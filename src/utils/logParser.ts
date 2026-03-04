@@ -31,6 +31,7 @@ export class LogParser {
 
     const rawLines = content.split('\n')
     const events: EventNotification[] = []
+    const seenEvents = new Set<string>() // 用于去重 IPC 导致的重复事件
     const totalLines = rawLines.length
     const chunkSize = 1000 // 每次处理 1000 行
 
@@ -53,7 +54,12 @@ export class LogParser {
             if (rawLine.includes('!!!OnEventNotify!!!')) {
               const event = this.parseEventNotification(parsed)
               if (event) {
-                events.push(event)
+                // 根据事件内容生成唯一 key，用于去重 IPC 导致的重复事件
+                const eventKey = this.generateEventKey(event)
+                if (!seenEvents.has(eventKey)) {
+                  seenEvents.add(eventKey)
+                  events.push(event)
+                }
               }
             }
           }
@@ -253,6 +259,31 @@ export class LogParser {
     }
 
     return value
+  }
+
+  /**
+   * 生成事件的唯一 key，用于去重 IPC 导致的重复事件
+   * 基于时间戳、消息类型和关键 ID 生成
+   */
+  private generateEventKey(event: EventNotification): string {
+    const { message, details, timestamp } = event
+    const parts = [timestamp, message]
+    
+    // 根据不同的消息类型使用不同的 ID 组合
+    if (details.task_id !== undefined) {
+      parts.push(`task:${details.task_id}`)
+    }
+    if (details.node_id !== undefined) {
+      parts.push(`node:${details.node_id}`)
+    }
+    if (details.reco_id !== undefined) {
+      parts.push(`reco:${details.reco_id}`)
+    }
+    if (details.action_id !== undefined) {
+      parts.push(`action:${details.action_id}`)
+    }
+    
+    return parts.join('|')
   }
 
   /**
