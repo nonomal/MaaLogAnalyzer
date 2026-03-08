@@ -155,14 +155,16 @@ const handleTabChange = (index: number) => {
 }
 
 // 同步 activeTaskIndex 与 selectedTask（处理外部改变 selectedTask 的情况）
-watch(() => props.selectedTask, (newTask) => {
-  if (newTask) {
-    const index = props.tasks.findIndex(t => t.task_id === newTask.task_id)
+watch(() => props.selectedTask, async (newTask, oldTask) => {
+  // 只在外部改变 selectedTask 时同步 activeTaskIndex（不是通过点击任务列表触发的）
+  if (newTask && newTask !== oldTask) {
+    const index = props.tasks.findIndex(t => t === newTask)
     if (index !== -1 && index !== activeTaskIndex.value) {
       activeTaskIndex.value = index
     }
   }
-  // 任务切换时重置滚动位置到顶部
+  // 任务切换时重置滚动位置到顶部（延迟到下一帧，确保 DOM 更新完成）
+  await new Promise(resolve => setTimeout(resolve, 0))
   if (virtualScroller.value) {
     virtualScroller.value.scrollToItem(0)
   }
@@ -625,7 +627,7 @@ const handleNestedClick = (node: NodeInfo, attemptIndex: number, nestedIndex: nu
               <n-list hoverable clickable>
                 <n-list-item
                   v-for="(task, index) in tasks"
-                  :key="index"
+                  :key="task.task_id"
                   @click="handleTabChange(index)"
                   :style="{
                     backgroundColor: activeTaskIndex === index ? 'var(--n-color-target)' : 'transparent',
