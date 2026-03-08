@@ -133,10 +133,14 @@ const scrollToNode = (index: number) => {
   }
 }
 
-// 当前任务的节点列表
-const currentNodes = computed<NodeInfo[]>(() => {
+// 当前任务的节点列表（添加唯一key用于虚拟滚动）
+const currentNodes = computed(() => {
   if (!props.selectedTask) return []
-  return props.selectedTask.nodes || []
+  const taskId = props.selectedTask.task_id
+  return (props.selectedTask.nodes || []).map(node => ({
+    ...node,
+    _uniqueKey: `${taskId}-${node.node_id}`
+  }))
 })
 
 // 虚拟滚动引用
@@ -149,6 +153,20 @@ const handleTabChange = (index: number) => {
     emit('select-task', props.tasks[index])
   }
 }
+
+// 同步 activeTaskIndex 与 selectedTask（处理外部改变 selectedTask 的情况）
+watch(() => props.selectedTask, (newTask) => {
+  if (newTask) {
+    const index = props.tasks.findIndex(t => t.task_id === newTask.task_id)
+    if (index !== -1 && index !== activeTaskIndex.value) {
+      activeTaskIndex.value = index
+    }
+  }
+  // 任务切换时重置滚动位置到顶部
+  if (virtualScroller.value) {
+    virtualScroller.value.scrollToItem(0)
+  }
+}, { immediate: true })
 
 // 处理文件上传（Web）
 const handleFileChange = (options: { fileList: UploadFileInfo[] }) => {
@@ -491,9 +509,10 @@ const handleNestedClick = (node: NodeInfo, attemptIndex: number, nestedIndex: nu
                   <DynamicScroller
                     v-else
                     ref="virtualScroller"
+                    :key="selectedTask?.task_id"
                     :items="currentNodes"
                     :min-item-size="150"
-                    key-field="node_id"
+                    key-field="_uniqueKey"
                     class="virtual-scroller"
                     style="height: 100%"
                   >
