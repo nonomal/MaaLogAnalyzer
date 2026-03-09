@@ -642,7 +642,7 @@ if (typeof window !== 'undefined') {
               <template #icon>
                 <n-icon><github-outlined /></n-icon>
               </template>
-              MAA Log Analyzer
+              Maa Log Analyzer
             </n-button>
             <n-text depth="3" style="font-size: 12px">
               基于 MaaFramework 开发的日志分析工具

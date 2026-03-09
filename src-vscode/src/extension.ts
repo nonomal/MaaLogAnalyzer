@@ -4,7 +4,7 @@ import * as path from 'path'
 let currentPanel: vscode.WebviewPanel | undefined = undefined
 
 export function activate(context: vscode.ExtensionContext) {
-  console.log('MAA Log Analyzer extension is now active!')
+  console.log('Maa Log Analyzer extension is now active!')
 
   // 注册打开分析器命令
   const openAnalyzerCommand = vscode.commands.registerCommand(

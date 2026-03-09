@@ -1,4 +1,4 @@
-# MAA Log Analyzer - VS Code 扩展
+# Maa Log Analyzer - VS Code 扩展
 
 VS Code 扩展版本的 MAA 日志分析器。
 
