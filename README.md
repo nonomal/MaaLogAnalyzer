@@ -5,7 +5,7 @@
 
 <div align="center">
 
-# MAALogAnalyzer
+# MaaLogAnalyzer
 
 _✨ 可视化分析基于 MaaFramework 开发应用的用户日志 ✨_</br>
 🔍 告别手翻百万行日志！用可视化+搜索的方式，高效定位、分析你的 Maa 应用运行问题 🔍
@@ -18,14 +18,14 @@ _✨ 可视化分析基于 MaaFramework 开发应用的用户日志 ✨_</br>
   <a href="https://www.naiveui.com/" target="_blank"><img alt="naive-ui" src="https://img.shields.io/badge/Naive UI-5FA04E?logo=vuedotjs&logoColor=fff"></a>
   <a href="https://tauri.app/" target="_blank"><img alt="tauri" src="https://img.shields.io/badge/Tauri 2-FFC131?logo=tauri&logoColor=000"></a>
   <br/>
-  <a href="https://github.com/Windsland52/MAALogAnalyzer/blob/main/LICENSE" target="_blank"><img alt="license" src="https://img.shields.io/github/license/Windsland52/MAALogAnalyzer"></a>
-  <a href="https://github.com/Windsland52/MAALogAnalyzer/commits/main/" target="_blank"><img alt="commits" src="https://img.shields.io/github/commit-activity/m/Windsland52/MAALogAnalyzer?color=%23ff69b4"></a>
-  <a href="https://github.com/Windsland52/MAALogAnalyzer/stargazers" target="_blank"><img alt="stars" src="https://img.shields.io/github/stars/Windsland52/MAALogAnalyzer?style=social"></a>
+  <a href="https://github.com/MaaXYZ/MaaLogAnalyzer/blob/main/LICENSE" target="_blank"><img alt="license" src="https://img.shields.io/github/license/MaaXYZ/MaaLogAnalyzer"></a>
+  <a href="https://github.com/MaaXYZ/MaaLogAnalyzer/commits/main/" target="_blank"><img alt="commits" src="https://img.shields.io/github/commit-activity/m/MaaXYZ/MaaLogAnalyzer?color=%23ff69b4"></a>
+  <a href="https://github.com/MaaXYZ/MaaLogAnalyzer/stargazers" target="_blank"><img alt="stars" src="https://img.shields.io/github/stars/MaaXYZ/MaaLogAnalyzer?style=social"></a>
 </p>
 
 <div align="center">
 
-[🌍 在线体验](https://maaloganalyzer.maafw.xyz) | [🚀 本地下载](https://github.com/Windsland52/MAALogAnalyzer/releases/latest) | [📖 使用文档](#-使用方法)
+[🌍 在线体验](https://maaloganalyzer.maafw.xyz) | [🚀 本地下载](https://github.com/MaaXYZ/MaaLogAnalyzer/releases/latest) | [📖 使用文档](#-使用方法)
 
 </div>
 
@@ -289,7 +289,7 @@ MIT License
 
 感谢以下开发者对 MaaLogAnalyzer 作出的贡献：
 
-[![贡献者](https://contrib.rocks/image?repo=Windsland52/MAALogAnalyzer&max=1000)](https://github.com/Windsland52/MAALogAnalyzer/graphs/contributors)
+[![贡献者](https://contrib.rocks/image?repo=MaaXYZ/MaaLogAnalyzer&max=1000)](https://github.com/MaaXYZ/MaaLogAnalyzer/graphs/contributors)
 
 ## 沟通交流
 

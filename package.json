@@ -6,12 +6,13 @@
     "license": "MIT",
     "repository": {
         "type": "git",
-        "url": "https://github.com/Windsland52/MAALogAnalyzer"
+        "url": "https://github.com/MaaXYZ/MaaLogAnalyzer"
     },
     "type": "module",
     "scripts": {
         "dev": "vite",
         "build": "vue-tsc && vite build",
+        "build:vscode": "vue-tsc && vite build --config src-vscode/vite.config.ts",
         "preview": "vite preview",
         "tauri": "tauri",
         "tauri:dev": "tauri dev",

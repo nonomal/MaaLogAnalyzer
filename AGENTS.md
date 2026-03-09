@@ -4,7 +4,7 @@ This file provides guidance to AI coding assistants (Claude Code, GitHub Copilot
 
 ## Project Overview
 
-MAALogAnalyzer is a Vue 3 + TypeScript + Tauri application for visualizing and analyzing logs from MaaFramework applications (v5.3+). It parses `maa.log` files to extract task execution flows, node details, and recognition/action attempts.
+MaaLogAnalyzer is a Vue 3 + TypeScript + Tauri application for visualizing and analyzing logs from MaaFramework applications (v5.3+). It parses `maa.log` files to extract task execution flows, node details, and recognition/action attempts.
 
 ## Development Commands
 
