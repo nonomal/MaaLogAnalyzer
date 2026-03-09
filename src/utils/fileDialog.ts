@@ -1,11 +1,16 @@
 /**
  * Tauri 文件对话框工具
- * 提供统一的文件访问接口，同时支持 Tauri 和 Web 环境
+ * 提供统一的文件访问接口，同时支持 Tauri、VS Code 和 Web 环境
  */
 
 // 检测是否在 Tauri 环境中
 export function isTauri(): boolean {
   return typeof window !== 'undefined' && '__TAURI__' in window
+}
+
+// 检测是否在 VS Code Webview 环境中
+export function isVSCode(): boolean {
+  return typeof window !== 'undefined' && (window.isVSCode === true || typeof __VSCODE__ !== 'undefined')
 }
 
 /**

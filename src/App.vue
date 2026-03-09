@@ -634,7 +634,7 @@ if (typeof window !== 'undefined') {
             <n-button 
               text 
               tag="a" 
-              href="https://github.com/Windsland52/MAALogAnalyzer" 
+              href="https://github.com/MaaXYZ/MaaLogAnalyzer" 
               target="_blank"
               type="primary"
             >

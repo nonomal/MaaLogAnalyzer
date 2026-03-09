@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, h } from 'vue'
+import { ref, computed, watch, h, onMounted, onUnmounted } from 'vue'
 import {
   NCard, NButton, NIcon, NText, NFlex, NDropdown,
   NScrollbar, NEmpty, NBadge, NTag, NSplit, NList, NListItem
@@ -10,7 +10,7 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import NodeCard from '../components/NodeCard.vue'
 import type { TaskInfo, NodeInfo } from '../types'
 import type { LogParser } from '../utils/logParser'
-import { isTauri } from '../utils/fileDialog'
+import { isTauri, isVSCode } from '../utils/fileDialog'
 import { formatDuration } from '../utils/formatDuration'
 
 const props = defineProps<{
@@ -41,6 +41,9 @@ const fileLoading = ref(false)
 
 // 是否在 Tauri 环境
 const isInTauri = ref(isTauri())
+
+// 是否在 VS Code 环境
+const isInVSCode = ref(isVSCode())
 
 // 任务列表折叠状态
 const taskListCollapsed = ref(false)
@@ -379,6 +382,12 @@ const handleReloadSelect = (key: string) => {
     } else if (key === 'folder') {
       handleTauriOpenFolder()
     }
+  } else if (isInVSCode.value) {
+    if (key === 'file') {
+      handleVSCodeOpen()
+    } else if (key === 'folder') {
+      handleVSCodeOpenFolder()
+    }
   } else {
     if (key === 'file') {
       triggerFileSelect()
@@ -486,6 +495,49 @@ const handleTauriOpenFolder = async () => {
   }
 }
 
+// 使用 VS Code 打开文件
+const handleVSCodeOpen = () => {
+  console.log('[VS Code] Opening file, vscodeApi:', window.vscodeApi)
+  if (window.vscodeApi) {
+    window.vscodeApi.postMessage({ type: 'openFile' })
+  } else {
+    console.error('[VS Code] vscodeApi not available')
+  }
+}
+
+// 使用 VS Code 打开文件夹
+const handleVSCodeOpenFolder = () => {
+  console.log('[VS Code] Opening folder, vscodeApi:', window.vscodeApi)
+  if (window.vscodeApi) {
+    window.vscodeApi.postMessage({ type: 'openFolder' })
+    console.log('[VS Code] Message sent: openFolder')
+  } else {
+    console.error('[VS Code] vscodeApi not available')
+  }
+}
+
+// 处理来自 VS Code 的消息
+const handleVSCodeMessage = (event: MessageEvent) => {
+  const message = event.data
+  if (message.type === 'loadFile' && message.content) {
+    emit('file-loading-start')
+    emit('upload-content', message.content)
+    emit('file-loading-end')
+  }
+}
+
+// 生命周期：监听 VS Code 消息
+onMounted(() => {
+  if (isInVSCode.value) {
+    window.addEventListener('message', handleVSCodeMessage)
+  }
+})
+
+onUnmounted(() => {
+  if (isInVSCode.value) {
+    window.removeEventListener('message', handleVSCodeMessage)
+  }
+})
 // 选择节点
 const handleNodeClick = (node: NodeInfo) => {
   emit('select-node', node)
@@ -540,6 +592,36 @@ const handleNestedClick = (node: NodeInfo, attemptIndex: number, nestedIndex: nu
           </n-button>
         </n-flex>
       </div>
+
+      <!-- VS Code 环境：使用 VS Code 文件对话框 -->
+      <div v-else-if="isInVSCode" style="text-align: center; padding: 40px 20px">
+        <n-icon size="48" :depth="3" style="margin-bottom: 16px">
+          <folder-open-outlined />
+        </n-icon>
+        <div style="margin-bottom: 20px">
+          <n-text style="font-size: 16px; display: block; margin-bottom: 8px">
+            使用 VS Code 文件选择器
+          </n-text>
+          <n-text depth="3" style="font-size: 14px; display: block; margin-bottom: 8px">
+            支持 maa.log 格式，或选择包含日志的文件夹
+          </n-text>
+          <n-badge value="VS Code" type="info" style="margin-top: 4px" />
+        </div>
+        <n-flex justify="center" style="gap: 12px">
+          <n-button type="primary" size="large" @click="handleVSCodeOpen">
+            <template #icon>
+              <n-icon><folder-open-outlined /></n-icon>
+            </template>
+            选择日志文件
+          </n-button>
+          <n-button size="large" @click="handleVSCodeOpenFolder">
+            <template #icon>
+              <n-icon><folder-open-outlined /></n-icon>
+            </template>
+            选择文件夹
+          </n-button>
+        </n-flex>
+      </div>
       
       <!-- Web 环境：自定义拖拽区域，支持文件和文件夹 -->
       <div
@@ -577,6 +659,16 @@ const handleNestedClick = (node: NodeInfo, attemptIndex: number, nestedIndex: nu
       <n-flex>
         <!-- Tauri 环境 -->
         <n-dropdown v-if="isInTauri" :options="reloadOptions" @select="handleReloadSelect">
+          <n-button>
+            <template #icon>
+              <n-icon><folder-open-outlined /></n-icon>
+            </template>
+            重新加载
+          </n-button>
+        </n-dropdown>
+
+        <!-- VS Code 环境 -->
+        <n-dropdown v-else-if="isInVSCode" :options="reloadOptions" @select="handleReloadSelect">
           <n-button>
             <template #icon>
               <n-icon><folder-open-outlined /></n-icon>
