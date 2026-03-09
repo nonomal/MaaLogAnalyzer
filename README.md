@@ -25,7 +25,7 @@ _✨ 可视化分析基于 MaaFramework 开发应用的用户日志 ✨_</br>
 
 <div align="center">
 
-[🌍 在线体验](https://maaloganalyzer.maafw.xyz) | [🚀 本地下载](https://github.com/MaaXYZ/MaaLogAnalyzer/releases/latest) | [📖 使用文档](#-使用方法)
+[🌍 在线体验](https://maaloganalyzer.maafw.xyz) | [🚀 本地下载](https://github.com/MaaXYZ/MaaLogAnalyzer/releases/latest) | [🔌 VSCode 插件](https://marketplace.visualstudio.com/items?itemName=Windsland52.maa-log-analyzer) | [📖 使用文档](#-使用方法)
 
 </div>
 
