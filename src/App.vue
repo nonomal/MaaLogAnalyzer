@@ -516,7 +516,7 @@ if (typeof window !== 'undefined') {
             />
           </template>
           <template #2>
-            <n-card size="small" title="节点详情" style="height: 100%; display: flex; flex-direction: column; position: relative" content-style="padding: 0; flex: 1; min-height: 0; overflow: hidden">
+            <n-card size="small" title="详细信息" style="height: 100%; display: flex; flex-direction: column; position: relative" content-style="padding: 0; flex: 1; min-height: 0; overflow: hidden">
               <!-- 折叠按钮 - 左边缘中间 -->
               <n-button
                 circle
