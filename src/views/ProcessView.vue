@@ -25,7 +25,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'select-task': [task: TaskInfo]
   'upload-file': [file: File]
-  'upload-content': [content: string]
+  'upload-content': [content: string, errorImages?: Map<string, string>]
   'select-node': [node: NodeInfo]
   'select-recognition': [node: NodeInfo, attemptIndex: number]
   'select-nested': [node: NodeInfo, attemptIndex: number, nestedIndex: number]
@@ -340,8 +340,24 @@ const handleFolderChange = async (event: Event) => {
 
 // 触发文件夹选择
 const folderInputRef = ref<HTMLInputElement | null>(null)
-const triggerFolderSelect = () => {
-  folderInputRef.value?.click()
+const triggerFolderSelect = async () => {
+  try {
+    const { openFolderDialog } = await import('../utils/fileDialog')
+
+    fileLoading.value = true
+    emit('file-loading-start')
+
+    const result = await openFolderDialog()
+
+    if (result) {
+      emit('upload-content', result.content, result.errorImages)
+    }
+  } catch (error) {
+    alert('打开文件夹失败: ' + error)
+  } finally {
+    fileLoading.value = false
+    emit('file-loading-end')
+  }
 }
 
 // 触发文件选择
@@ -441,57 +457,21 @@ const handleTauriOpen = async () => {
 // 使用 Tauri 打开文件夹
 const handleTauriOpenFolder = async () => {
   try {
-    // 动态导入 Tauri API
-    const { open } = await import('@tauri-apps/plugin-dialog')
-    const { readTextFile, exists } = await import('@tauri-apps/plugin-fs')
+    const { openFolderDialog } = await import('../utils/fileDialog')
 
-    // 打开文件夹选择对话框
-    const selected = await open({
-      multiple: false,
-      directory: true,
-      title: '选择日志文件夹'
-    })
+    fileLoading.value = true
+    emit('file-loading-start')
 
-    if (selected && typeof selected === 'string') {
-      try {
-        fileLoading.value = true
-        emit('file-loading-start')
+    const result = await openFolderDialog()
 
-        const folderPath = selected
-        const bakLogPath = `${folderPath}\\maa.bak.log`
-        const mainLogPath = `${folderPath}\\maa.log`
-
-        // 检查文件是否存在并读取
-        let combinedContent = ''
-
-        const bakExists = await exists(bakLogPath)
-        if (bakExists) {
-          combinedContent += await readTextFile(bakLogPath)
-        }
-
-        const mainExists = await exists(mainLogPath)
-        if (mainExists) {
-          if (combinedContent && !combinedContent.endsWith('\n')) {
-            combinedContent += '\n'
-          }
-          combinedContent += await readTextFile(mainLogPath)
-        }
-
-        if (!combinedContent) {
-          alert('文件夹中未找到 maa.log 或 maa.bak.log 文件')
-          return
-        }
-
-        emit('upload-content', combinedContent)
-      } finally {
-        fileLoading.value = false
-        emit('file-loading-end')
-      }
+    if (result) {
+      emit('upload-content', result.content, result.errorImages)
     }
   } catch (error) {
+    alert('打开文件夹失败: ' + error)
+  } finally {
     fileLoading.value = false
     emit('file-loading-end')
-    alert('打开文件夹失败: ' + error)
   }
 }
 

@@ -53,7 +53,8 @@ export interface RecognitionAttempt {
   timestamp: string
   status: 'success' | 'failed'
   reco_details?: RecognitionDetail
-  nested_nodes?: RecognitionAttempt[]  // 嵌套的 RecognitionNode 事件
+  nested_nodes?: RecognitionAttempt[]
+  error_image?: string
 }
 
 // 动作尝试记录（用于嵌套的 ActionNode）
@@ -87,6 +88,7 @@ export interface NodeInfo {
     node_id: number
     reco_id: number
   }
+  error_image?: string  // 节点截图路径
 }
 
 // 识别详情

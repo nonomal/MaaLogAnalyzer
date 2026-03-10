@@ -15,6 +15,18 @@ export class LogParser {
   private threadIds = new Set<string>()
   private taskProcessMap = new Map<number, string>()
   private taskThreadMap = new Map<number, string>()
+  private errorImages = new Map<string, string>()
+
+  /**
+   * 设置错误截图映射
+   */
+  setErrorImages(images: Map<string, string>): void {
+    this.errorImages = images
+    console.log('[Parser] 设置截图映射，数量:', images.size)
+    if (images.size > 0) {
+      console.log('[Parser] 截图映射示例:', Array.from(images.entries()).slice(0, 3))
+    }
+  }
 
   /**
    * 解析日志文件内容（异步分块处理）
@@ -520,7 +532,8 @@ export class LogParser {
             timestamp: this.stringPool.intern(event.timestamp),
             status: message === 'Node.Recognition.Succeeded' ? 'success' : 'failed',
             reco_details: details.reco_details ? markRaw(details.reco_details) : undefined,
-            nested_nodes: nestedNodes.length > 0 ? nestedNodes.slice() : undefined
+            nested_nodes: nestedNodes.length > 0 ? nestedNodes.slice() : undefined,
+            error_image: this.findRecognitionImage(event.timestamp, details.name || '')
           }
           recognitionAttempts.push(attempt)
           // 清空嵌套节点数组
@@ -532,7 +545,8 @@ export class LogParser {
             name: this.stringPool.intern(details.name || ''),
             timestamp: this.stringPool.intern(event.timestamp),
             status: message === 'Node.Recognition.Succeeded' ? 'success' : 'failed',
-            reco_details: details.reco_details ? markRaw(details.reco_details) : undefined
+            reco_details: details.reco_details ? markRaw(details.reco_details) : undefined,
+            error_image: this.findRecognitionImage(event.timestamp, details.name || '')
           }
           if (!recognitionsByTaskId.has(taskId)) {
             recognitionsByTaskId.set(taskId, [])
@@ -593,7 +607,8 @@ export class LogParser {
             recognition_attempts: nodeRecognitionAttempts,
             nested_action_nodes: nestedActionNodes.length > 0 ? nestedActionNodes.slice() : undefined,
             nested_recognition_in_action: nestedNodes.length > 0 ? nestedNodes.slice() : undefined,
-            node_details: details.node_details ? markRaw(details.node_details) : undefined
+            node_details: details.node_details ? markRaw(details.node_details) : undefined,
+            error_image: this.findErrorImage(event.timestamp, nodeName)
           }
           nodes.push(node)
           nodeIdSet.add(nodeId)
@@ -610,6 +625,52 @@ export class LogParser {
     return nodes
   }
 
+
+  /**
+   * 查找识别尝试的截图（匹配到秒级别）
+   */
+  private findRecognitionImage(timestamp: string, nodeName: string): string | undefined {
+    // 提取到秒的时间戳: 2026-03-09 19:46:35.xxx -> 2026.03.09-19.46.35
+    const secondsOnly = timestamp.replace(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\..*/, '$1.$2.$3-$4.$5.$6')
+
+    console.log('[Parser] 查找识别截图 - 节点:', nodeName, '原始时间:', timestamp, '秒级时间:', secondsOnly)
+
+    // 遍历所有截图，找到匹配的（节点名相同，时间匹配到秒）
+    for (const [key, path] of this.errorImages.entries()) {
+      if (key.includes(`${secondsOnly}.`) && key.endsWith(`_${nodeName}`)) {
+        console.log('[Parser] 找到识别截图:', nodeName, '时间:', timestamp, '匹配key:', key, '路径:', path)
+        return path
+      }
+    }
+
+    // 如果没找到，显示所有可能的key
+    if (this.errorImages.size > 0) {
+      const allKeys = Array.from(this.errorImages.keys())
+      console.log('[Parser] 未找到识别截图，所有key:', allKeys)
+    }
+
+    return undefined
+  }
+
+  /**
+   * 查找错误截图
+   */
+  private findErrorImage(timestamp: string, nodeName: string): string | undefined {
+    // 时间戳格式转换: 2026-03-08 13:12:30.216 -> 2026.03.08-13.12.30.216
+    const converted = timestamp.replace(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\.(\d{3})/, '$1.$2.$3-$4.$5.$6.$7')
+    const key = `${converted}_${nodeName}`
+    const result = this.errorImages.get(key)
+
+    console.log('[Parser] 查找截图 - 节点:', nodeName, '原始时间:', timestamp, '转换时间:', converted, '查找key:', key, '结果:', result ? '找到' : '未找到')
+
+    if (!result && this.errorImages.size > 0) {
+      // 显示前3个映射的key，帮助调试
+      const keys = Array.from(this.errorImages.keys()).slice(0, 3)
+      console.log('[Parser] 映射中的前3个key:', keys)
+    }
+
+    return result
+  }
 
   /**
    * 获取所有事件

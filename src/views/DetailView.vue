@@ -1,11 +1,19 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, watch } from 'vue'
 import {
   NCard, NFlex, NScrollbar, NDescriptions, NDescriptionsItem,
   NTag, NEmpty, NCode, NButton, NIcon, NText, NCollapse, NCollapseItem
 } from 'naive-ui'
 import { CheckCircleOutlined, CloseCircleOutlined, CopyOutlined } from '@vicons/antd'
 import type { NodeInfo, TaskInfo } from '../types'
+import { isTauri } from '../utils/fileDialog'
+
+// 转换文件路径为 Tauri 可访问的 URL
+const convertFileSrc = (filePath: string) => {
+  if (!isTauri()) return filePath
+  // Tauri v2 使用 asset 协议
+  return `https://asset.localhost/${filePath.replace(/\\/g, '/')}`
+}
 
 const props = defineProps<{
   selectedNode: NodeInfo | null
@@ -13,6 +21,13 @@ const props = defineProps<{
   selectedRecognitionIndex?: number | null
   selectedNestedIndex?: number | null
 }>()
+
+// 调试：监听节点变化
+watch(() => props.selectedNode, (node) => {
+  if (node) {
+    console.log('[DetailView] 选中节点:', node.name, '截图:', node.error_image)
+  }
+})
 
 // 节点状态标签类型
 const statusType = computed(() => {
@@ -256,8 +271,8 @@ const copyToClipboard = (text: string) => {
               {{ selectedNode.node_id }}
             </n-descriptions-item>
 
-            <n-descriptions-item label="任务 ID">
-              {{ selectedNode.task_id }}
+            <n-descriptions-item label="节点截图" v-if="selectedNode.error_image" :span="2">
+              <img :src="convertFileSrc(selectedNode.error_image)" style="max-width: 100%; border-radius: 4px; margin-top: 8px" alt="节点截图" />
             </n-descriptions-item>
           </n-descriptions>
         </n-card>

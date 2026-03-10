@@ -120,10 +120,10 @@ const handleFileUpload = async (file: File) => {
 }
 
 // 处理文件内容
-const handleContentUpload = async (content: string) => {
+const handleContentUpload = async (content: string, errorImages?: Map<string, string>) => {
   loading.value = true
   try {
-    await processLogContent(content)
+    await processLogContent(content, errorImages)
   } catch (error) {
     message.error(getErrorMessage(error), { duration: 5000 })
   } finally {
@@ -131,8 +131,8 @@ const handleContentUpload = async (content: string) => {
   }
 }
 
-// 处理日志内容
-const processLogContent = async (content: string) => {
+// 处理文件内容
+const processLogContent = async (content: string, errorImages?: Map<string, string>) => {
   // 清空所有状态，确保重新上传文件时不会显示旧数据
   tasks.value = []
   selectedTask.value = null
@@ -149,6 +149,11 @@ const processLogContent = async (content: string) => {
   parseProgress.value = 0
 
   try {
+    // 设置错误截图
+    if (errorImages) {
+      parser.setErrorImages(errorImages)
+    }
+
     // 异步解析，带进度回调
     await parser.parseFile(content, (progress) => {
       parseProgress.value = progress.percentage
