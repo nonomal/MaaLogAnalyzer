@@ -108,6 +108,15 @@ export interface RecognitionDetail {
   name: string
 }
 
+// 合并后的识别项（供 NodeCard 子组件共用）
+export interface MergedRecognitionItem {
+  name: string
+  status: 'success' | 'failed' | 'not-recognized'
+  attemptIndex?: number  // 在 recognition_attempts 中的索引
+  attempt?: RecognitionAttempt  // 原始 attempt 对象
+  hasNestedNodes?: boolean
+}
+
 // 动作详情
 export interface ActionDetail {
   action_id: number

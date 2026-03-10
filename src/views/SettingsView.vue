@@ -1,26 +1,23 @@
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { NCard, NForm, NFormItem, NSwitch, NButton, NFlex, useMessage } from 'naive-ui'
-import { getSettings, saveSettings, type AppSettings } from '../utils/settings'
+import { NCard, NForm, NFormItem, NSwitch, NButton, NFlex, NRadioGroup, NRadioButton, useMessage } from 'naive-ui'
+import { getSettings, saveSettings } from '../utils/settings'
 
 const message = useMessage()
-const settings = ref<AppSettings>(getSettings())
-
-onMounted(() => {
-  settings.value = getSettings()
-})
+const settings = getSettings()
 
 const handleSave = () => {
-  saveSettings(settings.value)
+  saveSettings(settings)
   message.success('设置已保存')
 }
 
 const handleReset = () => {
-  settings.value = {
-    defaultCollapseRecognition: true,
-    defaultCollapseAction: true
-  }
-  saveSettings(settings.value)
+  Object.assign(settings, {
+    defaultCollapseRecognition: false,
+    defaultCollapseNestedRecognition: true,
+    defaultCollapseAction: true,
+    displayMode: 'tree'
+  })
+  saveSettings(settings)
   message.success('已恢复默认设置')
 }
 </script>
@@ -30,13 +27,27 @@ const handleReset = () => {
     <n-text strong style="font-size: 16px; display: block; margin-bottom: 16px">显示</n-text>
 
     <n-form label-placement="left" label-width="200">
-      <n-form-item label="默认折叠识别尝试">
-        <n-switch v-model:value="settings.defaultCollapseRecognition" />
+      <n-form-item label="节点显示模式">
+        <n-radio-group v-model:value="settings.displayMode">
+          <n-radio-button value="detailed">详细</n-radio-button>
+          <n-radio-button value="compact">紧凑</n-radio-button>
+          <n-radio-button value="tree">树形</n-radio-button>
+        </n-radio-group>
       </n-form-item>
 
-      <n-form-item label="默认折叠动作部分">
-        <n-switch v-model:value="settings.defaultCollapseAction" />
-      </n-form-item>
+      <template v-if="settings.displayMode === 'detailed'">
+        <n-form-item label="默认折叠根部识别列表">
+          <n-switch v-model:value="settings.defaultCollapseRecognition" />
+        </n-form-item>
+
+        <n-form-item label="默认折叠嵌套识别节点">
+          <n-switch v-model:value="settings.defaultCollapseNestedRecognition" />
+        </n-form-item>
+
+        <n-form-item label="默认折叠动作部分">
+          <n-switch v-model:value="settings.defaultCollapseAction" />
+        </n-form-item>
+      </template>
     </n-form>
 
     <n-flex style="margin-top: 24px; gap: 12px">

@@ -2,33 +2,48 @@
  * 应用设置管理
  */
 
+import { reactive } from 'vue'
+
+export type DisplayMode = 'detailed' | 'compact' | 'tree'
+
 export interface AppSettings {
-  // 默认折叠识别尝试的嵌套节点
+  // 默认折叠根部识别列表
   defaultCollapseRecognition: boolean
+  // 默认折叠识别中嵌套的识别节点
+  defaultCollapseNestedRecognition: boolean
   // 默认折叠动作部分
   defaultCollapseAction: boolean
+  // 节点显示模式
+  displayMode: DisplayMode
 }
 
 const SETTINGS_KEY = 'maa-log-analyzer-settings'
 
 const defaultSettings: AppSettings = {
   defaultCollapseRecognition: false,
-  defaultCollapseAction: false
+  defaultCollapseNestedRecognition: false,
+  defaultCollapseAction: false,
+  displayMode: 'tree'
 }
 
+let settingsInstance: AppSettings | null = null
+
 /**
- * 获取设置
+ * 获取设置（reactive 单例）
  */
 export function getSettings(): AppSettings {
+  if (settingsInstance) return settingsInstance
+
+  let stored: Partial<AppSettings> = {}
   try {
-    const stored = localStorage.getItem(SETTINGS_KEY)
-    if (stored) {
-      return { ...defaultSettings, ...JSON.parse(stored) }
-    }
+    const raw = localStorage.getItem(SETTINGS_KEY)
+    if (raw) stored = JSON.parse(raw)
   } catch (error) {
     console.error('读取设置失败:', error)
   }
-  return defaultSettings
+
+  settingsInstance = reactive<AppSettings>({ ...defaultSettings, ...stored })
+  return settingsInstance
 }
 
 /**
@@ -39,5 +54,9 @@ export function saveSettings(settings: AppSettings): void {
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings))
   } catch (error) {
     console.error('保存设置失败:', error)
+  }
+  // 同步更新 reactive 单例
+  if (settingsInstance && settingsInstance !== settings) {
+    Object.assign(settingsInstance, settings)
   }
 }

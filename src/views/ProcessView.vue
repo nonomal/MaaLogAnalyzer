@@ -12,6 +12,9 @@ import type { TaskInfo, NodeInfo } from '../types'
 import type { LogParser } from '../utils/logParser'
 import { isTauri, isVSCode } from '../utils/platform'
 import { formatDuration, extractTime } from '../utils/formatDuration'
+import { getSettings } from '../utils/settings'
+
+const settings = getSettings()
 
 const props = defineProps<{
   tasks: TaskInfo[]
@@ -101,19 +104,21 @@ const toggleNodeNav = () => {
   }
 }
 
-// 根据两侧折叠状态动态调整节点导航宽度
-watch([taskListCollapsed, () => props.detailViewCollapsed], ([taskCollapsed, detailCollapsed]) => {
+// 根据显示模式计算节点导航默认宽度
+const getNodeNavDefaultSize = (taskCollapsed: boolean, detailCollapsed: boolean) => {
+  if (taskCollapsed && detailCollapsed) {
+    return settings.displayMode === 'detailed' ? 0.12 : 0.2
+  }
+  return settings.displayMode === 'detailed' ? 0.2 : 0.35
+}
+
+// 根据两侧折叠状态和显示模式动态调整节点导航宽度
+watch([taskListCollapsed, () => props.detailViewCollapsed, () => settings.displayMode], ([taskCollapsed, detailCollapsed]) => {
   // 只在节点导航未折叠时调整宽度
   if (!nodeNavCollapsed.value) {
-    if (taskCollapsed && detailCollapsed) {
-      // 两侧都折叠，使用较小宽度
-      nodeNavSize.value = 0.12
-      nodeNavSavedSize.value = 0.12
-    } else {
-      // 至少有一侧展开，使用较大宽度
-      nodeNavSize.value = 0.2
-      nodeNavSavedSize.value = 0.2
-    }
+    const size = getNodeNavDefaultSize(!!taskCollapsed, !!detailCollapsed)
+    nodeNavSize.value = size
+    nodeNavSavedSize.value = size
   }
 })
 
@@ -827,10 +832,11 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
                         @click="scrollToNode(index)"
                         :style="{
                           cursor: 'pointer',
-                          padding: '8px 12px'
+                          padding: settings.displayMode === 'detailed' ? '8px 12px' : '4px 8px'
                         }"
                       >
-                        <n-flex vertical style="gap: 4px">
+                        <!-- 详细模式：两行布局 -->
+                        <n-flex v-if="settings.displayMode === 'detailed'" vertical style="gap: 4px">
                           <n-flex align="center" style="gap: 8px">
                             <n-text strong style="font-size: 13px">{{ node.name || '未命名节点' }}</n-text>
                             <n-text depth="3" style="font-size: 11px">
@@ -845,6 +851,20 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
                               #{{ index + 1 }}
                             </n-text>
                           </n-flex>
+                        </n-flex>
+
+                        <!-- 紧凑模式：单行，小字号 -->
+                        <n-flex v-else-if="settings.displayMode === 'compact'" align="center" style="gap: 6px">
+                          <span class="nav-status-dot" :class="node.status === 'success' ? 'nav-dot-success' : 'nav-dot-failed'" />
+                          <n-text style="font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ node.name || '未命名节点' }}</n-text>
+                          <n-text depth="3" style="font-size: 10px; flex-shrink: 0">{{ extractTime(node.timestamp) }}</n-text>
+                        </n-flex>
+
+                        <!-- 树形模式：紧凑，带时间 -->
+                        <n-flex v-else align="center" style="gap: 4px">
+                          <span class="nav-status-dot" :class="node.status === 'success' ? 'nav-dot-success' : 'nav-dot-failed'" />
+                          <n-text style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1">{{ node.name || '未命名节点' }}</n-text>
+                          <n-text depth="3" style="font-size: 10px; flex-shrink: 0">{{ extractTime(node.timestamp) }}</n-text>
                         </n-flex>
                       </n-list-item>
                     </n-list>
@@ -894,7 +914,8 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
                         :size-dependencies="[
                           item.recognition_attempts?.length,
                           item.next_list?.length,
-                          item.action_details
+                          item.action_details,
+                          settings.displayMode
                         ]"
                       >
                         <div style="padding: 12px">
@@ -939,6 +960,22 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
 </template>
 
 <style scoped>
+.nav-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.nav-dot-success {
+  background: #63e2b7;
+}
+
+.nav-dot-failed {
+  background: #d03050;
+}
+
 /* 拖拽区域样式 */
 .drop-zone {
   border: 2px dashed var(--n-border-color);
