@@ -699,7 +699,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
       </div>
 
       <!-- 节点统计模式（独立显示，占据整个屏幕） -->
-      <div v-show="viewMode === 'statistics'" style="height: 100%">
+      <div v-if="viewMode === 'statistics'" style="height: 100%">
         <node-statistics-view :tasks="tasks" style="height: 100%" />
       </div>
 
