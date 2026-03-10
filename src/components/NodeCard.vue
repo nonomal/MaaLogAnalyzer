@@ -4,6 +4,10 @@ import { NCard, NButton, NFlex, NTag, NImage } from 'naive-ui'
 import { CheckCircleOutlined, CloseCircleOutlined } from '@vicons/antd'
 import type { NodeInfo } from '../types'
 import { isTauri } from '../utils/platform'
+import { getSettings } from '../utils/settings'
+
+// 读取设置
+const settings = getSettings()
 
 // 转换文件路径为可访问的 URL
 const convertFileSrc = (filePath: string) => {
@@ -25,13 +29,17 @@ const emit = defineEmits<{
 // 跟踪哪些识别尝试的嵌套节点是展开的（使用 Map 优化性能）
 const expandedAttempts = ref<Map<number, boolean>>(new Map())
 
-// 跟踪 Action 部分是否展开
-const actionExpanded = ref(false)
+// 跟踪 Recognition 部分是否展开（应用默认设置）
+const recognitionExpanded = ref(!settings.defaultCollapseRecognition)
+
+// 跟踪 Action 部分是否展开（应用默认设置）
+const actionExpanded = ref(!settings.defaultCollapseAction)
 
 // 监听node变化，清空展开状态
 watch(() => props.node?.node_id, () => {
   expandedAttempts.value.clear()
-  actionExpanded.value = false
+  recognitionExpanded.value = !settings.defaultCollapseRecognition
+  actionExpanded.value = !settings.defaultCollapseAction
 }, { flush: 'sync' })
 
 // 节点状态样式
@@ -56,13 +64,14 @@ const handleNestedClick = (attemptIndex: number, nestedIndex: number) => {
 
 // 切换嵌套节点的显示/隐藏（优化：避免创建新对象）
 const toggleNestedNodes = (attemptIndex: number) => {
-  const current = expandedAttempts.value.get(attemptIndex)
+  const current = isExpanded(attemptIndex)
   expandedAttempts.value.set(attemptIndex, !current)
 }
 
-// 检查节点是否展开
+// 检查节点是否展开（应用默认设置）
 const isExpanded = (attemptIndex: number) => {
-  return expandedAttempts.value.get(attemptIndex) || false
+  const value = expandedAttempts.value.get(attemptIndex)
+  return value !== undefined ? value : !settings.defaultCollapseRecognition
 }
 
 // 合并 next_list 和 recognition_attempts
@@ -158,12 +167,21 @@ const actionButtonType = computed(() => {
       <!-- Content: 执行流程 Recognition → Action → Next List -->
       <n-flex vertical style="gap: 12px">
         <!-- Recognition 部分（合并 next_list 和 recognition_attempts） -->
-        <n-card v-if="mergedRecognitionList.length > 0" size="small" title="Recognition">
+        <n-card v-if="mergedRecognitionList.length > 0" size="small">
+          <template #header>
+            <n-flex align="center" style="gap: 8px">
+              <span>Recognition</span>
+              <n-button size="small" @click="recognitionExpanded = !recognitionExpanded">
+                {{ recognitionExpanded ? 'Hide' : 'Show' }}
+              </n-button>
+            </n-flex>
+          </template>
+
           <n-flex vertical style="gap: 8px">
             <template v-for="(item, idx) in mergedRecognitionList" :key="`merged-${idx}`">
-              <!-- 未识别的节点：灰色禁用按钮 -->
+              <!-- 未识别的节点：灰色禁用按钮（仅展开时显示） -->
               <n-button
-                v-if="item.status === 'not-recognized'"
+                v-if="recognitionExpanded && item.status === 'not-recognized'"
                 :key="`not-recognized-${idx}`"
                 size="small"
                 type="default"
@@ -175,7 +193,7 @@ const actionButtonType = computed(() => {
               </n-button>
 
               <!-- 已识别的节点（没有嵌套节点）：直接显示按钮 -->
-              <n-flex v-else-if="!item.hasNestedNodes" :key="`simple-${idx}`" vertical style="gap: 8px; align-items: flex-start">
+              <n-flex v-else-if="!item.hasNestedNodes && (recognitionExpanded || item.status === 'success')" :key="`simple-${idx}`" vertical style="gap: 8px; align-items: flex-start">
                 <n-button
                   size="small"
                   :type="getButtonType(item.status)"
@@ -197,7 +215,7 @@ const actionButtonType = computed(() => {
               </n-flex>
 
               <!-- 已识别的节点（有嵌套节点）：显示嵌套结构 -->
-              <template v-else>
+              <template v-else-if="recognitionExpanded || item.status === 'success'">
                 <!-- 展开状态 -->
                 <n-card v-if="isExpanded(item.attemptIndex!)" :key="`nested-card-${item.attemptIndex}`" size="small">
                   <template #header>

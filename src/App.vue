@@ -5,10 +5,11 @@ import ProcessView from './views/ProcessView.vue'
 import DetailView from './views/DetailView.vue'
 import TextSearchView from './views/TextSearchView.vue'
 import NodeStatisticsView from './views/NodeStatisticsView.vue'
+import SettingsView from './views/SettingsView.vue'
 import { LogParser } from './utils/logParser'
 import { getErrorMessage } from './utils/errorHandler'
 import type { TaskInfo, NodeInfo } from './types'
-import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnHeightOutlined, InfoCircleOutlined, GithubOutlined, DashboardOutlined } from '@vicons/antd'
+import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnHeightOutlined, InfoCircleOutlined, GithubOutlined, DashboardOutlined, SettingOutlined } from '@vicons/antd'
 import { version } from '../package.json'
 
 // Props
@@ -107,6 +108,9 @@ const message = useMessage()
 
 // 关于对话框
 const showAboutModal = ref(false)
+
+// 设置对话框
+const showSettingsModal = ref(false)
 
 // 处理文件上传
 const handleFileUpload = async (file: File) => {
@@ -429,9 +433,20 @@ if (typeof window !== 'undefined') {
         
         <!-- 右侧按钮组 -->
         <n-flex align="center" style="gap: 8px">
+          <!-- 设置按钮 -->
+          <n-button
+            text
+            style="font-size: 20px"
+            @click="showSettingsModal = true"
+          >
+            <n-icon>
+              <setting-outlined />
+            </n-icon>
+          </n-button>
+
           <!-- 关于按钮 -->
-          <n-button 
-            text 
+          <n-button
+            text
             style="font-size: 20px"
             @click="showAboutModal = true"
           >
@@ -439,10 +454,10 @@ if (typeof window !== 'undefined') {
               <info-circle-outlined />
             </n-icon>
           </n-button>
-          
+
           <!-- 主题切换按钮 -->
-          <n-button 
-            text 
+          <n-button
+            text
             style="font-size: 20px"
             @click="emit('toggle-theme')"
           >
@@ -598,6 +613,17 @@ if (typeof window !== 'undefined') {
         </n-split>
       </div>
     </div>
+
+    <!-- 设置对话框 -->
+    <n-modal
+      v-model:show="showSettingsModal"
+      preset="card"
+      title="设置"
+      style="width: 600px"
+      :bordered="false"
+    >
+      <settings-view />
+    </n-modal>
 
     <!-- 关于对话框 -->
     <n-modal
