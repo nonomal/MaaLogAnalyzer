@@ -11,6 +11,16 @@ export interface ParseProgress {
 // 事件行正则：提取 timestamp, level, processId, threadId, msg, detailsJson
 const EVENT_LINE_REGEX = /^\[([^\]]+)\]\[([^\]]+)\]\[(Px[^\]]+)\]\[(Tx[^\]]+)\].*!!!OnEventNotify!!!\s*\[handle=[^\]]*\]\s*\[msg=([^\]]+)\]\s*\[details=(.*)\]\s*$/
 
+/** FNV-1a hash，将字符串映射为 32 位整数字符串，用于事件去重 key */
+function fnv1aHash(str: string): string {
+  let hash = 0x811c9dc5
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i)
+    hash = (hash * 0x01000193) >>> 0
+  }
+  return hash.toString(36)
+}
+
 /**
  * 子任务事件收集器
  * 统一管理非当前 task_id 的 Recognition/Action/PipelineNode 事件
@@ -117,10 +127,9 @@ export class LogParser {
           const event = this.parseEventLine(rawLine.trim(), lineNum)
           if (!event) continue
 
-          // IPC 去重
-          const eventKey = this.generateEventKey(event)
-          if (!seenEvents.has(eventKey)) {
-            seenEvents.add(eventKey)
+          // IPC 去重：用 message + details 内容的 hash
+          if (!seenEvents.has(event._dedupKey)) {
+            seenEvents.add(event._dedupKey)
             events.push(event)
 
             // 记录任务的进程和线程信息（只记录首次出现，避免 IPC 覆盖）
@@ -152,7 +161,7 @@ export class LogParser {
    * 直接从事件行提取所有需要的字段
    * 格式: [timestamp][level][Pxpid][Txthread][...] !!!OnEventNotify!!! [handle=xxx] [msg=EventName] [details={...json...}]
    */
-  private parseEventLine(line: string, lineNum: number): (EventNotification & { processId: string; threadId: string }) | null {
+  private parseEventLine(line: string, lineNum: number): (EventNotification & { processId: string; threadId: string; _dedupKey: string }) | null {
     const match = line.match(EVENT_LINE_REGEX)
     if (!match) return null
 
@@ -172,23 +181,9 @@ export class LogParser {
       details,
       processId,
       threadId,
-      _lineNumber: lineNum
+      _lineNumber: lineNum,
+      _dedupKey: `${msg}|${fnv1aHash(detailsJson)}`
     }
-  }
-
-  /**
-   * 生成事件的唯一 key，用于去重 IPC 导致的重复事件
-   */
-  private generateEventKey(event: EventNotification): string {
-    const { message, details, timestamp } = event
-    const parts = [timestamp, message]
-
-    if (details.task_id !== undefined) parts.push(`task:${details.task_id}`)
-    if (details.node_id !== undefined) parts.push(`node:${details.node_id}`)
-    if (details.reco_id !== undefined) parts.push(`reco:${details.reco_id}`)
-    if (details.action_id !== undefined) parts.push(`action:${details.action_id}`)
-
-    return parts.join('|')
   }
 
   /**
