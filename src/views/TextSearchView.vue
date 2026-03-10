@@ -24,6 +24,9 @@ import {
 } from 'naive-ui'
 import { parseLogLine } from '../utils/logHighlighter'
 import { SearchOutlined, FileTextOutlined, CloseOutlined } from '@vicons/antd'
+import { useIsMobile } from '../composables/useIsMobile'
+
+const { isMobile } = useIsMobile()
 
 // Props
 const props = defineProps<{
@@ -612,15 +615,50 @@ const loadContextLines = async (targetLine: number) => {
 <template>
   <div style="height: 100%; display: flex; flex-direction: column" :class="{ 'dark-theme': props.isDark }">
     <!-- 顶部工具栏 -->
-    <n-card 
+    <n-card
       size="small"
       :bordered="false"
       content-style="padding: 12px 16px"
     >
-      <n-flex align="center" justify="space-between" style="gap: 12px">
+      <!-- 移动端工具栏 -->
+      <n-flex v-if="isMobile" vertical style="gap: 8px">
+        <n-flex align="center" justify="space-between">
+          <n-text strong style="font-size: 16px">文本搜索</n-text>
+          <n-flex align="center" style="gap: 8px">
+            <input
+              id="text-search-file-input"
+              ref="fileInputRef"
+              type="file"
+              accept=".txt,.log"
+              @change="handleFileUpload"
+              style="display: none"
+            />
+            <n-button size="small" type="primary" @click="triggerFileSelect">
+              <template #icon><file-text-outlined /></template>
+              选择文件
+            </n-button>
+            <n-button v-if="fileName" size="small" @click="clearContent" secondary type="warning">
+              <template #icon><n-icon><close-outlined /></n-icon></template>
+            </n-button>
+          </n-flex>
+        </n-flex>
+        <n-flex v-if="fileName && !isLoadingFile" align="center" style="gap: 8px">
+          <n-text depth="3" style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1">
+            {{ fileName }}
+          </n-text>
+          <n-tag v-if="totalLines > 0" size="small" type="info">{{ totalLines }} 行</n-tag>
+          <n-tag v-if="fileSizeInMB > 0" size="small" :type="isLargeFile ? 'error' : 'warning'">
+            {{ fileSizeInMB.toFixed(1) }} MB
+          </n-tag>
+        </n-flex>
+        <n-text v-if="isLoadingFile" type="info" style="font-size: 13px">正在加载文件...</n-text>
+      </n-flex>
+
+      <!-- 桌面端工具栏 -->
+      <n-flex v-else align="center" justify="space-between" style="gap: 12px">
         <n-flex align="center" style="gap: 12px">
           <n-text strong style="font-size: 16px">📝 文本搜索</n-text>
-          
+
           <input
             id="text-search-file-input"
             ref="fileInputRef"
@@ -629,9 +667,9 @@ const loadContextLines = async (targetLine: number) => {
             @change="handleFileUpload"
             style="display: none"
           />
-          <n-button 
+          <n-button
             size="small"
-            type="primary" 
+            type="primary"
             @click="triggerFileSelect"
           >
             <template #icon>
@@ -639,8 +677,8 @@ const loadContextLines = async (targetLine: number) => {
             </template>
             选择文件
           </n-button>
-          
-          <n-button 
+
+          <n-button
             v-if="fileName"
             size="small"
             @click="clearContent"
@@ -653,7 +691,7 @@ const loadContextLines = async (targetLine: number) => {
             清除
           </n-button>
         </n-flex>
-        
+
         <n-flex align="center" style="gap: 12px">
           <n-text v-if="isLoadingFile" type="info" style="font-size: 13px">
             ⏳ 正在加载文件...
@@ -673,9 +711,104 @@ const loadContextLines = async (targetLine: number) => {
     </n-card>
     
     <!-- 主内容区域 -->
-    <n-split 
+    <!-- 移动端：纯垂直布局，搜索+结果 -->
+    <div v-if="isMobile" style="flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 8px; overflow: hidden">
+      <!-- 搜索控制 -->
+      <n-card size="small">
+        <n-flex vertical style="gap: 10px">
+          <n-input-group>
+            <n-input
+              v-model:value="searchText"
+              placeholder="输入搜索内容..."
+              clearable
+              @keyup.enter="performSearch"
+              :disabled="isSearching"
+              :input-props="{ id: 'text-search-input-m', name: 'text-search-input-m' }"
+            >
+              <template #prefix>
+                <search-outlined />
+              </template>
+            </n-input>
+            <n-button
+              type="primary"
+              @click="performSearch"
+              :loading="isSearching || isLoadingFile"
+              :disabled="!searchText || !fileName || isLoadingFile"
+            >
+              搜索
+            </n-button>
+          </n-input-group>
+          <n-flex align="center" style="gap: 8px; flex-wrap: wrap">
+            <n-checkbox v-model:checked="caseSensitive" size="small">区分大小写</n-checkbox>
+            <n-checkbox v-model:checked="useRegex" size="small">正则</n-checkbox>
+            <n-checkbox v-model:checked="hideDebugInfo" size="small">隐藏调试</n-checkbox>
+          </n-flex>
+          <n-flex wrap style="gap: 6px">
+            <n-button
+              v-for="option in quickSearchOptions"
+              :key="option"
+              size="tiny"
+              secondary
+              @click="useHistoryItem(option)"
+              :type="searchText === option ? 'primary' : 'default'"
+            >
+              {{ option }}
+            </n-button>
+          </n-flex>
+        </n-flex>
+      </n-card>
+
+      <!-- 搜索结果 -->
+      <n-card
+        size="small"
+        title="搜索结果"
+        style="flex: 1; min-height: 0"
+        content-style="height: 100%; overflow: hidden"
+      >
+        <template #header-extra>
+          <n-text v-if="totalMatches > 0" type="success" style="font-size: 13px">
+            {{ totalMatches }} 个结果
+          </n-text>
+        </template>
+
+        <n-scrollbar style="height: 100%; padding-right: 4px">
+          <n-empty v-if="!fileName" description="请先加载文件" />
+          <n-empty v-else-if="isLoadingFile" description="文件加载中...">
+            <template #icon><n-spin size="large" /></template>
+          </n-empty>
+          <n-empty v-else-if="!searchText" description="请输入搜索内容" />
+          <n-empty v-else-if="isSearching" description="搜索中...">
+            <template #icon><n-spin size="large" /></template>
+          </n-empty>
+          <n-empty v-else-if="searchResults.length === 0" description="未找到匹配结果" />
+          <n-list v-else hoverable clickable>
+            <n-list-item
+              v-for="(result, idx) in searchResults"
+              :key="idx"
+              @click="jumpToLine(result.lineNumber)"
+              style="cursor: pointer; padding: 6px 8px"
+            >
+              <n-flex align="center" style="gap: 6px">
+                <n-tag size="small" :bordered="false">{{ result.lineNumber }}</n-tag>
+                <n-text style="font-family: monospace; font-size: 12px; line-height: 1.5; word-break: break-all; flex: 1">
+                  <span>{{ highlightMatch(result).before }}</span>
+                  <span style="background-color: #f2c97d; color: #000; padding: 1px 3px; border-radius: 2px; font-weight: 600">
+                    {{ highlightMatch(result).match }}
+                  </span>
+                  <span>{{ highlightMatch(result).after }}</span>
+                </n-text>
+              </n-flex>
+            </n-list-item>
+          </n-list>
+        </n-scrollbar>
+      </n-card>
+    </div>
+
+    <!-- 桌面端：NSplit 左右布局 -->
+    <n-split
+      v-else
       :key="contentKey"
-      style="flex: 1; min-height: 0" 
+      style="flex: 1; min-height: 0"
       :default-size="0.4"
       :min="0.2"
       :max="0.8"

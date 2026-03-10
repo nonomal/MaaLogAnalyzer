@@ -7,6 +7,9 @@ import {
 import { CheckCircleOutlined, CloseCircleOutlined, CopyOutlined } from '@vicons/antd'
 import type { NodeInfo } from '../types'
 import { isTauri } from '../utils/platform'
+import { useIsMobile } from '../composables/useIsMobile'
+
+const { isMobile } = useIsMobile()
 
 // 转换文件路径为 Tauri 可访问的 URL
 const convertFileSrc = (filePath: string) => {
@@ -136,6 +139,9 @@ const formatJson = (obj: any) => {
   return JSON.stringify(obj, null, 2)
 }
 
+// 响应式列数
+const descriptionColumns = computed(() => isMobile.value ? 1 : 2)
+
 // 复制到剪贴板
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text)
@@ -157,7 +163,7 @@ const copyToClipboard = (text: string) => {
 
         <!-- 识别详情 (仅在点击识别尝试时显示) -->
         <n-card v-if="hasRecognition && isRecognitionAttemptSelected" title="🔍 识别详情">
-          <n-descriptions :column="2" size="small" label-placement="left" bordered>
+          <n-descriptions :column="descriptionColumns" size="small" label-placement="left" bordered>
             <n-descriptions-item label="识别 ID">
               {{ currentRecognition?.reco_id }}
             </n-descriptions-item>
@@ -209,7 +215,7 @@ const copyToClipboard = (text: string) => {
 
         <!-- 动作详情 (仅在点击动作按钮或嵌套动作节点时显示) -->
         <n-card title="⚡ 动作详情" v-if="hasAction && (isActionOnlyView || (selectedActionIndex !== null && selectedNestedActionIndex !== null))">
-          <n-descriptions :column="2" size="small" label-placement="left" bordered>
+          <n-descriptions :column="descriptionColumns" size="small" label-placement="left" bordered>
             <n-descriptions-item label="动作 ID">
               {{ currentActionDetails?.action_id }}
             </n-descriptions-item>
@@ -234,7 +240,7 @@ const copyToClipboard = (text: string) => {
               {{ currentAttempt?.timestamp || '-' }}
             </n-descriptions-item>
 
-            <n-descriptions-item label="目标位置" :span="2" v-if="currentActionDetails?.box">
+            <n-descriptions-item label="目标位置" :span="descriptionColumns" v-if="currentActionDetails?.box">
               <n-text code>
                 [{{ currentActionDetails.box.join(', ') }}]
               </n-text>
@@ -298,7 +304,7 @@ const copyToClipboard = (text: string) => {
 
         <!-- 节点详细信息 (仅在点击节点名称时显示) -->
         <n-card title="📋 节点详细信息" v-if="!isRecognitionAttemptSelected && !isActionOnlyView && selectedNode.node_details">
-          <n-descriptions :column="2" size="small" label-placement="left" bordered>
+          <n-descriptions :column="descriptionColumns" size="small" label-placement="left" bordered>
             <n-descriptions-item label="节点 ID">
               {{ selectedNode.node_details.node_id }}
             </n-descriptions-item>
@@ -366,5 +372,11 @@ const copyToClipboard = (text: string) => {
 
 .n-descriptions :deep(.n-descriptions-table-wrapper) {
   background: transparent;
+}
+
+@media (max-width: 768px) {
+  :deep(.n-descriptions-table-wrapper) {
+    font-size: 13px;
+  }
 }
 </style>

@@ -17,9 +17,12 @@ import { formatDuration } from '../utils/formatDuration'
 import { LogParser } from '../utils/logParser'
 import { getErrorMessage } from '../utils/errorHandler'
 import { isTauri } from '../utils/platform'
+import { useIsMobile } from '../composables/useIsMobile'
 
 // 注册 ECharts 组件
 use([CanvasRenderer, PieChart, TitleComponent, TooltipComponent, LegendComponent])
+
+const { isMobile } = useIsMobile()
 
 const props = defineProps<{
   tasks: TaskInfo[]
@@ -213,175 +216,247 @@ const statistics = computed(() => {
 })
 
 // 节点统计表格列定义
-const nodeColumns: DataTableColumns<NodeStatistics> = [
-  {
-    title: '节点名称',
-    key: 'name',
-    width: 250,
-    ellipsis: {
-      tooltip: true
-    },
-    render: (row) => row.name
-  },
-  {
-    title: '执行次数',
-    key: 'count',
-    width: 100,
-    align: 'center',
-    sorter: (a, b) => a.count - b.count,
-    render: (row) => row.count
-  },
-  {
-    title: '平均耗时',
-    key: 'avgDuration',
-    width: 120,
-    align: 'right',
-    defaultSortOrder: 'descend',
-    sorter: (a, b) => a.avgDuration - b.avgDuration,
-    render: (row) => formatDuration(row.avgDuration)
-  },
-  {
-    title: '最小耗时',
-    key: 'minDuration',
-    width: 120,
-    align: 'right',
-    sorter: (a, b) => a.minDuration - b.minDuration,
-    render: (row) => formatDuration(row.minDuration)
-  },
-  {
-    title: '最大耗时',
-    key: 'maxDuration',
-    width: 120,
-    align: 'right',
-    sorter: (a, b) => a.maxDuration - b.maxDuration,
-    render: (row) => formatDuration(row.maxDuration)
-  },
-  {
-    title: '总耗时',
-    key: 'totalDuration',
-    width: 120,
-    align: 'right',
-    sorter: (a, b) => a.totalDuration - b.totalDuration,
-    render: (row) => formatDuration(row.totalDuration)
-  },
-  {
-    title: '成功率',
-    key: 'successRate',
-    width: 150,
-    align: 'center',
-    sorter: (a, b) => a.successRate - b.successRate,
-    render: (row) => {
-      const rate = row.successRate
-      const color = rate >= 95 ? 'success' : rate >= 80 ? 'warning' : 'error'
-      return h(NProgress, {
-        type: 'line',
-        percentage: rate,
-        status: color,
-        showIndicator: true,
-        height: 18,
-        borderRadius: 4
-      })
-    }
-  },
-  {
-    title: '成功/失败',
-    key: 'status',
-    width: 120,
-    align: 'center',
-    render: (row) => {
-      return h(NFlex, { justify: 'center', align: 'center', style: { gap: '4px' } }, () => [
-        h(NTag, { type: 'success', size: 'small' }, () => row.successCount),
-        h(NText, { depth: 3 }, () => '/'),
-        h(NTag, { type: 'error', size: 'small' }, () => row.failCount)
-      ])
-    }
+const nodeColumns = computed<DataTableColumns<NodeStatistics>>(() => {
+  if (isMobile.value) {
+    return [
+      {
+        title: '节点名称',
+        key: 'name',
+        width: 150,
+        ellipsis: { tooltip: true },
+        render: (row) => row.name
+      },
+      {
+        title: '次数',
+        key: 'count',
+        width: 60,
+        align: 'center',
+        sorter: (a, b) => a.count - b.count,
+        render: (row) => row.count
+      },
+      {
+        title: '平均耗时',
+        key: 'avgDuration',
+        width: 90,
+        align: 'right',
+        defaultSortOrder: 'descend',
+        sorter: (a, b) => a.avgDuration - b.avgDuration,
+        render: (row) => formatDuration(row.avgDuration)
+      },
+      {
+        title: '成功率',
+        key: 'successRate',
+        width: 80,
+        align: 'center',
+        sorter: (a, b) => a.successRate - b.successRate,
+        render: (row) => `${row.successRate.toFixed(0)}%`
+      }
+    ]
   }
-]
+  return [
+    {
+      title: '节点名称',
+      key: 'name',
+      width: 250,
+      ellipsis: { tooltip: true },
+      render: (row) => row.name
+    },
+    {
+      title: '执行次数',
+      key: 'count',
+      width: 100,
+      align: 'center',
+      sorter: (a, b) => a.count - b.count,
+      render: (row) => row.count
+    },
+    {
+      title: '平均耗时',
+      key: 'avgDuration',
+      width: 120,
+      align: 'right',
+      defaultSortOrder: 'descend',
+      sorter: (a, b) => a.avgDuration - b.avgDuration,
+      render: (row) => formatDuration(row.avgDuration)
+    },
+    {
+      title: '最小耗时',
+      key: 'minDuration',
+      width: 120,
+      align: 'right',
+      sorter: (a, b) => a.minDuration - b.minDuration,
+      render: (row) => formatDuration(row.minDuration)
+    },
+    {
+      title: '最大耗时',
+      key: 'maxDuration',
+      width: 120,
+      align: 'right',
+      sorter: (a, b) => a.maxDuration - b.maxDuration,
+      render: (row) => formatDuration(row.maxDuration)
+    },
+    {
+      title: '总耗时',
+      key: 'totalDuration',
+      width: 120,
+      align: 'right',
+      sorter: (a, b) => a.totalDuration - b.totalDuration,
+      render: (row) => formatDuration(row.totalDuration)
+    },
+    {
+      title: '成功率',
+      key: 'successRate',
+      width: 150,
+      align: 'center',
+      sorter: (a, b) => a.successRate - b.successRate,
+      render: (row) => {
+        const rate = row.successRate
+        const color = rate >= 95 ? 'success' : rate >= 80 ? 'warning' : 'error'
+        return h(NProgress, {
+          type: 'line',
+          percentage: rate,
+          status: color,
+          showIndicator: true,
+          height: 18,
+          borderRadius: 4
+        })
+      }
+    },
+    {
+      title: '成功/失败',
+      key: 'status',
+      width: 120,
+      align: 'center',
+      render: (row) => {
+        return h(NFlex, { justify: 'center', align: 'center', style: { gap: '4px' } }, () => [
+          h(NTag, { type: 'success', size: 'small' }, () => row.successCount),
+          h(NText, { depth: 3 }, () => '/'),
+          h(NTag, { type: 'error', size: 'small' }, () => row.failCount)
+        ])
+      }
+    }
+  ]
+})
 
 // 识别和动作统计表格列定义
-const recognitionActionColumns: DataTableColumns<RecognitionActionStatistics> = [
-  {
-    title: '节点名称',
-    key: 'name',
-    width: 200,
-    ellipsis: {
-      tooltip: true
-    },
-    render: (row) => row.name
-  },
-  {
-    title: '执行次数',
-    key: 'count',
-    width: 90,
-    align: 'center',
-    sorter: (a, b) => a.count - b.count,
-    render: (row) => row.count
-  },
-  {
-    title: '平均识别尝试',
-    key: 'avgRecognitionAttempts',
-    width: 110,
-    align: 'center',
-    sorter: (a, b) => a.avgRecognitionAttempts - b.avgRecognitionAttempts,
-    render: (row) => row.avgRecognitionAttempts.toFixed(1)
-  },
-  {
-    title: '平均识别耗时',
-    key: 'avgRecognitionDuration',
-    width: 120,
-    align: 'right',
-    sorter: (a, b) => a.avgRecognitionDuration - b.avgRecognitionDuration,
-    render: (row) => row.recognitionCount > 0 ? formatDuration(row.avgRecognitionDuration) : '-'
-  },
-  {
-    title: '最大识别耗时',
-    key: 'maxRecognitionDuration',
-    width: 120,
-    align: 'right',
-    sorter: (a, b) => a.maxRecognitionDuration - b.maxRecognitionDuration,
-    render: (row) => row.recognitionCount > 0 ? formatDuration(row.maxRecognitionDuration) : '-'
-  },
-  {
-    title: '平均动作耗时',
-    key: 'avgActionDuration',
-    width: 120,
-    align: 'right',
-    defaultSortOrder: 'descend',
-    sorter: (a, b) => a.avgActionDuration - b.avgActionDuration,
-    render: (row) => row.actionCount > 0 ? formatDuration(row.avgActionDuration) : '-'
-  },
-  {
-    title: '最大动作耗时',
-    key: 'maxActionDuration',
-    width: 120,
-    align: 'right',
-    sorter: (a, b) => a.maxActionDuration - b.maxActionDuration,
-    render: (row) => row.actionCount > 0 ? formatDuration(row.maxActionDuration) : '-'
-  },
-  {
-    title: '成功率',
-    key: 'successRate',
-    width: 130,
-    align: 'center',
-    sorter: (a, b) => a.successRate - b.successRate,
-    render: (row) => {
-      const rate = row.successRate
-      const color = rate >= 95 ? 'success' : rate >= 80 ? 'warning' : 'error'
-      return h(NProgress, {
-        type: 'line',
-        percentage: rate,
-        status: color,
-        showIndicator: true,
-        height: 18,
-        borderRadius: 4
-      })
-    }
+const recognitionActionColumns = computed<DataTableColumns<RecognitionActionStatistics>>(() => {
+  if (isMobile.value) {
+    return [
+      {
+        title: '节点名称',
+        key: 'name',
+        width: 150,
+        ellipsis: { tooltip: true },
+        render: (row) => row.name
+      },
+      {
+        title: '次数',
+        key: 'count',
+        width: 60,
+        align: 'center',
+        sorter: (a, b) => a.count - b.count,
+        render: (row) => row.count
+      },
+      {
+        title: '识别耗时',
+        key: 'avgRecognitionDuration',
+        width: 90,
+        align: 'right',
+        sorter: (a, b) => a.avgRecognitionDuration - b.avgRecognitionDuration,
+        render: (row) => row.recognitionCount > 0 ? formatDuration(row.avgRecognitionDuration) : '-'
+      },
+      {
+        title: '动作耗时',
+        key: 'avgActionDuration',
+        width: 90,
+        align: 'right',
+        defaultSortOrder: 'descend',
+        sorter: (a, b) => a.avgActionDuration - b.avgActionDuration,
+        render: (row) => row.actionCount > 0 ? formatDuration(row.avgActionDuration) : '-'
+      }
+    ]
   }
-]
+  return [
+    {
+      title: '节点名称',
+      key: 'name',
+      width: 200,
+      ellipsis: { tooltip: true },
+      render: (row) => row.name
+    },
+    {
+      title: '执行次数',
+      key: 'count',
+      width: 90,
+      align: 'center',
+      sorter: (a, b) => a.count - b.count,
+      render: (row) => row.count
+    },
+    {
+      title: '平均识别尝试',
+      key: 'avgRecognitionAttempts',
+      width: 110,
+      align: 'center',
+      sorter: (a, b) => a.avgRecognitionAttempts - b.avgRecognitionAttempts,
+      render: (row) => row.avgRecognitionAttempts.toFixed(1)
+    },
+    {
+      title: '平均识别耗时',
+      key: 'avgRecognitionDuration',
+      width: 120,
+      align: 'right',
+      sorter: (a, b) => a.avgRecognitionDuration - b.avgRecognitionDuration,
+      render: (row) => row.recognitionCount > 0 ? formatDuration(row.avgRecognitionDuration) : '-'
+    },
+    {
+      title: '最大识别耗时',
+      key: 'maxRecognitionDuration',
+      width: 120,
+      align: 'right',
+      sorter: (a, b) => a.maxRecognitionDuration - b.maxRecognitionDuration,
+      render: (row) => row.recognitionCount > 0 ? formatDuration(row.maxRecognitionDuration) : '-'
+    },
+    {
+      title: '平均动作耗时',
+      key: 'avgActionDuration',
+      width: 120,
+      align: 'right',
+      defaultSortOrder: 'descend',
+      sorter: (a, b) => a.avgActionDuration - b.avgActionDuration,
+      render: (row) => row.actionCount > 0 ? formatDuration(row.avgActionDuration) : '-'
+    },
+    {
+      title: '最大动作耗时',
+      key: 'maxActionDuration',
+      width: 120,
+      align: 'right',
+      sorter: (a, b) => a.maxActionDuration - b.maxActionDuration,
+      render: (row) => row.actionCount > 0 ? formatDuration(row.maxActionDuration) : '-'
+    },
+    {
+      title: '成功率',
+      key: 'successRate',
+      width: 130,
+      align: 'center',
+      sorter: (a, b) => a.successRate - b.successRate,
+      render: (row) => {
+        const rate = row.successRate
+        const color = rate >= 95 ? 'success' : rate >= 80 ? 'warning' : 'error'
+        return h(NProgress, {
+          type: 'line',
+          percentage: rate,
+          status: color,
+          showIndicator: true,
+          height: 18,
+          borderRadius: 4
+        })
+      }
+    }
+  ]
+})
 
 // 当前显示的表格列
 const columns = computed(() => {
-  return statMode.value === 'node' ? nodeColumns : recognitionActionColumns
+  return statMode.value === 'node' ? nodeColumns.value : recognitionActionColumns.value
 })
 
 // 节点统计摘要
@@ -646,6 +721,30 @@ const recognitionActionChartOption = computed(() => {
     ]
   }
 })
+
+// 移动端适配饼图：图例放底部、饼图居中
+const adaptChartForMobile = (option: any) => {
+  if (!option || !isMobile.value) return option
+  return {
+    ...option,
+    legend: {
+      ...option.legend,
+      orient: 'horizontal',
+      left: 'center',
+      top: undefined,
+      bottom: 0,
+      textStyle: { fontSize: 11 }
+    },
+    series: option.series.map((s: any) => ({
+      ...s,
+      center: ['50%', '45%'],
+      radius: ['30%', '55%']
+    }))
+  }
+}
+
+const mobileNodeChartOption = computed(() => adaptChartForMobile(nodeChartOption.value))
+const mobileRecognitionActionChartOption = computed(() => adaptChartForMobile(recognitionActionChartOption.value))
 </script>
 
 <template>
@@ -656,10 +755,10 @@ const recognitionActionChartOption = computed(() => {
     content-style="padding: 16px; flex: 1; min-height: 0; display: flex; flex-direction: column"
   >
     <template #header-extra>
-      <n-flex align="center" style="gap: 12px">
+      <n-flex align="center" :style="isMobile ? 'gap: 8px; flex-wrap: wrap' : 'gap: 12px'">
         <n-radio-group v-model:value="statMode" size="small">
           <n-radio-button value="node">节点统计</n-radio-button>
-          <n-radio-button value="recognition-action">识别/动作统计</n-radio-button>
+          <n-radio-button value="recognition-action">识别/动作</n-radio-button>
         </n-radio-group>
 
         <!-- 节点统计维度选择 -->
@@ -673,7 +772,7 @@ const recognitionActionChartOption = computed(() => {
             { label: '最大耗时', value: 'maxDuration' }
           ]"
           size="small"
-          style="width: 120px"
+          :style="isMobile ? 'width: 100px' : 'width: 120px'"
         />
 
         <!-- 识别/动作统计维度选择 -->
@@ -688,10 +787,11 @@ const recognitionActionChartOption = computed(() => {
             { label: '平均识别尝试', value: 'avgRecognitionAttempts' }
           ]"
           size="small"
-          style="width: 140px"
+          :style="isMobile ? 'width: 120px' : 'width: 140px'"
         />
 
         <n-input
+          v-if="!isMobile"
           v-model:value="searchKeyword"
           placeholder="搜索节点名称"
           clearable
@@ -740,7 +840,16 @@ const recognitionActionChartOption = computed(() => {
       style="margin-bottom: 16px"
       :bordered="false"
     >
-      <n-flex justify="space-around" align="center">
+      <!-- 移动端搜索框 -->
+      <n-input
+        v-if="isMobile"
+        v-model:value="searchKeyword"
+        placeholder="搜索节点名称"
+        clearable
+        size="small"
+        style="margin-bottom: 12px"
+      />
+      <n-flex :justify="isMobile ? 'start' : 'space-around'" align="center" :wrap="true" :style="isMobile ? 'gap: 16px' : ''">
         <div style="text-align: center">
           <n-text depth="3" style="font-size: 12px">节点类型</n-text>
           <n-text strong style="display: block; font-size: 20px; margin-top: 4px">
@@ -765,7 +874,7 @@ const recognitionActionChartOption = computed(() => {
             {{ formatDuration(nodeSummary.totalDuration) }}
           </n-text>
         </div>
-        <div style="text-align: center; max-width: 200px">
+        <div v-if="!isMobile" style="text-align: center; max-width: 200px">
           <n-text depth="3" style="font-size: 12px">最慢节点</n-text>
           <n-text
             strong
@@ -788,7 +897,16 @@ const recognitionActionChartOption = computed(() => {
       style="margin-bottom: 16px"
       :bordered="false"
     >
-      <n-flex justify="space-around" align="center">
+      <!-- 移动端搜索框 -->
+      <n-input
+        v-if="isMobile"
+        v-model:value="searchKeyword"
+        placeholder="搜索节点名称"
+        clearable
+        size="small"
+        style="margin-bottom: 12px"
+      />
+      <n-flex :justify="isMobile ? 'start' : 'space-around'" align="center" :wrap="true" :style="isMobile ? 'gap: 16px' : ''">
         <div style="text-align: center">
           <n-text depth="3" style="font-size: 12px">节点类型</n-text>
           <n-text strong style="display: block; font-size: 20px; margin-top: 4px">
@@ -819,7 +937,7 @@ const recognitionActionChartOption = computed(() => {
             {{ formatDuration(recognitionActionSummary.avgActionDuration) }}
           </n-text>
         </div>
-        <div style="text-align: center; max-width: 200px">
+        <div v-if="!isMobile" style="text-align: center; max-width: 200px">
           <n-text depth="3" style="font-size: 12px">最慢动作节点</n-text>
           <n-text
             strong
@@ -842,8 +960,8 @@ const recognitionActionChartOption = computed(() => {
       style="margin-bottom: 16px"
       :bordered="false"
     >
-      <div style="width: 100%; height: 400px">
-        <v-chart :option="nodeChartOption" autoresize />
+      <div :style="{ width: '100%', height: isMobile ? '300px' : '400px' }">
+        <v-chart :option="mobileNodeChartOption" autoresize />
       </div>
     </n-card>
 
@@ -854,8 +972,8 @@ const recognitionActionChartOption = computed(() => {
       style="margin-bottom: 16px"
       :bordered="false"
     >
-      <div style="width: 100%; height: 400px">
-        <v-chart :option="recognitionActionChartOption" autoresize />
+      <div :style="{ width: '100%', height: isMobile ? '300px' : '400px' }">
+        <v-chart :option="mobileRecognitionActionChartOption" autoresize />
       </div>
     </n-card>
 
@@ -929,7 +1047,7 @@ const recognitionActionChartOption = computed(() => {
       v-model:show="showFileLoadingModal"
       preset="card"
       title="正在读取日志文件"
-      style="width: 500px"
+      :style="{ width: isMobile ? '90vw' : '500px' }"
       :bordered="false"
       :closable="false"
       :mask-closable="false"
@@ -958,7 +1076,7 @@ const recognitionActionChartOption = computed(() => {
       v-model:show="showParsingModal"
       preset="card"
       title="正在解析日志文件"
-      style="width: 500px"
+      :style="{ width: isMobile ? '90vw' : '500px' }"
       :bordered="false"
       :closable="false"
       :mask-closable="false"

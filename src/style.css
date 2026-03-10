@@ -79,3 +79,7 @@ body.force-dark {
   background: #18181c !important;
   color: rgba(255, 255, 255, 0.82) !important;
 }
+
+@media (max-width: 768px) {
+  .drop-zone { min-height: 200px; }
+}

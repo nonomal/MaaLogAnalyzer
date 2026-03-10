@@ -4,7 +4,7 @@ import {
   NCard, NButton, NIcon, NText, NFlex, NDropdown,
   NScrollbar, NEmpty, NBadge, NTag, NSplit, NList, NListItem
 } from 'naive-ui'
-import { CloudUploadOutlined, FolderOpenOutlined, FileOutlined, FolderOutlined } from '@vicons/antd'
+import { CloudUploadOutlined, FolderOpenOutlined, FileOutlined, FolderOutlined, MenuOutlined } from '@vicons/antd'
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import NodeCard from '../components/NodeCard.vue'
@@ -23,6 +23,7 @@ const props = defineProps<{
   parser: LogParser
   detailViewCollapsed?: boolean
   onExpandDetailView?: () => void
+  isMobile?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -36,6 +37,7 @@ const emit = defineEmits<{
   'select-nested-action': [node: NodeInfo, actionIndex: number, nestedIndex: number]
   'file-loading-start': []
   'file-loading-end': []
+  'open-task-drawer': []
 }>()
 
 // 当前选中的任务索引
@@ -553,10 +555,28 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
 
 <template>
   <n-card
-    title="MAA 日志分析器"
+    :title="isMobile ? undefined : 'MAA 日志分析器'"
     style="height: 100%"
     content-style="display: flex; flex-direction: column; gap: 16px; min-height: 0"
   >
+    <!-- 移动端工具栏 -->
+    <n-flex v-if="isMobile && tasks.length > 0" align="center" style="gap: 8px">
+      <n-button text style="font-size: 20px" @click="emit('open-task-drawer')">
+        <n-icon><menu-outlined /></n-icon>
+      </n-button>
+      <n-text strong style="font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+        {{ selectedTask?.entry || '选择任务' }}
+      </n-text>
+      <n-dropdown :options="reloadOptions" @select="handleReloadSelect">
+        <n-button size="small">
+          <template #icon>
+            <n-icon><folder-open-outlined /></n-icon>
+          </template>
+          重新加载
+        </n-button>
+      </n-dropdown>
+    </n-flex>
+
     <!-- 标题右侧：主题切换按钮 -->
     <!-- 文件上传区域 -->
     <div v-if="tasks.length === 0">
@@ -652,6 +672,50 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
 
     <!-- 任务列表 -->
     <template v-else>
+      <!-- 移动端：直接显示节点卡片，无 NSplit -->
+      <template v-if="isMobile">
+        <div v-if="currentNodes.length === 0" style="padding: 40px 0">
+          <n-empty description="暂无节点数据" />
+        </div>
+        <DynamicScroller
+          v-else
+          ref="virtualScroller"
+          :key="selectedTask?.task_id"
+          :items="currentNodes"
+          :min-item-size="150"
+          key-field="_uniqueKey"
+          class="virtual-scroller"
+          style="flex: 1; min-height: 0"
+        >
+          <template #default="{ item, index, active }">
+            <DynamicScrollerItem
+              :item="item"
+              :active="active"
+              :data-index="index"
+              :size-dependencies="[
+                item.recognition_attempts?.length,
+                item.next_list?.length,
+                item.action_details,
+                settings.displayMode
+              ]"
+            >
+              <div style="padding: 8px 4px">
+                <node-card
+                  :node="item"
+                  @select-node="handleNodeClick"
+                  @select-action="handleActionClick"
+                  @select-recognition="handleRecognitionClick"
+                  @select-nested="handleNestedClick"
+                  @select-nested-action="handleNestedActionClick"
+                />
+              </div>
+            </DynamicScrollerItem>
+          </template>
+        </DynamicScroller>
+      </template>
+
+      <!-- 桌面端：完整 NSplit 布局 -->
+      <template v-else>
       <!-- 操作按钮 -->
       <n-flex>
         <!-- Tauri 环境 -->
@@ -937,6 +1001,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
           </n-card>
         </template>
       </n-split>
+      </template>
     </template>
 
     <!-- Web 环境下的全局隐藏文件选择输入框 -->

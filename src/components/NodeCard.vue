@@ -234,4 +234,10 @@ const actionButtonType = computed<ButtonType>(() => {
 .node-card:hover :deep(.n-card) {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
 }
+
+@media (max-width: 768px) {
+  .node-card { padding-left: 12px; }
+  .node-card:hover { transform: none; }
+  .node-card::before { width: 8px; height: 8px; }
+}
 </style>

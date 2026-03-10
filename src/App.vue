@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, h } from 'vue'
-import { NSplit, NCard, NFlex, NButton, NIcon, NDropdown, NModal, NText, NDivider, NTag, NProgress, NSelect, useMessage } from 'naive-ui'
+import { NSplit, NCard, NFlex, NButton, NIcon, NDropdown, NModal, NText, NDivider, NTag, NProgress, NSelect, NDrawer, NDrawerContent, NScrollbar, NList, NListItem, useMessage } from 'naive-ui'
 import ProcessView from './views/ProcessView.vue'
 import DetailView from './views/DetailView.vue'
 import TextSearchView from './views/TextSearchView.vue'
@@ -9,15 +9,17 @@ import SettingsView from './views/SettingsView.vue'
 import { LogParser } from './utils/logParser'
 import { getErrorMessage } from './utils/errorHandler'
 import type { TaskInfo, NodeInfo } from './types'
-import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnHeightOutlined, InfoCircleOutlined, GithubOutlined, DashboardOutlined, SettingOutlined } from '@vicons/antd'
+import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnHeightOutlined, InfoCircleOutlined, GithubOutlined, DashboardOutlined, SettingOutlined, MenuOutlined } from '@vicons/antd'
 import { version } from '../package.json'
+import { useIsMobile } from './composables/useIsMobile'
+import { formatDuration } from './utils/formatDuration'
 
 // Props
 interface Props {
   isDark: boolean
 }
 
-withDefaults(defineProps<Props>(), {
+const props = withDefaults(defineProps<Props>(), {
   isDark: true
 })
 
@@ -26,12 +28,19 @@ const emit = defineEmits<{
   'toggle-theme': []
 }>()
 
+// 移动端检测
+const { isMobile } = useIsMobile()
+
+// 移动端抽屉状态
+const showTaskDrawer = ref(false)
+const showDetailDrawer = ref(false)
+
 // 视图模式
 type ViewMode = 'analysis' | 'search' | 'statistics' | 'split'
 const viewMode = ref<ViewMode>('analysis')
 
-// 视图模式选项
-const viewModeOptions = [
+// 所有视图模式选项
+const allViewModeOptions = [
   {
     label: '日志分析',
     key: 'analysis' as ViewMode,
@@ -54,15 +63,27 @@ const viewModeOptions = [
   }
 ]
 
+// 视图模式选项（mobile 下过滤掉 split）
+const viewModeOptions = computed(() => {
+  if (isMobile.value) {
+    return allViewModeOptions.filter(opt => opt.key !== 'split')
+  }
+  return allViewModeOptions
+})
+
 // 当前视图模式的显示文本
 const currentViewLabel = computed(() => {
-  const option = viewModeOptions.find(opt => opt.key === viewMode.value)
+  const option = viewModeOptions.value.find(opt => opt.key === viewMode.value)
   return option?.label || '视图'
 })
 
 // 处理视图模式切换
 const handleViewModeSelect = (key: string) => {
-  viewMode.value = key as ViewMode
+  if (isMobile.value && key === 'split') {
+    viewMode.value = 'analysis'
+  } else {
+    viewMode.value = key as ViewMode
+  }
 }
 
 const splitSize = ref(0.65)
@@ -342,20 +363,92 @@ const handleFileLoadingStart = () => {
 const handleFileLoadingEnd = () => {
   showFileLoadingModal.value = false
 }
+
+// 响应式 modal 宽度
+const modalWidth = computed(() => isMobile.value ? '90vw' : '600px')
+const modalWidthSmall = computed(() => isMobile.value ? '90vw' : '500px')
+
+// 移动端下选中节点/识别/动作自动打开详情抽屉
+watch(
+  [selectedNode, selectedRecognitionIndex, selectedNestedIndex, selectedActionIndex, selectedNestedActionIndex, isActionOnlyView],
+  () => {
+    if (isMobile.value && selectedNode.value) {
+      showDetailDrawer.value = true
+    }
+  }
+)
+
+// 移动端汉堡菜单选项
+const mobileMenuOptions = computed(() => [
+  ...viewModeOptions.value.map(opt => ({
+    label: opt.label,
+    key: `view-${opt.key}`,
+    icon: opt.icon
+  })),
+  { type: 'divider' as const, key: 'd1' },
+  { label: '设置', key: 'settings', icon: () => h(SettingOutlined) },
+  { label: '关于', key: 'about', icon: () => h(InfoCircleOutlined) },
+  { label: props.isDark ? '浅色模式' : '深色模式', key: 'theme', icon: () => h(props.isDark ? BulbOutlined : BulbFilled) }
+])
+
+// isDark as ref for computed access
+const isDark = computed(() => props.isDark)
+
+const handleMobileMenuSelect = (key: string) => {
+  if (key.startsWith('view-')) {
+    handleViewModeSelect(key.replace('view-', ''))
+  } else if (key === 'settings') {
+    showSettingsModal.value = true
+  } else if (key === 'about') {
+    showAboutModal.value = true
+  } else if (key === 'theme') {
+    emit('toggle-theme')
+  }
+}
+
+// 移动端任务选择（选择后关闭抽屉）
+const handleMobileSelectTask = (task: TaskInfo) => {
+  handleSelectTask(task)
+  showTaskDrawer.value = false
+}
 </script>
 
 <template>
   <div style="height: 100vh; display: flex; flex-direction: column">
     <!-- 顶部菜单栏 -->
-    <n-card 
-      size="small" 
+    <n-card
+      size="small"
       :bordered="false"
       content-style="padding: 8px 16px"
     >
-      <n-flex justify="space-between" align="center">
+      <!-- 移动端头部 -->
+      <n-flex v-if="isMobile" justify="space-between" align="center">
+        <n-flex align="center" style="gap: 8px">
+          <n-button
+            text
+            style="font-size: 22px"
+            @click="showTaskDrawer = true"
+          >
+            <n-icon><menu-outlined /></n-icon>
+          </n-button>
+          <n-text strong style="font-size: 16px">MAA 日志工具</n-text>
+        </n-flex>
+        <n-dropdown
+          :options="mobileMenuOptions"
+          @select="handleMobileMenuSelect"
+          trigger="click"
+        >
+          <n-button size="small">
+            {{ currentViewLabel }}
+          </n-button>
+        </n-dropdown>
+      </n-flex>
+
+      <!-- 桌面端头部 -->
+      <n-flex v-else justify="space-between" align="center">
         <n-flex align="center" style="gap: 12px">
           <n-text strong style="font-size: 16px">MAA 日志工具</n-text>
-          
+
           <!-- 视图模式下拉菜单 -->
           <n-dropdown
             :options="viewModeOptions"
@@ -407,7 +500,7 @@ const handleFileLoadingEnd = () => {
             清除过滤
           </n-button>
         </n-flex>
-        
+
         <!-- 右侧按钮组 -->
         <n-flex align="center" style="gap: 8px">
           <!-- 设置按钮 -->
@@ -451,7 +544,98 @@ const handleFileLoadingEnd = () => {
     <div style="flex: 1; min-height: 0">
       <!-- 日志分析模式 -->
       <div v-show="viewMode === 'analysis'" style="height: 100%">
+        <!-- 移动端布局 -->
+        <template v-if="isMobile">
+          <process-view
+            :tasks="filteredTasks"
+            :selected-task="selectedTask"
+            :loading="loading"
+            :parser="parser"
+            :is-mobile="true"
+            @select-task="handleSelectTask"
+            @upload-file="handleFileUpload"
+            @upload-content="handleContentUpload"
+            @select-node="handleSelectNode"
+            @select-action="handleSelectAction"
+            @select-recognition="handleSelectRecognition"
+            @select-nested="handleSelectNested"
+            @select-nested-action="handleSelectNestedAction"
+            @file-loading-start="handleFileLoadingStart"
+            @file-loading-end="handleFileLoadingEnd"
+            @open-task-drawer="showTaskDrawer = true"
+          />
+
+          <!-- 左侧任务抽屉 -->
+          <n-drawer
+            v-model:show="showTaskDrawer"
+            placement="left"
+            :width="280"
+          >
+            <n-drawer-content title="任务列表">
+              <n-scrollbar style="height: 100%">
+                <n-list hoverable clickable>
+                  <n-list-item
+                    v-for="(task, index) in filteredTasks"
+                    :key="task.task_id"
+                    @click="handleMobileSelectTask(task)"
+                    :style="{
+                      backgroundColor: selectedTask?.task_id === task.task_id ? 'var(--n-color-target)' : 'transparent',
+                      cursor: 'pointer',
+                      padding: '12px 16px'
+                    }"
+                  >
+                    <n-flex vertical style="gap: 8px">
+                      <n-flex align="center" justify="space-between">
+                        <n-text strong style="font-size: 15px">{{ task.entry }}</n-text>
+                        <n-tag size="small" :type="task.status === 'succeeded' ? 'success' : task.status === 'failed' ? 'error' : 'warning'">
+                          #{{ index + 1 }}
+                        </n-tag>
+                      </n-flex>
+                      <n-flex vertical style="gap: 4px">
+                        <n-text depth="3" style="font-size: 12px">
+                          状态:
+                          <n-text :type="task.status === 'succeeded' ? 'success' : task.status === 'failed' ? 'error' : 'warning'">
+                            {{ task.status === 'succeeded' ? '成功' : task.status === 'failed' ? '失败' : '运行中' }}
+                          </n-text>
+                        </n-text>
+                        <n-text depth="3" style="font-size: 12px">
+                          节点: {{ task.nodes.length }} 个
+                        </n-text>
+                        <n-text depth="3" style="font-size: 12px" v-if="task.duration">
+                          耗时: {{ formatDuration(task.duration) }}
+                        </n-text>
+                      </n-flex>
+                    </n-flex>
+                  </n-list-item>
+                </n-list>
+              </n-scrollbar>
+            </n-drawer-content>
+          </n-drawer>
+
+          <!-- 底部详情抽屉 -->
+          <n-drawer
+            v-model:show="showDetailDrawer"
+            placement="bottom"
+            :default-height="400"
+            resizable
+          >
+            <n-drawer-content title="详细信息">
+              <detail-view
+                :selected-node="selectedNode"
+                :selected-recognition-index="selectedRecognitionIndex"
+                :selected-nested-index="selectedNestedIndex"
+                :selected-action-index="selectedActionIndex"
+                :selected-nested-action-index="selectedNestedActionIndex"
+                :is-action-only-view="isActionOnlyView"
+                style="height: 100%"
+              />
+            </n-drawer-content>
+          </n-drawer>
+        </template>
+
+        <!-- 桌面端布局 -->
         <n-split
+          v-else
           v-model:size="splitSize"
           :max="1"
           :min="0.4"
@@ -602,7 +786,7 @@ const handleFileLoadingEnd = () => {
       v-model:show="showSettingsModal"
       preset="card"
       title="设置"
-      style="width: 600px"
+      :style="{ width: modalWidth }"
       :bordered="false"
     >
       <settings-view />
@@ -613,7 +797,7 @@ const handleFileLoadingEnd = () => {
       v-model:show="showAboutModal"
       preset="card"
       title="关于 MAA 日志工具"
-      style="width: 600px"
+      :style="{ width: modalWidth }"
       :bordered="false"
     >
       <n-flex vertical style="gap: 20px">
@@ -703,7 +887,7 @@ const handleFileLoadingEnd = () => {
       v-model:show="showFileLoadingModal"
       preset="card"
       title="正在读取日志文件"
-      style="width: 500px"
+      :style="{ width: modalWidthSmall }"
       :bordered="false"
       :closable="false"
       :mask-closable="false"
@@ -732,7 +916,7 @@ const handleFileLoadingEnd = () => {
       v-model:show="showParsingModal"
       preset="card"
       title="正在解析日志文件"
-      style="width: 500px"
+      :style="{ width: modalWidthSmall }"
       :bordered="false"
       :closable="false"
       :mask-closable="false"

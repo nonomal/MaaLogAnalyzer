@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { NCard, NForm, NFormItem, NSwitch, NButton, NFlex, NRadioGroup, NRadioButton, useMessage } from 'naive-ui'
 import { getSettings, saveSettings } from '../utils/settings'
+import { useIsMobile } from '../composables/useIsMobile'
 
+const { isMobile } = useIsMobile()
 const message = useMessage()
 const settings = getSettings()
 
@@ -26,7 +28,7 @@ const handleReset = () => {
   <n-card style="height: 100%">
     <n-text strong style="font-size: 16px; display: block; margin-bottom: 16px">显示</n-text>
 
-    <n-form label-placement="left" label-width="200">
+    <n-form :label-placement="isMobile ? 'top' : 'left'" :label-width="isMobile ? undefined : 200">
       <n-form-item label="节点显示模式">
         <n-radio-group v-model:value="settings.displayMode">
           <n-radio-button value="detailed">详细</n-radio-button>
