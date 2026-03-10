@@ -13,6 +13,8 @@ export interface AppSettings {
   defaultCollapseNestedRecognition: boolean
   // 默认折叠动作部分
   defaultCollapseAction: boolean
+  // 默认展开原始 JSON 数据
+  defaultExpandRawJson: boolean
   // 节点显示模式
   displayMode: DisplayMode
 }
@@ -23,6 +25,7 @@ const defaultSettings: AppSettings = {
   defaultCollapseRecognition: false,
   defaultCollapseNestedRecognition: false,
   defaultCollapseAction: false,
+  defaultExpandRawJson: false,
   displayMode: 'tree'
 }
 

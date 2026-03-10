@@ -8,8 +8,13 @@ import { CheckCircleOutlined, CloseCircleOutlined, CopyOutlined } from '@vicons/
 import type { NodeInfo } from '../types'
 import { isTauri } from '../utils/platform'
 import { useIsMobile } from '../composables/useIsMobile'
+import { getSettings } from '../utils/settings'
 
 const { isMobile } = useIsMobile()
+const settings = getSettings()
+
+// 原始 JSON 折叠默认展开名称
+const rawJsonDefaultExpanded = computed(() => settings.defaultExpandRawJson ? ['reco-json', 'action-json', 'node-json'] : [])
 
 // 转换文件路径为 Tauri 可访问的 URL
 const convertFileSrc = (filePath: string) => {
@@ -190,7 +195,7 @@ const copyToClipboard = (text: string) => {
           </n-descriptions>
 
           <!-- 原始识别数据 (折叠) -->
-          <n-collapse style="margin-top: 16px">
+          <n-collapse style="margin-top: 16px" :default-expanded-names="rawJsonDefaultExpanded">
             <n-collapse-item title="原始识别数据" name="reco-json">
               <template #header-extra>
                 <n-button
@@ -248,7 +253,7 @@ const copyToClipboard = (text: string) => {
           </n-descriptions>
 
           <!-- 原始动作数据 (折叠) -->
-          <n-collapse style="margin-top: 16px">
+          <n-collapse style="margin-top: 16px" :default-expanded-names="rawJsonDefaultExpanded">
             <n-collapse-item title="原始动作数据" name="action-json">
               <template #header-extra>
                 <n-button
@@ -327,7 +332,7 @@ const copyToClipboard = (text: string) => {
 
         <!-- 完整节点数据 (仅在点击节点名称时显示) -->
         <n-card title="📄 完整节点数据" v-if="!isRecognitionAttemptSelected && !isActionOnlyView">
-          <n-collapse>
+          <n-collapse :default-expanded-names="rawJsonDefaultExpanded">
             <n-collapse-item title="原始 JSON 数据" name="node-json">
               <template #header-extra>
                 <n-button

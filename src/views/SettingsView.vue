@@ -17,6 +17,7 @@ const handleReset = () => {
     defaultCollapseRecognition: false,
     defaultCollapseNestedRecognition: true,
     defaultCollapseAction: true,
+    defaultExpandRawJson: true,
     displayMode: 'tree'
   })
   saveSettings(settings)
@@ -50,6 +51,10 @@ const handleReset = () => {
           <n-switch v-model:value="settings.defaultCollapseAction" />
         </n-form-item>
       </template>
+
+      <n-form-item label="默认展开原始 JSON 数据">
+        <n-switch v-model:value="settings.defaultExpandRawJson" />
+      </n-form-item>
     </n-form>
 
     <n-flex style="margin-top: 24px; gap: 12px">
