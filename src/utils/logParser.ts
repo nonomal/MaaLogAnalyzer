@@ -191,7 +191,7 @@ export class LogParser {
       processId,
       threadId,
       _lineNumber: lineNum,
-      _dedupKey: `${msg}|${fnv1aHash(detailsJson)}`
+      _dedupKey: `${timestamp.substring(0, 19)}|${msg}|${fnv1aHash(detailsJson)}`
     }
   }
 
