@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { NCard, NForm, NFormItem, NSwitch, NButton, NFlex, NRadioGroup, NRadioButton, useMessage } from 'naive-ui'
+import { NCard, NForm, NFormItem, NSwitch, NButton, NFlex, NRadioGroup, NRadioButton, NText, useMessage } from 'naive-ui'
 import { getSettings, saveSettings } from '../utils/settings'
 import { useIsMobile } from '../composables/useIsMobile'
 

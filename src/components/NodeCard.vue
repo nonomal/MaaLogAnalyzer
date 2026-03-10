@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
-import { NCard, NButton, NFlex } from 'naive-ui'
+import { NCard, NButton, NFlex, NText } from 'naive-ui'
 import type { NodeInfo, RecognitionAttempt, MergedRecognitionItem } from '../types'
 import { getSettings } from '../utils/settings'
 import { extractTime } from '../utils/formatDuration'
