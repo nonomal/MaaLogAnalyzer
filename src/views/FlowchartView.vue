@@ -615,7 +615,7 @@ const onPaneClick = () => {
               :key="info.node_id"
             >
               <div v-if="popoverNodeData.nodeInfos.length > 1" class="popover-exec-label">
-                执行 #{{ idx + 1 }}
+                执行 #{{ popoverNodeData.executionOrder[idx] ?? idx + 1 }}
               </div>
               <div class="popover-row">
                 <n-tag size="tiny" :type="info.status === 'success' ? 'success' : 'error'">
