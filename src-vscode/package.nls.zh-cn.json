@@ -1,0 +1,11 @@
+﻿{
+  "displayName": "Maa 日志分析器",
+  "description": "Maa 日志分析器 - 分析 MaaFramework 日志文件",
+  "command.openAnalyzer": "Maa: 打开日志分析器",
+  "command.analyzeFolder": "Maa: 选择文件/文件夹并分析",
+  "command.analyzeFile": "Maa: 分析此日志文件",
+  "command.installContextMenu": "Maa: 安装 Windows 右键菜单",
+  "command.uninstallContextMenu": "Maa: 卸载 Windows 右键菜单",
+  "viewsContainer.maa": "MAA",
+  "view.logAnalyzer": "日志分析"
+}

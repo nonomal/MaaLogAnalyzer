@@ -1,7 +1,7 @@
 {
   "name": "maa-log-analyzer",
-  "displayName": "Maa Log Analyzer",
-  "description": "Maa Log Analyzer - Analyze MaaFramework log files",
+  "displayName": "%displayName%",
+  "description": "%description%",
   "version": "0.0.1",
   "publisher": "Windsland52",
   "icon": "icon.png",
@@ -16,21 +16,57 @@
   "categories": [
     "Other"
   ],
-  "activationEvents": [],
+  "activationEvents": [
+    "onUri"
+  ],
   "main": "./dist/extension.js",
   "contributes": {
     "commands": [
       {
         "command": "maaLogAnalyzer.openAnalyzer",
-        "title": "Maa: 打开日志分析器"
+        "title": "%command.openAnalyzer%"
+      },
+      {
+        "command": "maaLogAnalyzer.analyzeFolder",
+        "title": "%command.analyzeFolder%"
       },
       {
         "command": "maaLogAnalyzer.analyzeFile",
-        "title": "Maa: 分析此日志文件"
+        "title": "%command.analyzeFile%"
+      },
+      {
+        "command": "maaLogAnalyzer.installContextMenu",
+        "title": "%command.installContextMenu%"
+      },
+      {
+        "command": "maaLogAnalyzer.uninstallContextMenu",
+        "title": "%command.uninstallContextMenu%"
       }
     ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "maaLogAnalyzer",
+          "title": "%viewsContainer.maa%",
+          "icon": "icon.png"
+        }
+      ]
+    },
+    "views": {
+      "maaLogAnalyzer": [
+        {
+          "id": "maaLogAnalyzer.sidebar",
+          "name": "%view.logAnalyzer%"
+        }
+      ]
+    },
     "menus": {
       "explorer/context": [
+        {
+          "command": "maaLogAnalyzer.analyzeFolder",
+          "when": "explorerResourceIsFolder",
+          "group": "navigation"
+        },
         {
           "command": "maaLogAnalyzer.analyzeFile",
           "when": "resourceExtname == .log || resourceFilename =~ /maa.*\\.log/i",
@@ -42,6 +78,38 @@
           "command": "maaLogAnalyzer.analyzeFile",
           "when": "resourceExtname == .log",
           "group": "navigation"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "maaLogAnalyzer.openAnalyzer",
+          "when": "view == maaLogAnalyzer.sidebar && viewItem == openAnalyzer",
+          "group": "inline"
+        },
+        {
+          "command": "maaLogAnalyzer.analyzeFolder",
+          "when": "view == maaLogAnalyzer.sidebar && viewItem == analyzeFolder",
+          "group": "inline"
+        },
+        {
+          "command": "maaLogAnalyzer.installContextMenu",
+          "when": "view == maaLogAnalyzer.sidebar && viewItem == installContextMenu && isWindows",
+          "group": "inline"
+        },
+        {
+          "command": "maaLogAnalyzer.uninstallContextMenu",
+          "when": "view == maaLogAnalyzer.sidebar && viewItem == uninstallContextMenu && isWindows",
+          "group": "inline"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "maaLogAnalyzer.installContextMenu",
+          "when": "isWindows"
+        },
+        {
+          "command": "maaLogAnalyzer.uninstallContextMenu",
+          "when": "isWindows"
         }
       ]
     }

@@ -1,0 +1,11 @@
+﻿{
+  "displayName": "Maa Log Analyzer",
+  "description": "Maa Log Analyzer - Analyze MaaFramework log files",
+  "command.openAnalyzer": "Maa: Open Log Analyzer",
+  "command.analyzeFolder": "Maa: Analyze File/Folder",
+  "command.analyzeFile": "Maa: Analyze This Log File",
+  "command.installContextMenu": "Maa: Install Windows Context Menu",
+  "command.uninstallContextMenu": "Maa: Uninstall Windows Context Menu",
+  "viewsContainer.maa": "MAA",
+  "view.logAnalyzer": "Log Analyzer"
+}

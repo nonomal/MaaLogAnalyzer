@@ -1,8 +1,42 @@
 import * as vscode from 'vscode'
 import * as path from 'path'
+import { execFile } from 'child_process'
+import { promisify } from 'util'
+import { copyFile, mkdir } from 'fs/promises'
 import { unzipSync } from 'fflate'
 
 let currentPanel: vscode.WebviewPanel | undefined = undefined
+const execFileAsync = promisify(execFile)
+const isZh = vscode.env.language.toLowerCase().startsWith('zh')
+const t = (en: string, zh: string) => (isZh ? zh : en)
+
+class SidebarActionItem extends vscode.TreeItem {
+  constructor(label: string, commandId: string, contextValue: string) {
+    super(label, vscode.TreeItemCollapsibleState.None)
+    this.contextValue = contextValue
+    this.command = { command: commandId, title: label }
+  }
+}
+
+class SidebarActionProvider implements vscode.TreeDataProvider<SidebarActionItem> {
+  getTreeItem(element: SidebarActionItem): vscode.TreeItem {
+    return element
+  }
+
+  getChildren(): SidebarActionItem[] {
+    const items: SidebarActionItem[] = [
+      new SidebarActionItem(t('Open Analyzer', '\u6253\u5f00\u5206\u6790\u9762\u677f'), 'maaLogAnalyzer.openAnalyzer', 'openAnalyzer'),
+      new SidebarActionItem(t('Analyze File/Folder', '\u9009\u62e9\u6587\u4ef6/\u6587\u4ef6\u5939\u5e76\u5206\u6790'), 'maaLogAnalyzer.analyzeFolder', 'analyzeFolder'),
+    ]
+    if (process.platform === 'win32') {
+      items.push(
+        new SidebarActionItem(t('Install Windows Context Menu', '\u5b89\u88c5\u7cfb\u7edf\u53f3\u952e\u83dc\u5355'), 'maaLogAnalyzer.installContextMenu', 'installContextMenu'),
+        new SidebarActionItem(t('Uninstall Windows Context Menu', '\u5378\u8f7d\u7cfb\u7edf\u53f3\u952e\u83dc\u5355'), 'maaLogAnalyzer.uninstallContextMenu', 'uninstallContextMenu'),
+      )
+    }
+    return items
+  }
+}
 
 export function activate(context: vscode.ExtensionContext) {
   console.log('Maa Log Analyzer extension is now active!')
@@ -15,34 +49,107 @@ export function activate(context: vscode.ExtensionContext) {
     }
   )
 
-  // 注册分析文件命令（右键菜单）
-  const analyzeFileCommand = vscode.commands.registerCommand(
-    'maaLogAnalyzer.analyzeFile',
-    async (uri: vscode.Uri) => {
-      const panel = createOrShowPanel(context)
+  // 注册分析文件夹命令（资源管理器右键或侧边栏入口）
+  const analyzeFolderCommand = vscode.commands.registerCommand(
+    'maaLogAnalyzer.analyzeFolder',
+    async (_uri?: vscode.Uri) => {
+      const targetUri = await pickUriForAnalysis()
 
-      if (uri.fsPath.toLowerCase().endsWith('.zip')) {
-        await handleZipFile(uri)
-      } else {
-        // 读取文件内容
-        try {
-          const fileContent = await vscode.workspace.fs.readFile(uri)
-          const content = new TextDecoder('utf-8').decode(fileContent)
-
-          // 发送文件内容到 Webview
-          panel.webview.postMessage({
-            type: 'loadFile',
-            content: content,
-            fileName: path.basename(uri.fsPath)
-          })
-        } catch (error) {
-          vscode.window.showErrorMessage(`无法读取文件: ${error}`)
-        }
+      if (targetUri) {
+        createOrShowPanel(context)
+        await analyzeUri(targetUri)
       }
     }
   )
 
-  context.subscriptions.push(openAnalyzerCommand, analyzeFileCommand)
+  const analyzeFileCommand = vscode.commands.registerCommand(
+    'maaLogAnalyzer.analyzeFile',
+    async (uri: vscode.Uri) => {
+      createOrShowPanel(context)
+      await analyzeFileUri(uri)
+    }
+  )
+
+  const installContextMenuCommand = vscode.commands.registerCommand(
+    'maaLogAnalyzer.installContextMenu',
+    async () => {
+      await installWindowsContextMenu(context)
+    }
+  )
+
+  const uninstallContextMenuCommand = vscode.commands.registerCommand(
+    'maaLogAnalyzer.uninstallContextMenu',
+    async () => {
+      await uninstallWindowsContextMenu()
+    }
+  )
+  const sidebarProvider = new SidebarActionProvider()
+  const sidebarView = vscode.window.createTreeView('maaLogAnalyzer.sidebar', {
+    treeDataProvider: sidebarProvider,
+    showCollapseAll: false,
+  })
+
+  const uriHandler = vscode.window.registerUriHandler({
+    handleUri: async (uri: vscode.Uri) => {
+      let targetPath: string | null = null
+      let targetRoute: 'analyze-file' | 'analyze-folder' | null = null
+
+      // New format: vscode://publisher.extension/open/<route>/<base64Path>
+      const parts = uri.path.replace(/^\/+/, '').split('/')
+      if (parts[0] === 'open' && parts.length >= 3) {
+        if (parts[1] === 'analyze-file' || parts[1] === 'analyze-folder') {
+          targetRoute = parts[1]
+        }
+        const encoded = parts.slice(2).join('/')
+        try {
+          targetPath = Buffer.from(encoded, 'base64').toString('utf8')
+        } catch {
+          targetPath = null
+        }
+      }
+
+      // Backward compatibility: ?path=...
+      if (!targetPath) {
+        const qs = new URLSearchParams(uri.query)
+        targetPath = qs.get('path')
+        const route = qs.get('route')
+        if (route === 'analyze-file' || route === 'analyze-folder') {
+          targetRoute = route
+        }
+      }
+
+      // Ignore unrelated URI opens silently.
+      if (!targetPath) return
+
+      try {
+        const normalizedPath = targetPath.trim().replace(/^"(.*)"$/, '$1')
+        const targetUri = vscode.Uri.file(normalizedPath)
+        createOrShowPanel(context)
+
+        if (targetRoute === 'analyze-file') {
+          await analyzeFileUri(targetUri)
+          return
+        }
+        if (targetRoute === 'analyze-folder') {
+          await analyzeFolderUri(targetUri)
+          return
+        }
+
+        const lower = normalizedPath.toLowerCase()
+        const looksLikeFile = lower.endsWith('.zip') || lower.endsWith('.log') || lower.endsWith('.jsonl') || lower.endsWith('.txt')
+
+        if (looksLikeFile) {
+          await analyzeFileUri(targetUri)
+        } else {
+          await analyzeFolderUri(targetUri)
+        }
+      } catch (error) {
+        vscode.window.showErrorMessage(`无法处理外部打开请求: ${error}`)
+      }
+    },
+  })
+
+  context.subscriptions.push(openAnalyzerCommand, analyzeFolderCommand, analyzeFileCommand, installContextMenuCommand, uninstallContextMenuCommand, sidebarView, uriHandler)
 }
 
 function createOrShowPanel(context: vscode.ExtensionContext): vscode.WebviewPanel {
@@ -109,54 +216,11 @@ function createOrShowPanel(context: vscode.ExtensionContext): vscode.WebviewPane
           break
 
         case 'openFolder':
-          // 打开文件夹选择对话框
-          const folderUri = await vscode.window.showOpenDialog({
-            canSelectMany: false,
-            canSelectFolders: true,
-            canSelectFiles: false,
-            title: '选择日志文件夹'
-          })
+          // Open file or folder picker
+          const targetUri = await pickUriForAnalysis()
 
-          if (folderUri && folderUri[0]) {
-            try {
-              const folderPath = folderUri[0]
-              const bakLogUri = vscode.Uri.joinPath(folderPath, 'maa.bak.log')
-              const mainLogUri = vscode.Uri.joinPath(folderPath, 'maa.log')
-
-              let combinedContent = ''
-
-              // 尝试读取 maa.bak.log
-              try {
-                const bakContent = await vscode.workspace.fs.readFile(bakLogUri)
-                combinedContent += new TextDecoder('utf-8').decode(bakContent)
-              } catch {
-                // 文件不存在，忽略
-              }
-
-              // 尝试读取 maa.log
-              try {
-                const mainContent = await vscode.workspace.fs.readFile(mainLogUri)
-                if (combinedContent && !combinedContent.endsWith('\n')) {
-                  combinedContent += '\n'
-                }
-                combinedContent += new TextDecoder('utf-8').decode(mainContent)
-              } catch {
-                // 文件不存在，忽略
-              }
-
-              if (!combinedContent) {
-                vscode.window.showErrorMessage('文件夹中未找到 maa.log 或 maa.bak.log 文件')
-                break
-              }
-
-              currentPanel?.webview.postMessage({
-                type: 'loadFile',
-                content: combinedContent,
-                fileName: path.basename(folderPath.fsPath)
-              })
-            } catch (error) {
-              vscode.window.showErrorMessage(`无法读取文件夹: ${error}`)
-            }
+          if (targetUri) {
+            await analyzeUri(targetUri)
           }
           break
 
@@ -185,6 +249,251 @@ function createOrShowPanel(context: vscode.ExtensionContext): vscode.WebviewPane
   return currentPanel
 }
 
+async function analyzeFileUri(uri: vscode.Uri): Promise<void> {
+  if (uri.fsPath.toLowerCase().endsWith('.zip')) {
+    await handleZipFile(uri)
+    return
+  }
+
+  try {
+    const fileContent = await vscode.workspace.fs.readFile(uri)
+    const content = new TextDecoder('utf-8').decode(fileContent)
+
+    currentPanel?.webview.postMessage({
+      type: 'loadFile',
+      content,
+      fileName: path.basename(uri.fsPath),
+    })
+  } catch (error) {
+    vscode.window.showErrorMessage(`无法读取文件: ${error}`)
+  }
+}
+async function pickUriForAnalysis(): Promise<vscode.Uri | undefined> {
+  const choice = await vscode.window.showQuickPick(
+    [
+      { label: t('Log File', '\u65e5\u5fd7\u6587\u4ef6'), value: 'file' as const },
+      { label: t('Log Folder', '\u65e5\u5fd7\u6587\u4ef6\u5939'), value: 'folder' as const },
+    ],
+    {
+      title: t('Choose what to analyze', '\u9009\u62e9\u8981\u5206\u6790\u7684\u7c7b\u578b'),
+      placeHolder: t('Select file or folder', '\u9009\u62e9\u6587\u4ef6\u6216\u6587\u4ef6\u5939'),
+      ignoreFocusOut: true,
+    },
+  )
+
+  if (!choice) return undefined
+
+  const selected = await vscode.window.showOpenDialog({
+    canSelectMany: false,
+    canSelectFolders: choice.value === 'folder',
+    canSelectFiles: choice.value === 'file',
+    filters: choice.value === 'file' ? { 'Log Files': ['log', 'jsonl', 'txt', 'zip'] } : undefined,
+    title: choice.value === 'file'
+      ? t('Select Log File', '\u9009\u62e9\u65e5\u5fd7\u6587\u4ef6')
+      : t('Select Log Folder', '\u9009\u62e9\u65e5\u5fd7\u6587\u4ef6\u5939'),
+  })
+
+  return selected?.[0]
+}
+
+async function analyzeUri(uri: vscode.Uri): Promise<void> {
+  try {
+    const stat = await vscode.workspace.fs.stat(uri)
+    if ((stat.type & vscode.FileType.Directory) === vscode.FileType.Directory) {
+      await analyzeFolderUri(uri)
+      return
+    }
+  } catch {
+    // fallback to extension-based detection below
+  }
+
+  const lower = uri.fsPath.toLowerCase()
+  const looksLikeFile = lower.endsWith('.zip') || lower.endsWith('.log') || lower.endsWith('.jsonl') || lower.endsWith('.txt')
+  if (looksLikeFile) {
+    await analyzeFileUri(uri)
+    return
+  }
+
+  await analyzeFolderUri(uri)
+}
+
+async function analyzeFolderUri(folderUri: vscode.Uri): Promise<void> {
+  try {
+    const relPatternMain = new vscode.RelativePattern(folderUri, '**/maa.log')
+    const relPatternBak = new vscode.RelativePattern(folderUri, '**/maa.bak.log')
+
+    const [mainLogs, bakLogs] = await Promise.all([
+      vscode.workspace.findFiles(relPatternMain, '**/node_modules/**', 100),
+      vscode.workspace.findFiles(relPatternBak, '**/node_modules/**', 100),
+    ])
+
+    if (mainLogs.length === 0 && bakLogs.length === 0) {
+      vscode.window.showErrorMessage('文件夹中未找到 maa.log 或 maa.bak.log 文件')
+      return
+    }
+
+    // 优先选择“距离根目录最近”的 maa.log，并优先拼接同目录的 maa.bak.log
+    const sortByDepth = (a: vscode.Uri, b: vscode.Uri) => {
+      const da = a.path.split('/').length
+      const db = b.path.split('/').length
+      return da - db
+    }
+
+    const sortedMain = [...mainLogs].sort(sortByDepth)
+    const targetMain = sortedMain[0]
+
+    let targetBak: vscode.Uri | undefined
+    if (targetMain) {
+      const mainDir = path.posix.dirname(targetMain.path).toLowerCase()
+      targetBak = bakLogs.find(b => path.posix.dirname(b.path).toLowerCase() === mainDir)
+    }
+    if (!targetBak && bakLogs.length > 0) {
+      targetBak = [...bakLogs].sort(sortByDepth)[0]
+    }
+
+    let combinedContent = ''
+
+    if (targetBak) {
+      const bakContent = await vscode.workspace.fs.readFile(targetBak)
+      combinedContent += new TextDecoder('utf-8').decode(bakContent)
+    }
+
+    if (targetMain) {
+      const mainContent = await vscode.workspace.fs.readFile(targetMain)
+      if (combinedContent && !combinedContent.endsWith('\n')) {
+        combinedContent += '\n'
+      }
+      combinedContent += new TextDecoder('utf-8').decode(mainContent)
+    }
+
+    if (!combinedContent) {
+      vscode.window.showErrorMessage('未能读取到有效日志内容')
+      return
+    }
+
+    const sourceName = targetMain ? path.basename(path.dirname(targetMain.fsPath)) : path.basename(folderUri.fsPath)
+
+    currentPanel?.webview.postMessage({
+      type: 'loadFile',
+      content: combinedContent,
+      fileName: sourceName,
+    })
+  } catch (error) {
+    vscode.window.showErrorMessage(`无法读取文件夹: ${error}`)
+  }
+}
+
+async function execReg(args: string[]): Promise<{ stdout: string; stderr: string }> {
+  return execFileAsync('reg.exe', args, { windowsHide: true }) as Promise<{ stdout: string; stderr: string }>
+}
+
+async function regKeyExists(key: string): Promise<boolean> {
+  try {
+    await execReg(['query', key])
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function prepareContextMenuAssets(context: vscode.ExtensionContext): Promise<{ helperScript: string; iconPath: string }> {
+  const sourceScriptDir = path.join(context.extensionPath, 'scripts', 'windows')
+  const sourceIconPath = path.join(context.extensionPath, 'webview', 'favicon.ico')
+
+  const targetDir = path.join(context.globalStorageUri.fsPath, 'windows-context-menu')
+  await mkdir(targetDir, { recursive: true })
+
+  const sourceVbs = path.join(sourceScriptDir, 'open-folder-in-maa-analyzer.vbs')
+  const sourcePs1 = path.join(sourceScriptDir, 'open-folder-in-maa-analyzer.ps1')
+
+  const targetVbs = path.join(targetDir, 'open-folder-in-maa-analyzer.vbs')
+  const targetPs1 = path.join(targetDir, 'open-folder-in-maa-analyzer.ps1')
+  const targetIcon = path.join(targetDir, 'favicon.ico')
+
+  await copyFile(sourceVbs, targetVbs)
+  await copyFile(sourcePs1, targetPs1)
+  await copyFile(sourceIconPath, targetIcon)
+
+  return { helperScript: targetVbs, iconPath: targetIcon }
+}
+
+async function installWindowsContextMenu(context: vscode.ExtensionContext): Promise<void> {
+  if (process.platform !== 'win32') {
+    vscode.window.showWarningMessage('该功能仅支持 Windows')
+    return
+  }
+
+  const action = await vscode.window.showInformationMessage(
+    '将安装 Windows 右键菜单（文件夹、文件夹空白处、.log、.zip）：用 MAA Log Analyzer 分析。是否继续？',
+    '安装',
+    '取消',
+  )
+  if (action !== '安装') return
+  const entries: Array<{ menuKey: string; arg: string }> = [
+    { menuKey: 'HKCU\\Software\\Classes\\Directory\\shell\\MaaLogAnalyzer', arg: '%1' },
+    { menuKey: 'HKCU\\Software\\Classes\\Directory\\Background\\shell\\MaaLogAnalyzer', arg: '%V' },
+    { menuKey: 'HKCU\\Software\\Classes\\SystemFileAssociations\\.log\\shell\\MaaLogAnalyzer', arg: '%1' },
+    { menuKey: 'HKCU\\Software\\Classes\\SystemFileAssociations\\.zip\\shell\\MaaLogAnalyzer', arg: '%1' },
+  ]
+
+  try {
+    const wscriptExe = (process.env.WINDIR || 'C:\\Windows') + '\\System32\\wscript.exe'
+    const { helperScript, iconPath } = await prepareContextMenuAssets(context)
+
+    for (const entry of entries) {
+      const commandKey = `${entry.menuKey}\\command`
+      const command = `"${wscriptExe}" "${helperScript}" "${entry.arg}"`
+
+      await execReg(['add', entry.menuKey, '/ve', '/d', '用 MAA Log Analyzer 分析', '/f'])
+      await execReg(['add', entry.menuKey, '/v', 'Icon', '/d', iconPath, '/f'])
+      await execReg(['add', commandKey, '/ve', '/d', command, '/f'])
+    }
+
+    vscode.window.showInformationMessage('已安装 Windows 右键菜单（文件夹/空白处/.log/.zip）')
+  } catch (error) {
+    vscode.window.showErrorMessage(`安装右键菜单失败: ${error}`)
+  }
+}
+
+async function uninstallWindowsContextMenu(): Promise<void> {
+  if (process.platform !== 'win32') {
+    vscode.window.showWarningMessage('该功能仅支持 Windows')
+    return
+  }
+
+  const action = await vscode.window.showInformationMessage(
+    '将卸载 Windows 右键菜单（文件夹、文件夹空白处、.log、.zip）。是否继续？',
+    '卸载',
+    '取消',
+  )
+  if (action !== '卸载') return
+
+  const menuKeys = [
+    'HKCU\\Software\\Classes\\Directory\\shell\\MaaLogAnalyzer',
+    'HKCU\\Software\\Classes\\Directory\\Background\\shell\\MaaLogAnalyzer',
+    'HKCU\\Software\\Classes\\SystemFileAssociations\\.log\\shell\\MaaLogAnalyzer',
+    'HKCU\\Software\\Classes\\SystemFileAssociations\\.zip\\shell\\MaaLogAnalyzer',
+  ]
+
+  try {
+    let removed = 0
+    for (const key of menuKeys) {
+      if (await regKeyExists(key)) {
+        await execReg(['delete', key, '/f'])
+        removed++
+      }
+    }
+
+    if (removed === 0) {
+      vscode.window.showInformationMessage('右键菜单未安装，无需卸载')
+      return
+    }
+
+    vscode.window.showInformationMessage('已卸载 Windows 右键菜单')
+  } catch (error) {
+    vscode.window.showErrorMessage(`卸载右键菜单失败: ${error}`)
+  }
+}
 /** 判断某个路径是否是需要解压的文件 */
 function isNeededFile(filePath: string): boolean {
   const lower = filePath.replace(/\\/g, '/').toLowerCase()

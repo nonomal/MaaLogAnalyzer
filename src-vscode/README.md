@@ -53,3 +53,5 @@ src-vscode/
 │   └── extension.ts    # 扩展入口
 └── webview/            # 构建产物（Vue 应用）
 ```
+
+## Windows 文件管理器右键菜单（文件夹）`r`n`r`n推荐直接在扩展里执行命令（无需手动跑脚本）：`r`n`r`n1. `Maa: 安装 Windows 右键菜单``r`n2. 在资源管理器中右键文件夹，点击“用 MAA Log Analyzer 分析”`r`n3. 如需移除，执行 `Maa: 卸载 Windows 右键菜单``r`n`r`n备用方式（手动脚本）：`r`n`r`n```powershell`r`npowershell -ExecutionPolicy Bypass -File .\scripts\windows\install-context-menu.ps1`r`n```
