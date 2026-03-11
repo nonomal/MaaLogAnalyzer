@@ -5,11 +5,12 @@ import ProcessView from './views/ProcessView.vue'
 import DetailView from './views/DetailView.vue'
 import TextSearchView from './views/TextSearchView.vue'
 import NodeStatisticsView from './views/NodeStatisticsView.vue'
+import FlowchartView from './views/FlowchartView.vue'
 import SettingsView from './views/SettingsView.vue'
 import { LogParser } from './utils/logParser'
 import { getErrorMessage } from './utils/errorHandler'
 import type { TaskInfo, NodeInfo } from './types'
-import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnHeightOutlined, InfoCircleOutlined, GithubOutlined, DashboardOutlined, SettingOutlined, MenuOutlined } from '@vicons/antd'
+import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnHeightOutlined, InfoCircleOutlined, GithubOutlined, DashboardOutlined, SettingOutlined, MenuOutlined, ApartmentOutlined } from '@vicons/antd'
 import { version } from '../package.json'
 import { useIsMobile } from './composables/useIsMobile'
 import { formatDuration } from './utils/formatDuration'
@@ -36,7 +37,7 @@ const showTaskDrawer = ref(false)
 const showDetailDrawer = ref(false)
 
 // 视图模式
-type ViewMode = 'analysis' | 'search' | 'statistics' | 'split'
+type ViewMode = 'analysis' | 'search' | 'statistics' | 'flowchart' | 'split'
 const viewMode = ref<ViewMode>('analysis')
 
 // 所有视图模式选项
@@ -55,6 +56,11 @@ const allViewModeOptions = [
     label: '节点统计',
     key: 'statistics' as ViewMode,
     icon: () => h(DashboardOutlined)
+  },
+  {
+    label: '流程图',
+    key: 'flowchart' as ViewMode,
+    icon: () => h(ApartmentOutlined)
   },
   {
     label: '分屏模式',
@@ -97,6 +103,7 @@ const selectedActionIndex = ref<number | null>(null)
 const selectedNestedActionIndex = ref<number | null>(null)
 const isActionOnlyView = ref(false)
 const loading = ref(false)
+const pendingScrollNodeId = ref<number | null>(null)
 const parseProgress = ref(0)
 const showParsingModal = ref(false)
 const showFileLoadingModal = ref(false)
@@ -236,6 +243,19 @@ const handleSelectTask = (task: TaskInfo) => {
   selectedNode.value = null
   selectedRecognitionIndex.value = null
   selectedNestedIndex.value = null
+}
+
+// 从流程图定位到日志分析
+const handleNavigateToNode = (task: TaskInfo, node: NodeInfo) => {
+  selectedTask.value = task
+  selectedNode.value = node
+  selectedRecognitionIndex.value = null
+  selectedNestedIndex.value = null
+  selectedActionIndex.value = null
+  selectedNestedActionIndex.value = null
+  isActionOnlyView.value = false
+  pendingScrollNodeId.value = node.node_id
+  viewMode.value = 'analysis'
 }
 
 // 选择节点
@@ -481,6 +501,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
                   <bar-chart-outlined v-if="viewMode === 'analysis'" />
                   <file-search-outlined v-else-if="viewMode === 'search'" />
                   <dashboard-outlined v-else-if="viewMode === 'statistics'" />
+                  <apartment-outlined v-else-if="viewMode === 'flowchart'" />
                   <column-height-outlined v-else />
                 </n-icon>
               </template>
@@ -572,6 +593,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
             :loading="loading"
             :parser="parser"
             :is-mobile="true"
+            :pending-scroll-node-id="pendingScrollNodeId"
             @select-task="handleSelectTask"
             @upload-file="handleFileUpload"
             @upload-content="handleContentUpload"
@@ -583,6 +605,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
             @file-loading-start="handleFileLoadingStart"
             @file-loading-end="handleFileLoadingEnd"
             @open-task-drawer="showTaskDrawer = true"
+            @scroll-done="pendingScrollNodeId = null"
           />
 
           <!-- 左侧任务抽屉 -->
@@ -669,6 +692,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
               :parser="parser"
               :detail-view-collapsed="detailViewCollapsed"
               :on-expand-detail-view="toggleDetailView"
+              :pending-scroll-node-id="pendingScrollNodeId"
               @select-task="handleSelectTask"
               @upload-file="handleFileUpload"
               @upload-content="handleContentUpload"
@@ -679,6 +703,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
               @select-nested-action="handleSelectNestedAction"
               @file-loading-start="handleFileLoadingStart"
               @file-loading-end="handleFileLoadingEnd"
+              @scroll-done="pendingScrollNodeId = null"
             />
           </template>
           <template #2>
@@ -723,6 +748,20 @@ const handleMobileSelectTask = (task: TaskInfo) => {
         <node-statistics-view :tasks="tasks" style="height: 100%" />
       </div>
 
+      <!-- 流程图模式 -->
+      <div v-if="viewMode === 'flowchart'" style="height: 100%">
+        <flowchart-view
+          :tasks="filteredTasks"
+          :parser="parser"
+          :initial-task="selectedTask"
+          style="height: 100%"
+          @select-task="handleSelectTask"
+          @navigate-to-node="handleNavigateToNode"
+          @upload-file="handleFileUpload"
+          @upload-content="handleContentUpload"
+        />
+      </div>
+
       <!-- 分屏模式 -->
       <div v-show="viewMode === 'split'" style="height: 100%">
         <n-split
@@ -748,6 +787,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
                   :parser="parser"
                   :detail-view-collapsed="detailViewCollapsed"
                   :on-expand-detail-view="toggleDetailView"
+                  :pending-scroll-node-id="pendingScrollNodeId"
                   @select-task="handleSelectTask"
                   @upload-file="handleFileUpload"
                   @upload-content="handleContentUpload"
@@ -758,6 +798,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
                   @select-nested-action="handleSelectNestedAction"
                   @file-loading-start="handleFileLoadingStart"
                   @file-loading-end="handleFileLoadingEnd"
+                  @scroll-done="pendingScrollNodeId = null"
                 />
               </template>
               <template #2>

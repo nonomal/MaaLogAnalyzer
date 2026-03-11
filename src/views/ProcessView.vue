@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, h, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, nextTick, h, onMounted, onUnmounted } from 'vue'
 import {
   NCard, NButton, NIcon, NText, NFlex, NDropdown,
   NScrollbar, NEmpty, NBadge, NTag, NSplit, NList, NListItem
@@ -24,6 +24,7 @@ const props = defineProps<{
   detailViewCollapsed?: boolean
   onExpandDetailView?: () => void
   isMobile?: boolean
+  pendingScrollNodeId?: number | null
 }>()
 
 const emit = defineEmits<{
@@ -38,6 +39,7 @@ const emit = defineEmits<{
   'file-loading-start': []
   'file-loading-end': []
   'open-task-drawer': []
+  'scroll-done': []
 }>()
 
 // 当前选中的任务索引
@@ -199,6 +201,18 @@ watch(() => props.selectedTask, async (newTask, oldTask) => {
     virtualScroller.value.scrollToItem(0)
   }
 }, { immediate: true })
+
+// 从流程图定位过来时，滚动到指定节点
+watch(() => props.pendingScrollNodeId, (nodeId) => {
+  if (nodeId == null) return
+  const index = currentNodes.value.findIndex(n => n.node_id === nodeId)
+  if (index >= 0) {
+    nextTick(() => {
+      scrollToNode(index)
+      emit('scroll-done')
+    })
+  }
+})
 
 // 处理拖拽上传（支持文件和文件夹）
 const handleDrop = async (event: DragEvent) => {

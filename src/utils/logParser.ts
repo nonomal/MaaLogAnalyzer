@@ -457,7 +457,7 @@ export class LogParser {
   /**
    * 查找识别尝试的截图（匹配到秒级别）
    */
-  private findRecognitionImage(timestamp: string, nodeName: string): string | undefined {
+  findRecognitionImage(timestamp: string, nodeName: string): string | undefined {
     if (this.errorImages.size === 0) return undefined
 
     // 2026-03-09 19:46:35.xxx -> 2026.03.09-19.46.35
@@ -475,7 +475,7 @@ export class LogParser {
   /**
    * 查找错误截图（匹配到秒级别 + 节点名）
    */
-  private findErrorImage(timestamp: string, nodeName: string): string | undefined {
+  findErrorImage(timestamp: string, nodeName: string): string | undefined {
     if (this.errorImages.size === 0) return undefined
 
     // 2026-03-08 13:12:30.216 -> 2026.03.08-13.12.30
@@ -494,7 +494,7 @@ export class LogParser {
    * 查找 vision 调试截图（秒级时间戳 + 节点名 + reco_id 三重匹配）
    * key 格式: YYYY.MM.DD-HH.MM.SS.ms_NodeName_RecoId
    */
-  private findVisionImage(timestamp: string, nodeName: string, recoId: number): string | undefined {
+  findVisionImage(timestamp: string, nodeName: string, recoId: number): string | undefined {
     if (this.visionImages.size === 0) return undefined
 
     // 2026-03-08 13:12:30.216 -> 2026.03.08-13.12.30
