@@ -59,37 +59,58 @@ const selectedTask = computed(() =>
   selectedTaskIndex.value != null ? props.tasks[selectedTaskIndex.value] ?? null : null
 )
 
-// Auto-select first task, or sync with initialTask from parent
+function findTaskIndex(task: TaskInfo): number {
+  // 1) 优先使用对象引用，避免重复 task_id 时跳到同 id 的第一个任务
+  const byRef = props.tasks.findIndex(t => t === task)
+  if (byRef >= 0) return byRef
+
+  // 2) uuid 在大多数日志中唯一，作为第二匹配条件
+  if (task.uuid) {
+    const byUuid = props.tasks.findIndex(t => t.uuid === task.uuid)
+    if (byUuid >= 0) return byUuid
+  }
+
+  // 3) 回退到复合键，减少仅 task_id 匹配的歧义
+  return props.tasks.findIndex(t =>
+    t.task_id === task.task_id
+    && t.start_time === task.start_time
+    && t.entry === task.entry
+  )
+}
+
+// 同步任务列表与外部 initialTask：
+// - 优先对齐父组件传入的任务
+// - 无法对齐时才回退到第一个任务
 watch(
-  () => props.tasks,
-  (tasks) => {
-    if (tasks.length > 0 && (selectedTaskIndex.value == null || selectedTaskIndex.value >= tasks.length)) {
-      selectedTaskIndex.value = 0
-    }
+  [() => props.tasks, () => props.initialTask],
+  ([tasks, initialTask]) => {
     if (tasks.length === 0) {
       selectedTaskIndex.value = null
+      return
+    }
+
+    if (initialTask) {
+      const idx = findTaskIndex(initialTask)
+      if (idx >= 0) {
+        selectedTaskIndex.value = idx
+        return
+      }
+    }
+
+    if (selectedTaskIndex.value == null || selectedTaskIndex.value >= tasks.length) {
+      selectedTaskIndex.value = 0
     }
   },
   { immediate: true }
 )
 
-// 从日志分析切换过来时，同步到对应的任务
-watch(
-  () => props.initialTask,
-  (task) => {
-    if (!task) return
-    const idx = props.tasks.findIndex(t => t.task_id === task.task_id)
-    if (idx >= 0) {
-      selectedTaskIndex.value = idx
-    }
-  },
-  { immediate: true }
-)
-
-// 任务变更时通知父组件（用于切回日志分析时同步）
-watch(selectedTask, (task) => {
+// 用户主动切换任务时通知父组件
+function handleUserTaskSelect(idx: number | null) {
+  if (idx == null) return
+  selectedTaskIndex.value = idx
+  const task = props.tasks[idx]
   if (task) emit('select-task', task)
-})
+}
 
 // 定位到日志分析界面
 function navigateToNode(info: NodeInfo) {
@@ -497,12 +518,13 @@ const onPaneClick = () => {
       <n-flex align="center" style="gap: 12px">
         <n-text strong>任务:</n-text>
         <n-select
-          v-model:value="selectedTaskIndex"
+          :value="selectedTaskIndex"
           :options="taskOptions"
           :render-label="renderTaskLabel"
           placeholder="选择任务"
           size="small"
           style="min-width: 125px; flex: 1; max-width: 250px"
+          @update:value="handleUserTaskSelect"
         />
         <n-dropdown :options="uploadOptions" @select="handleUploadSelect" trigger="click">
           <n-button size="small" secondary>打开</n-button>
