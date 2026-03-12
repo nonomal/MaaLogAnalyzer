@@ -9,6 +9,9 @@ use tauri::Manager;
 
 use serde::Serialize;
 
+const MAIN_LOG_CANDIDATES: [&str; 2] = ["maa.log", "maafw.log"];
+const BAK_LOG_CANDIDATES: [&str; 2] = ["maa.bak.log", "maafw.bak.log"];
+
 #[derive(Serialize)]
 struct ZipExtractResult {
     content: String,
@@ -27,11 +30,17 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
         .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
         .collect();
 
-    // Find base directory containing maa.log
-    let base = find_base_directory(&names).ok_or("ZIP 中未找到 maa.log 文件")?;
+    // Find base directory containing main log (maa.log / maafw.log)
+    let base = find_base_directory(&names).ok_or("ZIP 中未找到主日志文件（maa.log / maafw.log）")?;
 
-    let bak_log_path = join_path(&base, "maa.bak.log");
-    let main_log_path = join_path(&base, "maa.log");
+    let bak_log_paths: Vec<String> = BAK_LOG_CANDIDATES
+        .iter()
+        .map(|name| join_path(&base, name))
+        .collect();
+    let main_log_paths: Vec<String> = MAIN_LOG_CANDIDATES
+        .iter()
+        .map(|name| join_path(&base, name))
+        .collect();
     let on_error_prefix = join_path(&base, "on_error/");
     let vision_prefix = join_path(&base, "vision/");
 
@@ -45,11 +54,11 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
         let name = entry.name().replace('\\', "/");
         let lower = name.to_lowercase();
 
-        if lower == bak_log_path.to_lowercase() {
+        if bak_log_paths.iter().any(|p| lower == p.to_lowercase()) {
             let mut buf = Vec::new();
             entry.read_to_end(&mut buf).map_err(|e| format!("读取失败: {e}"))?;
             content.push_str(&decode_content(&buf));
-        } else if lower == main_log_path.to_lowercase() {
+        } else if main_log_paths.iter().any(|p| lower == p.to_lowercase()) {
             if !content.is_empty() && !content.ends_with('\n') {
                 content.push('\n');
             }
@@ -91,12 +100,16 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
     })
 }
 
-/// Find the base directory containing maa.log
+/// Find the base directory containing main log (maa.log / maafw.log)
 fn find_base_directory(paths: &[String]) -> Option<String> {
     for p in paths {
         let normalized = p.replace('\\', "/");
         let lower = normalized.to_lowercase();
-        if lower.ends_with("/maa.log") || lower == "maa.log" {
+        if lower.ends_with("/maa.log")
+            || lower == "maa.log"
+            || lower.ends_with("/maafw.log")
+            || lower == "maafw.log"
+        {
             let last_slash = normalized.rfind('/');
             return Some(match last_slash {
                 Some(idx) => normalized[..idx].to_string(),

@@ -32,6 +32,9 @@ const emit = defineEmits<{
 
 const { isMobile } = useIsMobile()
 
+const isMainLogFileName = (name: string) => name === 'maa.log' || name === 'maafw.log'
+const isBakLogFileName = (name: string) => name === 'maa.bak.log' || name === 'maafw.bak.log'
+
 const FLOWCHART_PLAYBACK_SETTINGS_KEY = 'maa-log-analyzer-flowchart-playback-settings'
 
 function loadFlowchartPlaybackSettings(): { playbackIntervalMs: number; focusZoom: number } {
@@ -199,9 +202,9 @@ async function handleTauriOpen(key: string) {
       for (const entry of entries) {
         const name = entry.name?.toLowerCase() || ''
         const fullPath = `${dirPath}/${entry.name}`
-        if (name === 'maa.bak.log') {
+        if (isBakLogFileName(name)) {
           content = await readTextFile(fullPath) + '\n' + content
-        } else if (name === 'maa.log') {
+        } else if (isMainLogFileName(name)) {
           content += await readTextFile(fullPath)
         } else if (name.endsWith('.png') || name.endsWith('.jpg')) {
           const baseName = entry.name!.replace(/\.(png|jpg)$/i, '')
@@ -243,9 +246,9 @@ async function handleFolderInputChange(event: Event) {
 
   for (const file of files) {
     const name = file.name.toLowerCase()
-    if (name === 'maa.bak.log') {
+    if (isBakLogFileName(name)) {
       bakContent = await file.text()
-    } else if (name === 'maa.log') {
+    } else if (isMainLogFileName(name)) {
       mainContent = await file.text()
     } else if (name.endsWith('.png') || name.endsWith('.jpg')) {
       const baseName = file.name.replace(/\.(png|jpg)$/i, '')

@@ -53,6 +53,9 @@ const saveProcessLayoutState = (state: ProcessLayoutState) => {
 
 const processLayoutState = readProcessLayoutState()
 
+const isMainLogFileName = (name: string) => name === 'maa.log' || name === 'maafw.log'
+const isBakLogFileName = (name: string) => name === 'maa.bak.log' || name === 'maafw.bak.log'
+
 const props = defineProps<{
   tasks: TaskInfo[]
   selectedTask: TaskInfo | null
@@ -307,15 +310,15 @@ const handleDirectoryEntry = async (dirEntry: FileSystemDirectoryEntry) => {
 
     for (const file of files) {
       const fileName = file.name.toLowerCase()
-      if (fileName === 'maa.bak.log') {
+      if (isBakLogFileName(fileName)) {
         bakLogFile = file
-      } else if (fileName === 'maa.log') {
+      } else if (isMainLogFileName(fileName)) {
         mainLogFile = file
       }
     }
 
     if (!bakLogFile && !mainLogFile) {
-      alert('文件夹中未找到 maa.log 或 maa.bak.log 文件')
+      alert('文件夹中未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
       return
     }
 
@@ -388,21 +391,21 @@ const handleFolderChange = async (event: Event) => {
   const files = input.files
   if (!files || files.length === 0) return
 
-  // 查找 maa.bak.log 和 maa.log
+  // 查找 bak/main 日志（maa / maafw）
   let bakLogFile: File | null = null
   let mainLogFile: File | null = null
 
   for (const file of files) {
     const fileName = file.name.toLowerCase()
-    if (fileName === 'maa.bak.log') {
+    if (isBakLogFileName(fileName)) {
       bakLogFile = file
-    } else if (fileName === 'maa.log') {
+    } else if (isMainLogFileName(fileName)) {
       mainLogFile = file
     }
   }
 
   if (!bakLogFile && !mainLogFile) {
-    alert('文件夹中未找到 maa.log 或 maa.bak.log 文件')
+    alert('文件夹中未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
     return
   }
 
@@ -751,7 +754,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
             使用原生文件选择器
           </n-text>
           <n-text depth="3" style="font-size: 14px; display: block; margin-bottom: 8px">
-            支持 maa.log 格式、.zip 压缩包，或选择包含日志的文件夹
+            支持 maa.log / maafw.log、.zip 压缩包，或选择包含日志的文件夹
           </n-text>
           <n-badge value="Tauri" type="success" style="margin-top: 4px" />
         </div>
@@ -781,7 +784,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
             使用 VS Code 文件选择器
           </n-text>
           <n-text depth="3" style="font-size: 14px; display: block; margin-bottom: 8px">
-            支持 maa.log 格式、.zip 压缩包，或选择包含日志的文件夹
+            支持 maa.log / maafw.log、.zip 压缩包，或选择包含日志的文件夹
           </n-text>
           <n-badge value="VS Code" type="info" style="margin-top: 4px" />
         </div>
@@ -818,7 +821,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
             拖拽日志文件/文件夹到此处，或点击下方按钮选择
           </n-text>
           <n-text depth="3" style="font-size: 14px; display: block; margin-bottom: 12px">
-            支持 maa.log 格式、.zip 压缩包，文件夹需包含 maa.log 或 maa.bak.log
+            支持 maa.log / maafw.log、.zip 压缩包，文件夹需包含日志文件
           </n-text>
           <n-dropdown :options="reloadOptions" @select="handleReloadSelect">
             <n-button type="primary" size="large">

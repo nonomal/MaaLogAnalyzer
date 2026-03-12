@@ -7,6 +7,9 @@ import { isTauri, isVSCode } from './platform'
 
 export { isTauri, isVSCode }
 
+const MAIN_LOG_CANDIDATES = ['maa.log', 'maafw.log'] as const
+const BAK_LOG_CANDIDATES = ['maa.bak.log', 'maafw.bak.log'] as const
+
 /**
  * 解码文件内容，自动尝试多种编码
  * @param bytes 文件的原始字节数组
@@ -354,51 +357,55 @@ async function openFolderDialogTauri(): Promise<{ content: string; errorImages: 
 
     console.log('[文件夹] 选择的路径:', selected)
 
+    const hasAnyLogIn = async (dirPath: string) => {
+      for (const name of [...BAK_LOG_CANDIDATES, ...MAIN_LOG_CANDIDATES]) {
+        if (await exists(`${dirPath}\\${name}`)) return true
+      }
+      return false
+    }
+
     let debugPath = selected
-    let bakLogPath = `${debugPath}\\maa.bak.log`
-    let mainLogPath = `${debugPath}\\maa.log`
 
-    // 先检查当前文件夹是否就是日志目录（例如用户直接选择了 debug 文件夹）
-    if (!(await exists(bakLogPath)) && !(await exists(mainLogPath))) {
+    if (!(await hasAnyLogIn(debugPath))) {
       debugPath = `${selected}\\debug`
-      bakLogPath = `${debugPath}\\maa.bak.log`
-      mainLogPath = `${debugPath}\\maa.log`
 
-      // 如果没有 debug 子文件夹，再递归查找
-      if (!(await exists(debugPath))) {
-        console.log('[文件夹] debug文件夹不存在，开始递归查找')
+      if (!(await exists(debugPath)) || !(await hasAnyLogIn(debugPath))) {
+        console.log('[文件夹] debug文件夹不存在或不含日志，开始递归查找')
         const found = await findDebugFolder(selected)
-        if (!found) {
-          alert('未找到debug文件夹或maa.log文件')
+        if (!found || !(await hasAnyLogIn(found))) {
+          alert('未找到debug文件夹或日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
           return null
         }
         debugPath = found
-        bakLogPath = `${debugPath}\\maa.bak.log`
-        mainLogPath = `${debugPath}\\maa.log`
         console.log('[文件夹] 找到debug文件夹:', debugPath)
       }
     }
 
-    // 读取日志文件
     let content = ''
 
     console.log('[文件夹] 读取日志文件')
 
-    if (await exists(bakLogPath)) {
-      console.log('[文件夹] 读取 maa.bak.log')
-      content += await readTextFile(bakLogPath)
+    for (const bakName of BAK_LOG_CANDIDATES) {
+      const bakLogPath = `${debugPath}\\${bakName}`
+      if (await exists(bakLogPath)) {
+        console.log(`[文件夹] 读取 ${bakName}`)
+        content += await readTextFile(bakLogPath)
+      }
     }
 
-    if (await exists(mainLogPath)) {
-      console.log('[文件夹] 读取 maa.log')
-      if (content && !content.endsWith('\n')) {
-        content += '\n'
+    for (const mainName of MAIN_LOG_CANDIDATES) {
+      const mainLogPath = `${debugPath}\\${mainName}`
+      if (await exists(mainLogPath)) {
+        console.log(`[文件夹] 读取 ${mainName}`)
+        if (content && !content.endsWith('\n')) {
+          content += '\n'
+        }
+        content += await readTextFile(mainLogPath)
       }
-      content += await readTextFile(mainLogPath)
     }
 
     if (!content) {
-      alert('未找到maa.log文件')
+      alert('未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
       return null
     }
 
@@ -415,7 +422,6 @@ async function openFolderDialogTauri(): Promise<{ content: string; errorImages: 
     return null
   }
 }
-
 /**
  * 解析 wait_freezes 文件名为标准化 key
  * 格式: YYYY.MM.DD-HH.MM.SS.ms_NodeName_wait_freezes.jpg
@@ -559,81 +565,85 @@ async function openFolderDialogWeb(): Promise<{ content: string; errorImages: Ma
     const dirHandle = await (window as any).showDirectoryPicker()
     console.log('[文件夹] 选择的文件夹:', dirHandle.name)
 
-    // 查找 debug 文件夹
+    const hasAnyLogIn = async (handle: FileSystemDirectoryHandle) => {
+      for (const name of [...BAK_LOG_CANDIDATES, ...MAIN_LOG_CANDIDATES]) {
+        try {
+          await handle.getFileHandle(name)
+          return true
+        } catch {
+          // continue
+        }
+      }
+      return false
+    }
+
     let debugHandle = dirHandle
 
-    // 先检查当前文件夹是否有 maa.log（可能用户直接选择了 debug 文件夹）
-    try {
-      await dirHandle.getFileHandle('maa.log')
-      console.log('[文件夹] 当前文件夹就是 debug 文件夹')
-    } catch {
-      // 当前文件夹没有 maa.log，尝试找 debug 子文件夹
+    if (!(await hasAnyLogIn(dirHandle))) {
       try {
         debugHandle = await dirHandle.getDirectoryHandle('debug')
+        if (!(await hasAnyLogIn(debugHandle))) {
+          throw new Error('debug 不含日志')
+        }
         console.log('[文件夹] 找到 debug 子文件夹')
       } catch {
-        console.log('[文件夹] debug子文件夹不存在，开始递归查找')
+        console.log('[文件夹] debug子文件夹不存在或不含日志，开始递归查找')
         const found = await findDebugFolderWeb(dirHandle)
-        if (!found) {
-          alert('未找到debug文件夹或maa.log文件')
+        if (!found || !(await hasAnyLogIn(found))) {
+          alert('未找到debug文件夹或日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
           return null
         }
         debugHandle = found
         console.log('[文件夹] 递归找到debug文件夹')
       }
+    } else {
+      console.log('[文件夹] 当前文件夹就是 debug 文件夹')
     }
 
-    // 读取日志文件
     let content = ''
 
-    try {
-      const bakLogHandle = await debugHandle.getFileHandle('maa.bak.log')
-      const bakFile = await bakLogHandle.getFile()
-      content += await bakFile.text()
-      console.log('[文件夹] 读取 maa.bak.log')
-    } catch {
-      // 文件不存在
+    for (const bakName of BAK_LOG_CANDIDATES) {
+      try {
+        const bakLogHandle = await debugHandle.getFileHandle(bakName)
+        const bakFile = await bakLogHandle.getFile()
+        content += await bakFile.text()
+        console.log(`[文件夹] 读取 ${bakName}`)
+      } catch {}
     }
 
-    try {
-      const mainLogHandle = await debugHandle.getFileHandle('maa.log')
-      const mainFile = await mainLogHandle.getFile()
-      if (content && !content.endsWith('\n')) {
-        content += '\n'
-      }
-      content += await mainFile.text()
-      console.log('[文件夹] 读取 maa.log')
-    } catch {
-      // 文件不存在
+    for (const mainName of MAIN_LOG_CANDIDATES) {
+      try {
+        const mainLogHandle = await debugHandle.getFileHandle(mainName)
+        const mainFile = await mainLogHandle.getFile()
+        if (content && !content.endsWith('\n')) {
+          content += '\n'
+        }
+        content += await mainFile.text()
+        console.log(`[文件夹] 读取 ${mainName}`)
+      } catch {}
     }
 
     if (!content) {
-      alert('未找到maa.log文件')
+      alert('未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
       return null
     }
 
     console.log('[文件夹] 日志文件读取完成，大小:', content.length)
 
-    // 读取截图
     const errorImages = await readErrorImagesWeb(debugHandle)
-
-    // 读取 vision 调试截图
     const visionImages = await readVisionImagesWeb(debugHandle)
-
-    // 读取 wait_freezes 调试截图
     const waitFreezesImages = await readWaitFreezesImagesWeb(debugHandle)
 
     return { content, errorImages, visionImages, waitFreezesImages }
   } catch (error) {
     console.error('[文件夹] 打开失败:', error)
     if ((error as Error).name === 'AbortError') {
-      return null // 用户取消
+      return null
     }
     alert('打开文件夹失败: ' + error)
     return null
   }
 }
-
 /**
  * Web 版本：读取 vision 文件夹中的 wait_freezes 调试截图
  */

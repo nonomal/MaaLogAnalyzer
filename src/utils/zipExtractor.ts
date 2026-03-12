@@ -1,6 +1,6 @@
 /**
  * ZIP 压缩包解压与日志提取工具
- * 从 ZIP 文件中提取 maa.log / maa.bak.log 及 on_error 截图
+ * 从 ZIP 文件中提取日志（maa / maafw）及 on_error 截图
  *
  * 使用 fflate 的 filter 选项，只解压需要的文件，避免大 ZIP 全量解压导致内存暴涨。
  */
@@ -8,12 +8,15 @@
 import { unzipSync } from 'fflate'
 import { decodeFileContent } from './fileDialog'
 
+const MAIN_LOG_NAMES = ['maa.log', 'maafw.log'] as const
+const BAK_LOG_NAMES = ['maa.bak.log', 'maafw.bak.log'] as const
+
 /** 判断某个路径是否是我们需要解压的文件 */
 function isNeededFile(path: string): boolean {
   const lower = path.replace(/\\/g, '/').toLowerCase()
   const name = lower.substring(lower.lastIndexOf('/') + 1)
   // 日志文件
-  if (name === 'maa.log' || name === 'maa.bak.log') return true
+  if (MAIN_LOG_NAMES.includes(name as (typeof MAIN_LOG_NAMES)[number]) || BAK_LOG_NAMES.includes(name as (typeof BAK_LOG_NAMES)[number])) return true
   // on_error 截图
   if (lower.includes('/on_error/') && lower.endsWith('.png')) return true
   // vision 调试截图
@@ -39,7 +42,7 @@ export async function extractZipContent(
 
   const paths = Object.keys(files)
 
-  // 找到 maa.log 所在的 base 目录
+  // 找到主日志所在的 base 目录
   const basePath = findBaseDirectory(paths)
   if (basePath === null) {
     return null
@@ -48,16 +51,19 @@ export async function extractZipContent(
   // 读取日志内容
   let content = ''
 
-  // 先读 maa.bak.log
-  const bakLogPath = joinPath(basePath, 'maa.bak.log')
-  const bakLogData = findFile(files, paths, bakLogPath)
+  const bakLogName = BAK_LOG_NAMES.find((name) => findFile(files, paths, joinPath(basePath, name)))
+  const mainLogName = MAIN_LOG_NAMES.find((name) => findFile(files, paths, joinPath(basePath, name)))
+
+  // 先读 bak
+  const bakLogPath = bakLogName ? joinPath(basePath, bakLogName) : ''
+  const bakLogData = bakLogPath ? findFile(files, paths, bakLogPath) : null
   if (bakLogData) {
     content += decodeFileContent(bakLogData)
   }
 
-  // 再读 maa.log
-  const mainLogPath = joinPath(basePath, 'maa.log')
-  const mainLogData = findFile(files, paths, mainLogPath)
+  // 再读主日志
+  const mainLogPath = mainLogName ? joinPath(basePath, mainLogName) : ''
+  const mainLogData = mainLogPath ? findFile(files, paths, mainLogPath) : null
   if (mainLogData) {
     if (content && !content.endsWith('\n')) {
       content += '\n'
@@ -82,15 +88,20 @@ export async function extractZipContent(
 }
 
 /**
- * 找到 maa.log 所在的 base 目录
- * 支持：根目录 maa.log、debug/maa.log、xxx/debug/maa.log
+ * 找到主日志所在的 base 目录
+ * 支持：根目录日志、debug/日志、xxx/debug/日志
  */
 function findBaseDirectory(paths: string[]): string | null {
   const normalizedPaths = paths.map((p) => p.replace(/\\/g, '/'))
 
   for (const p of normalizedPaths) {
     const lower = p.toLowerCase()
-    if (lower.endsWith('/maa.log') || lower === 'maa.log') {
+    if (
+      lower.endsWith('/maa.log') ||
+      lower === 'maa.log' ||
+      lower.endsWith('/maafw.log') ||
+      lower === 'maafw.log'
+    ) {
       const lastSlash = p.lastIndexOf('/')
       return lastSlash === -1 ? '' : p.substring(0, lastSlash)
     }

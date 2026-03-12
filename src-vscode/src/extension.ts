@@ -10,6 +10,9 @@ const execFileAsync = promisify(execFile)
 const isZh = vscode.env.language.toLowerCase().startsWith('zh')
 const t = (en: string, zh: string) => (isZh ? zh : en)
 
+const MAIN_LOG_CANDIDATES = ['maa.log', 'maafw.log'] as const
+const BAK_LOG_CANDIDATES = ['maa.bak.log', 'maafw.bak.log'] as const
+
 class SidebarActionItem extends vscode.TreeItem {
   constructor(label: string, commandId: string, contextValue: string) {
     super(label, vscode.TreeItemCollapsibleState.None)
@@ -319,20 +322,22 @@ async function analyzeUri(uri: vscode.Uri): Promise<void> {
 
 async function analyzeFolderUri(folderUri: vscode.Uri): Promise<void> {
   try {
-    const relPatternMain = new vscode.RelativePattern(folderUri, '**/maa.log')
-    const relPatternBak = new vscode.RelativePattern(folderUri, '**/maa.bak.log')
+    const mainPatterns = MAIN_LOG_CANDIDATES.map(name => new vscode.RelativePattern(folderUri, `**/${name}`))
+    const bakPatterns = BAK_LOG_CANDIDATES.map(name => new vscode.RelativePattern(folderUri, `**/${name}`))
 
-    const [mainLogs, bakLogs] = await Promise.all([
-      vscode.workspace.findFiles(relPatternMain, '**/node_modules/**', 100),
-      vscode.workspace.findFiles(relPatternBak, '**/node_modules/**', 100),
+    const [mainLists, bakLists] = await Promise.all([
+      Promise.all(mainPatterns.map(p => vscode.workspace.findFiles(p, '**/node_modules/**', 100))),
+      Promise.all(bakPatterns.map(p => vscode.workspace.findFiles(p, '**/node_modules/**', 100))),
     ])
 
+    const mainLogs = mainLists.flat()
+    const bakLogs = bakLists.flat()
+
     if (mainLogs.length === 0 && bakLogs.length === 0) {
-      vscode.window.showErrorMessage('文件夹中未找到 maa.log 或 maa.bak.log 文件')
+      vscode.window.showErrorMessage('文件夹中未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
       return
     }
 
-    // 优先选择“距离根目录最近”的 maa.log，并优先拼接同目录的 maa.bak.log
     const sortByDepth = (a: vscode.Uri, b: vscode.Uri) => {
       const da = a.path.split('/').length
       const db = b.path.split('/').length
@@ -382,7 +387,6 @@ async function analyzeFolderUri(folderUri: vscode.Uri): Promise<void> {
     vscode.window.showErrorMessage(`无法读取文件夹: ${error}`)
   }
 }
-
 async function execReg(args: string[]): Promise<{ stdout: string; stderr: string }> {
   return execFileAsync('reg.exe', args, { windowsHide: true }) as Promise<{ stdout: string; stderr: string }>
 }
@@ -498,18 +502,18 @@ async function uninstallWindowsContextMenu(): Promise<void> {
 function isNeededFile(filePath: string): boolean {
   const lower = filePath.replace(/\\/g, '/').toLowerCase()
   const name = lower.substring(lower.lastIndexOf('/') + 1)
-  if (name === 'maa.log' || name === 'maa.bak.log') return true
+  if (MAIN_LOG_CANDIDATES.includes(name as (typeof MAIN_LOG_CANDIDATES)[number]) || BAK_LOG_CANDIDATES.includes(name as (typeof BAK_LOG_CANDIDATES)[number])) return true
   if (lower.includes('/on_error/') && lower.endsWith('.png')) return true
   if (lower.includes('/vision/') && lower.endsWith('.jpg')) return true
   return false
 }
 
-/** 找到 maa.log 所在的 base 目录 */
+/** 找到主日志（maa.log / maafw.log）所在的 base 目录 */
 function findBaseDirectory(paths: string[]): string | null {
   for (const p of paths) {
     const normalized = p.replace(/\\/g, '/')
     const lower = normalized.toLowerCase()
-    if (lower.endsWith('/maa.log') || lower === 'maa.log') {
+    if (lower.endsWith('/maa.log') || lower === 'maa.log' || lower.endsWith('/maafw.log') || lower === 'maafw.log') {
       const lastSlash = normalized.lastIndexOf('/')
       return lastSlash === -1 ? '' : normalized.substring(0, lastSlash)
     }
@@ -562,36 +566,40 @@ async function handleZipFile(uri: vscode.Uri): Promise<void> {
     const zipData = new Uint8Array(fileContent)
 
     const files = unzipSync(zipData, {
-      filter: (file) => isNeededFile(file.name)
+      filter: (file) => isNeededFile(file.name),
     })
 
     const paths = Object.keys(files)
     const basePath = findBaseDirectory(paths)
     if (basePath === null) {
-      vscode.window.showWarningMessage('ZIP 文件中未找到 maa.log 文件')
+      vscode.window.showWarningMessage('ZIP 文件中未找到主日志文件（maa.log / maafw.log）')
       return
     }
 
     let content = ''
 
-    // 读取 maa.bak.log
-    const bakLogPath = joinZipPath(basePath, 'maa.bak.log')
-    for (const p of paths) {
-      if (p.replace(/\\/g, '/').toLowerCase() === bakLogPath.toLowerCase()) {
-        content += new TextDecoder('utf-8').decode(files[p])
-        break
+    // 读取 bak 日志（maa.bak.log / maafw.bak.log）
+    for (const bakName of BAK_LOG_CANDIDATES) {
+      const bakLogPath = joinZipPath(basePath, bakName)
+      for (const p of paths) {
+        if (p.replace(/\\/g, '/').toLowerCase() === bakLogPath.toLowerCase()) {
+          content += new TextDecoder('utf-8').decode(files[p])
+          break
+        }
       }
     }
 
-    // 读取 maa.log
-    const mainLogPath = joinZipPath(basePath, 'maa.log')
-    for (const p of paths) {
-      if (p.replace(/\\/g, '/').toLowerCase() === mainLogPath.toLowerCase()) {
-        if (content && !content.endsWith('\n')) {
-          content += '\n'
+    // 读取主日志（maa.log / maafw.log）
+    for (const mainName of MAIN_LOG_CANDIDATES) {
+      const mainLogPath = joinZipPath(basePath, mainName)
+      for (const p of paths) {
+        if (p.replace(/\\/g, '/').toLowerCase() === mainLogPath.toLowerCase()) {
+          if (content && !content.endsWith('\n')) {
+            content += '\n'
+          }
+          content += new TextDecoder('utf-8').decode(files[p])
+          break
         }
-        content += new TextDecoder('utf-8').decode(files[p])
-        break
       }
     }
 
@@ -648,13 +656,12 @@ async function handleZipFile(uri: vscode.Uri): Promise<void> {
       content,
       errorImages,
       visionImages,
-      waitFreezesImages
+      waitFreezesImages,
     })
   } catch (error) {
     vscode.window.showErrorMessage(`解压 ZIP 文件失败: ${error}`)
   }
 }
-
 function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): string {
   // 获取 webview 资源路径
   const webviewUri = webview.asWebviewUri(vscode.Uri.joinPath(extensionUri, 'webview'))
