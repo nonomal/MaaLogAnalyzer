@@ -763,6 +763,7 @@ const mobileRecognitionActionChartOption = computed(() => adaptChartForMobile(re
 <template>
   <n-card
     size="small"
+    data-tour="statistics-root"
     title="节点性能统计"
     style="height: 100%; display: flex; flex-direction: column"
     content-style="padding: 16px; flex: 1; min-height: 0; display: flex; flex-direction: column"
@@ -991,7 +992,7 @@ const mobileRecognitionActionChartOption = computed(() => adaptChartForMobile(re
     </n-card>
 
     <!-- 数据表格 -->
-    <div style="flex: 1; min-height: 0; overflow: hidden">
+    <div style="flex: 1; min-height: 0; overflow: hidden" data-tour="statistics-table">
       <n-data-table
         v-if="statistics.length > 0"
         :columns="columns"
@@ -1113,3 +1114,4 @@ const mobileRecognitionActionChartOption = computed(() => adaptChartForMobile(re
     </n-modal>
   </n-card>
 </template>
+

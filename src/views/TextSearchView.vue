@@ -613,10 +613,11 @@ const loadContextLines = async (targetLine: number) => {
 </script>
 
 <template>
-  <div style="height: 100%; display: flex; flex-direction: column" :class="{ 'dark-theme': props.isDark }">
+  <div style="height: 100%; display: flex; flex-direction: column" data-tour="textsearch-root" :class="{ 'dark-theme': props.isDark }">
     <!-- 顶部工具栏 -->
     <n-card
       size="small"
+      data-tour="textsearch-toolbar"
       :bordered="false"
       content-style="padding: 12px 16px"
     >
@@ -761,6 +762,7 @@ const loadContextLines = async (targetLine: number) => {
       <!-- 搜索结果 -->
       <n-card
         size="small"
+        data-tour="textsearch-results"
         title="搜索结果"
         style="flex: 1; min-height: 0"
         content-style="height: 100%; overflow: hidden"
@@ -968,6 +970,7 @@ const loadContextLines = async (targetLine: number) => {
       <!-- 右侧：文件信息/搜索结果详情 -->
       <template #2>
         <n-card 
+          data-tour="textsearch-content"
           :title="isLargeFile ? '📦 大文件信息' : '📄 文件内容'"
           size="small"
           style="height: 100%"
@@ -1280,3 +1283,4 @@ const loadContextLines = async (targetLine: number) => {
   background: transparent;
 }
 </style>
+

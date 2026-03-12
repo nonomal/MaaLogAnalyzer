@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, h, defineAsyncComponent } from 'vue'
+import { ref, computed, watch, h, defineAsyncComponent, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { NSplit, NCard, NFlex, NButton, NIcon, NDropdown, NModal, NText, NDivider, NTag, NProgress, NSelect, NDrawer, NDrawerContent, NScrollbar, NList, NListItem, useMessage } from 'naive-ui'
 import ProcessView from './views/ProcessView.vue'
 import DetailView from './views/DetailView.vue'
@@ -10,6 +10,9 @@ import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnH
 import { version } from '../package.json'
 import { useIsMobile } from './composables/useIsMobile'
 import { formatDuration } from './utils/formatDuration'
+import TourOverlay from './components/TourOverlay.vue'
+import { TOUR_STEPS, TOUR_STORAGE_KEY, TOUR_VERSION } from './tutorial/steps'
+import tutorialSampleLog from './assets/tutorial-sample.log?raw'
 
 // Props
 interface Props {
@@ -140,6 +143,287 @@ const showAboutModal = ref(false)
 
 // 设置对话框
 const showSettingsModal = ref(false)
+
+// Spotlight tutorial
+const tutorialLoadingSample = ref(false)
+const tutorialAutoStarted = ref(false)
+const tourActive = ref(false)
+const activeTourStepIndexes = ref<number[]>([])
+const tourStepIndex = ref(0)
+const tourTargetFound = ref(false)
+const tourTargetElement = ref<HTMLElement | null>(null)
+const tourTargetRect = ref<{ top: number; left: number; width: number; height: number } | null>(null)
+const tourResolveRunId = ref(0)
+
+const currentTourSteps = computed(() => activeTourStepIndexes.value.map(i => TOUR_STEPS[i]).filter(Boolean) as typeof TOUR_STEPS)
+const currentTourStep = computed(() => currentTourSteps.value[tourStepIndex.value] ?? null)
+
+const tourSections = computed(() => {
+  const sections: { id: string; title: string }[] = []
+  for (const step of currentTourSteps.value) {
+    if (!sections.some(section => section.id === step.sectionId)) {
+      sections.push({ id: step.sectionId, title: step.sectionTitle })
+    }
+  }
+  return sections
+})
+
+const currentTourSectionIndex = computed(() => {
+  const current = currentTourStep.value
+  if (!current) return 0
+  const index = tourSections.value.findIndex(section => section.id === current.sectionId)
+  return index >= 0 ? index + 1 : 0
+})
+
+const currentTourSectionTotal = computed(() => tourSections.value.length)
+const currentTourSectionTitle = computed(() => currentTourStep.value?.sectionTitle ?? '')
+
+const currentTourSectionStepTotal = computed(() => {
+  const current = currentTourStep.value
+  if (!current) return 0
+  return currentTourSteps.value.filter(step => step.sectionId === current.sectionId).length
+})
+
+const currentTourSectionStepIndex = computed(() => {
+  const current = currentTourStep.value
+  if (!current) return 0
+  return currentTourSteps.value.slice(0, tourStepIndex.value + 1)
+    .filter(step => step.sectionId === current.sectionId)
+    .length
+})
+
+interface TutorialProgressState {
+  completedVersion: number
+  completedStepIds: Set<string>
+  rawObject: Record<string, any> | null
+}
+
+function readTutorialProgressState(): TutorialProgressState {
+  try {
+    const raw = localStorage.getItem(TOUR_STORAGE_KEY)
+    if (!raw) return { completedVersion: 0, completedStepIds: new Set(), rawObject: null }
+
+    const legacy = Number(raw)
+    if (Number.isFinite(legacy)) {
+      return { completedVersion: legacy, completedStepIds: new Set(), rawObject: null }
+    }
+
+    const parsed = JSON.parse(raw) as any
+    if (!parsed || typeof parsed !== "object") {
+      return { completedVersion: 0, completedStepIds: new Set(), rawObject: null }
+    }
+
+    let completedVersion = 0
+    if (typeof parsed.completedVersion === "number") {
+      completedVersion = parsed.completedVersion
+    }
+
+    const completedStepIds = new Set<string>()
+    if (Array.isArray(parsed.completedStepIds)) {
+      parsed.completedStepIds.forEach((id: unknown) => {
+        if (typeof id === "string") completedStepIds.add(id)
+      })
+    }
+
+    if (parsed.versions && typeof parsed.versions === "object") {
+      for (const [ver, info] of Object.entries(parsed.versions as Record<string, any>)) {
+        const v = Number(ver)
+        if (Number.isFinite(v) && info && typeof info === "object" && info.completed === true) {
+          completedVersion = Math.max(completedVersion, v)
+        }
+        if (info && typeof info === "object" && Array.isArray(info.completedStepIds)) {
+          info.completedStepIds.forEach((id: unknown) => {
+            if (typeof id === "string") completedStepIds.add(id)
+          })
+        }
+      }
+    }
+
+    return { completedVersion, completedStepIds, rawObject: parsed }
+  } catch {
+    return { completedVersion: 0, completedStepIds: new Set(), rawObject: null }
+  }
+}
+
+function hasCompletedCurrentTutorialVersion(): boolean {
+  const state = readTutorialProgressState()
+  return state.completedVersion >= TOUR_VERSION
+}
+
+function markCurrentTutorialVersionCompleted(stepIds: string[]) {
+  try {
+    const state = readTutorialProgressState()
+    const merged = new Set(state.completedStepIds)
+    stepIds.forEach(id => merged.add(id))
+
+    const obj = state.rawObject && typeof state.rawObject === "object" ? state.rawObject : {}
+    obj.completedVersion = Math.max(state.completedVersion, TOUR_VERSION)
+    obj.completedStepIds = Array.from(merged)
+    obj.activeVersion = TOUR_VERSION
+    if (!obj.versions || typeof obj.versions !== "object") obj.versions = {}
+    const verKey = String(TOUR_VERSION)
+    const prev = obj.versions[verKey] && typeof obj.versions[verKey] === "object" ? obj.versions[verKey] : {}
+    obj.versions[verKey] = {
+      ...prev,
+      completed: true,
+      completedStepIds: Array.from(merged),
+      updatedAt: new Date().toISOString(),
+    }
+
+    localStorage.setItem(TOUR_STORAGE_KEY, JSON.stringify(obj))
+  } catch {
+    localStorage.setItem(TOUR_STORAGE_KEY, String(TOUR_VERSION))
+  }
+}
+
+function getPendingTourStepIndexes(): number[] {
+  const state = readTutorialProgressState()
+  return TOUR_STEPS
+    .map((step, idx) => ({ step, idx }))
+    .filter(({ step }) => {
+      const doneById = state.completedStepIds.has(step.id)
+      const doneByVersion = (step.sinceVersion ?? 1) <= state.completedVersion
+      return !(doneById || doneByVersion)
+    })
+    .map(item => item.idx)
+}
+
+const stopTour = () => {
+  tourActive.value = false
+  tourTargetFound.value = false
+  tourTargetElement.value = null
+  tourTargetRect.value = null
+  activeTourStepIndexes.value = []
+  tourStepIndex.value = 0
+}
+const waitForElement = async (selector: string, timeoutMs: number): Promise<HTMLElement | null> => {
+  const start = Date.now()
+  while (Date.now() - start < timeoutMs) {
+    const found = document.querySelector(selector)
+    if (found instanceof HTMLElement) {
+      return found
+    }
+    await new Promise(resolve => setTimeout(resolve, 120))
+  }
+  return null
+}
+
+const updateTourRectFromElement = (el: HTMLElement) => {
+  const rect = el.getBoundingClientRect()
+  const padding = currentTourStep.value?.padding ?? 8
+  const top = Math.max(4, rect.top - padding)
+  const left = Math.max(4, rect.left - padding)
+  const width = Math.max(24, rect.width + padding * 2)
+  const height = Math.max(24, rect.height + padding * 2)
+  tourTargetRect.value = { top, left, width, height }
+}
+
+const resolveCurrentTourTarget = async () => {
+  const step = currentTourStep.value
+  if (!tourActive.value || !step) return
+
+  const runId = ++tourResolveRunId.value
+
+  if (step.view && viewMode.value !== step.view) {
+    viewMode.value = step.view
+  }
+
+  await nextTick()
+  await new Promise(resolve => setTimeout(resolve, 80))
+
+  const timeout = step.optional ? 1500 : 5000
+  const el = await waitForElement(step.target, timeout)
+
+  if (runId !== tourResolveRunId.value || !tourActive.value) {
+    return
+  }
+
+  if (!el) {
+    tourTargetFound.value = false
+    tourTargetElement.value = null
+    tourTargetRect.value = null
+    return
+  }
+
+  el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' })
+  await new Promise(resolve => setTimeout(resolve, 140))
+
+  if (runId !== tourResolveRunId.value || !tourActive.value) {
+    return
+  }
+
+  tourTargetElement.value = el
+  tourTargetFound.value = true
+  updateTourRectFromElement(el)
+}
+
+const handleTourViewportChange = () => {
+  if (!tourActive.value) return
+  if (!tourTargetElement.value) return
+  updateTourRectFromElement(tourTargetElement.value)
+}
+
+const startTour = async (auto = false) => {
+  if (tutorialLoadingSample.value || loading.value) return
+  tutorialLoadingSample.value = true
+  loading.value = true
+
+  try {
+    await processLogContent(tutorialSampleLog)
+    if (tasks.value.length === 0) {
+      message.error('Built-in sample failed to load: no tasks parsed.')
+      return
+    }
+
+    const indexes = auto
+      ? getPendingTourStepIndexes()
+      : TOUR_STEPS.map((_, idx) => idx)
+
+    if (indexes.length === 0) {
+      return
+    }
+
+    activeTourStepIndexes.value = indexes
+    tourStepIndex.value = 0
+    tourActive.value = true
+    await resolveCurrentTourTarget()
+  } catch (error) {
+    message.error(getErrorMessage(error), { duration: 5000 })
+  } finally {
+    loading.value = false
+    tutorialLoadingSample.value = false
+  }
+}
+
+const openTutorial = () => {
+  void startTour(false)
+}
+
+const handleTourPrev = async () => {
+  if (tourStepIndex.value <= 0) return
+  tourStepIndex.value -= 1
+  await resolveCurrentTourTarget()
+}
+
+const handleTourNext = async () => {
+  if (tourStepIndex.value >= currentTourSteps.value.length - 1) return
+  tourStepIndex.value += 1
+  await resolveCurrentTourTarget()
+}
+
+const handleTourRetry = async () => {
+  await resolveCurrentTourTarget()
+}
+
+const handleTourFinish = () => {
+  markCurrentTutorialVersionCompleted(currentTourSteps.value.map(step => step.id))
+  stopTour()
+}
+
+const handleTourSkip = () => {
+  markCurrentTutorialVersionCompleted(currentTourSteps.value.map(step => step.id))
+  stopTour()
+}
 
 // 处理文件上传
 const handleFileUpload = async (file: File) => {
@@ -426,6 +710,7 @@ const mobileMenuOptions = computed(() => [
     icon: opt.icon
   })),
   { type: 'divider' as const, key: 'd1' },
+  { label: '新手教程', key: 'tutorial', icon: () => h(InfoCircleOutlined) },
   { label: '设置', key: 'settings', icon: () => h(SettingOutlined) },
   { label: '关于', key: 'about', icon: () => h(InfoCircleOutlined) },
   { label: props.isDark ? '浅色模式' : '深色模式', key: 'theme', icon: () => h(props.isDark ? BulbOutlined : BulbFilled) }
@@ -437,6 +722,8 @@ const isDark = computed(() => props.isDark)
 const handleMobileMenuSelect = (key: string) => {
   if (key.startsWith('view-')) {
     handleViewModeSelect(key.replace('view-', ''))
+  } else if (key === 'tutorial') {
+    openTutorial()
   } else if (key === 'settings') {
     showSettingsModal.value = true
   } else if (key === 'about') {
@@ -451,6 +738,26 @@ const handleMobileSelectTask = (task: TaskInfo) => {
   handleSelectTask(task)
   showTaskDrawer.value = false
 }
+
+watch(viewMode, () => {
+  if (!tourActive.value) return
+  void resolveCurrentTourTarget()
+})
+
+onMounted(() => {
+  window.addEventListener('resize', handleTourViewportChange)
+  window.addEventListener('scroll', handleTourViewportChange, true)
+
+  if (!tutorialAutoStarted.value && !hasCompletedCurrentTutorialVersion()) {
+    tutorialAutoStarted.value = true
+    void startTour(true)
+  }
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', handleTourViewportChange)
+  window.removeEventListener('scroll', handleTourViewportChange, true)
+})
 </script>
 
 <template>
@@ -490,24 +797,26 @@ const handleMobileSelectTask = (task: TaskInfo) => {
           <n-text strong style="font-size: 16px">MAA 日志工具</n-text>
 
           <!-- 视图模式下拉菜单 -->
-          <n-dropdown
-            :options="viewModeOptions"
-            @select="handleViewModeSelect"
-            trigger="click"
-          >
-            <n-button size="small">
-              <template #icon>
-                <n-icon>
-                  <bar-chart-outlined v-if="viewMode === 'analysis'" />
-                  <file-search-outlined v-else-if="viewMode === 'search'" />
-                  <dashboard-outlined v-else-if="viewMode === 'statistics'" />
-                  <apartment-outlined v-else-if="viewMode === 'flowchart'" />
-                  <column-height-outlined v-else />
-                </n-icon>
-              </template>
-              {{ currentViewLabel }}
-            </n-button>
-          </n-dropdown>
+          <div data-tour="header-view-switch">
+            <n-dropdown
+              :options="viewModeOptions"
+              @select="handleViewModeSelect"
+              trigger="click"
+            >
+              <n-button size="small">
+                <template #icon>
+                  <n-icon>
+                    <bar-chart-outlined v-if="viewMode === 'analysis'" />
+                    <file-search-outlined v-else-if="viewMode === 'search'" />
+                    <dashboard-outlined v-else-if="viewMode === 'statistics'" />
+                    <apartment-outlined v-else-if="viewMode === 'flowchart'" />
+                    <column-height-outlined v-else />
+                  </n-icon>
+                </template>
+                {{ currentViewLabel }}
+              </n-button>
+            </n-dropdown>
+          </div>
 
           <!-- 进程过滤器 -->
           <n-select
@@ -544,10 +853,21 @@ const handleMobileSelectTask = (task: TaskInfo) => {
 
         <!-- 右侧按钮组 -->
         <n-flex align="center" style="gap: 8px">
+          <n-button
+            size="small"
+            secondary
+            :loading="tutorialLoadingSample"
+            data-tour="header-tutorial-button"
+            @click="openTutorial"
+          >
+            新手教程
+          </n-button>
+
           <!-- 设置按钮 -->
           <n-button
             text
             style="font-size: 20px"
+            data-tour="header-settings-button"
             @click="showSettingsModal = true"
           >
             <n-icon>
@@ -570,6 +890,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
           <n-button
             text
             style="font-size: 20px"
+            data-tour="header-theme-button"
             @click="emit('toggle-theme')"
           >
             <n-icon>
@@ -584,7 +905,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
     <!-- 主内容区域 -->
     <div style="flex: 1; min-height: 0">
       <!-- 日志分析模式 -->
-      <div v-show="viewMode === 'analysis'" style="height: 100%">
+      <div v-show="viewMode === 'analysis'" data-tour="analysis-main" style="height: 100%">
         <!-- 移动端布局 -->
         <template v-if="isMobile">
           <process-view
@@ -739,17 +1060,17 @@ const handleMobileSelectTask = (task: TaskInfo) => {
       </div>
 
       <!-- 文本搜索模式（独立显示，占据整个屏幕） -->
-      <div v-show="viewMode === 'search'" style="height: 100%">
+      <div v-show="viewMode === 'search'" data-tour="search-main" style="height: 100%">
         <text-search-view :is-dark="isDark" style="height: 100%" />
       </div>
 
       <!-- 节点统计模式（独立显示，占据整个屏幕） -->
-      <div v-if="viewMode === 'statistics'" style="height: 100%">
+      <div v-if="viewMode === 'statistics'" data-tour="statistics-main" style="height: 100%">
         <node-statistics-view :tasks="tasks" style="height: 100%" />
       </div>
 
       <!-- 流程图模式 -->
-      <div v-if="viewMode === 'flowchart'" style="height: 100%">
+      <div v-if="viewMode === 'flowchart'" data-tour="flowchart-main" style="height: 100%">
         <flowchart-view
           :tasks="filteredTasks"
           :parser="parser"
@@ -763,7 +1084,7 @@ const handleMobileSelectTask = (task: TaskInfo) => {
       </div>
 
       <!-- 分屏模式 -->
-      <div v-show="viewMode === 'split'" style="height: 100%">
+      <div v-show="viewMode === 'split'" data-tour="split-main" style="height: 100%">
         <n-split
           direction="vertical"
           :default-size="0.5"
@@ -852,6 +1173,25 @@ const handleMobileSelectTask = (task: TaskInfo) => {
     >
       <settings-view />
     </n-modal>
+
+    <TourOverlay
+      :active="tourActive"
+      :step="currentTourStep"
+      :step-index="tourStepIndex"
+      :total-steps="currentTourSteps.length"
+      :section-title="currentTourSectionTitle"
+      :section-index="currentTourSectionIndex"
+      :section-total="currentTourSectionTotal"
+      :section-step-index="currentTourSectionStepIndex"
+      :section-step-total="currentTourSectionStepTotal"
+      :target-rect="tourTargetRect"
+      :target-found="tourTargetFound"
+      @prev="handleTourPrev"
+      @next="handleTourNext"
+      @retry="handleTourRetry"
+      @finish="handleTourFinish"
+      @skip="handleTourSkip"
+    />
 
     <!-- 关于对话框 -->
     <n-modal

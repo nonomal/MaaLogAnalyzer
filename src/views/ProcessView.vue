@@ -659,6 +659,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
 
 <template>
   <n-card
+    data-tour="analysis-process-root"
     :title="isMobile ? undefined : 'MAA 日志分析器'"
     style="height: 100%"
     content-style="display: flex; flex-direction: column; gap: 16px; min-height: 0"
@@ -748,6 +749,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
       <div
         v-else
         class="drop-zone"
+        data-tour="analysis-upload-zone"
         @drop="handleDrop"
         @dragover="handleDragOver"
         @dragenter="handleDragOver"
@@ -863,7 +865,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
       >
         <!-- 左侧：任务列表 -->
         <template #1>
-          <n-card size="small" style="height: 100%; display: flex; flex-direction: column; position: relative" content-style="padding: 0; flex: 1; min-height: 0; overflow: hidden">
+          <n-card size="small" data-tour="analysis-task-list" style="height: 100%; display: flex; flex-direction: column; position: relative" content-style="padding: 0; flex: 1; min-height: 0; overflow: hidden">
                 <template #header>
                   <n-flex align="center" justify="space-between" style="padding-right: 16px">
                     <n-text style="font-size: 14px; font-weight: 500">任务列表</n-text>
@@ -941,7 +943,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
 
         <!-- 右侧：节点详情 -->
         <template #2>
-          <n-card size="small" title="节点时间线" style="height: 100%; display: flex; flex-direction: column; position: relative" content-style="padding: 0; flex: 1; min-height: 0; overflow: hidden">
+          <n-card size="small" data-tour="analysis-node-timeline" title="节点时间线" style="height: 100%; display: flex; flex-direction: column; position: relative" content-style="padding: 0; flex: 1; min-height: 0; overflow: hidden">
             <!-- 展开任务列表按钮（仅在任务列表折叠时显示） -->
             <n-button
               v-if="taskListCollapsed"
@@ -988,7 +990,7 @@ const handleNestedActionClick = (node: NodeInfo, actionIndex: number, nestedInde
             >
               <!-- 左侧：节点导航列表 -->
               <template #1>
-                <n-card size="small" style="height: 100%; display: flex; flex-direction: column; position: relative" content-style="padding: 0; flex: 1; min-height: 0; overflow: hidden">
+                <n-card size="small" data-tour="analysis-node-nav" style="height: 100%; display: flex; flex-direction: column; position: relative" content-style="padding: 0; flex: 1; min-height: 0; overflow: hidden">
                   <template #header>
                     <n-flex align="center" justify="space-between" style="padding-right: 16px">
                       <n-text style="font-size: 14px; font-weight: 500">节点导航</n-text>

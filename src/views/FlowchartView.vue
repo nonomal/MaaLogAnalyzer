@@ -699,7 +699,7 @@ const onPaneClick = () => {
 <template>
   <div class="flowchart-view">
     <!-- Top bar: task selector -->
-    <n-card size="small" :bordered="false" content-style="padding: 8px 12px">
+    <n-card size="small" data-tour="flowchart-toolbar" :bordered="false" content-style="padding: 8px 12px">
       <n-flex align="center" style="gap: 12px">
         <n-text strong>任务:</n-text>
         <n-select
@@ -740,7 +740,7 @@ const onPaneClick = () => {
 
     <div class="flowchart-body">
       <!-- Desktop left nav panel -->
-      <div v-if="!isMobile && executionTimeline.length > 0" class="flowchart-nav-panel">
+      <div v-if="!isMobile && executionTimeline.length > 0" class="flowchart-nav-panel" data-tour="flowchart-execution-nav">
         <div class="nav-header">
           <n-text strong style="font-size: 13px">执行顺序</n-text>
         </div>
@@ -766,7 +766,7 @@ const onPaneClick = () => {
       </div>
 
       <!-- Vue Flow canvas -->
-      <div class="flowchart-canvas">
+      <div class="flowchart-canvas" data-tour="flowchart-canvas">
         <!-- Mobile nav floating button -->
         <n-button
           v-if="isMobile && executionTimeline.length > 0"
