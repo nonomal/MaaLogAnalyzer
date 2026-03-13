@@ -10,11 +10,24 @@ import { decodeFileContent } from './fileDialog'
 
 const MAIN_LOG_NAMES = ['maa.log', 'maafw.log'] as const
 const BAK_LOG_NAMES = ['maa.bak.log', 'maafw.bak.log'] as const
+const SEARCH_TEXT_EXTENSIONS = ['.log', '.txt', '.jsonl'] as const
+
+export interface ExtractedTextFile {
+  path: string
+  name: string
+  content: string
+}
+
+const isSearchTextFile = (normalizedPath: string) => {
+  const lower = normalizedPath.toLowerCase()
+  return SEARCH_TEXT_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
 
 /** 判断某个路径是否是我们需要解压的文件 */
 function isNeededFile(path: string): boolean {
   const lower = path.replace(/\\/g, '/').toLowerCase()
   const name = lower.substring(lower.lastIndexOf('/') + 1)
+  if (isSearchTextFile(lower)) return true
   // 日志文件
   if (MAIN_LOG_NAMES.includes(name as (typeof MAIN_LOG_NAMES)[number]) || BAK_LOG_NAMES.includes(name as (typeof BAK_LOG_NAMES)[number])) return true
   // on_error 截图
@@ -31,7 +44,13 @@ function isNeededFile(path: string): boolean {
  */
 export async function extractZipContent(
   file: File,
-): Promise<{ content: string; errorImages: Map<string, string>; visionImages: Map<string, string>; waitFreezesImages: Map<string, string> } | null> {
+): Promise<{
+  content: string
+  errorImages: Map<string, string>
+  visionImages: Map<string, string>
+  waitFreezesImages: Map<string, string>
+  textFiles: ExtractedTextFile[]
+} | null> {
   const buffer = await file.arrayBuffer()
   const zipData = new Uint8Array(buffer)
 
@@ -83,8 +102,9 @@ export async function extractZipContent(
 
   // 读取 wait_freezes 调试截图
   const waitFreezesImages = extractWaitFreezesImages(files, paths, basePath)
+  const textFiles = extractSearchTextFiles(files, paths)
 
-  return { content, errorImages, visionImages, waitFreezesImages }
+  return { content, errorImages, visionImages, waitFreezesImages, textFiles }
 }
 
 /**
@@ -264,4 +284,25 @@ function extractWaitFreezesImages(
   }
 
   return imageMap
+}
+
+
+function extractSearchTextFiles(
+  files: Record<string, Uint8Array>,
+  paths: string[],
+): ExtractedTextFile[] {
+  const textFiles: ExtractedTextFile[] = []
+  for (const p of paths) {
+    const normalized = p.replace(/\\/g, '/')
+    if (!isSearchTextFile(normalized)) continue
+    const data = files[p]
+    if (!data) continue
+    textFiles.push({
+      path: normalized,
+      name: normalized.substring(normalized.lastIndexOf('/') + 1),
+      content: decodeFileContent(data),
+    })
+  }
+  textFiles.sort((a, b) => a.path.localeCompare(b.path))
+  return textFiles
 }

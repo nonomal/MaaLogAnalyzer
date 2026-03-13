@@ -1,10 +1,11 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref, computed, watch, h, defineAsyncComponent, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { NSplit, NCard, NFlex, NButton, NIcon, NDropdown, NModal, NText, NTag, NProgress, NSelect, NDrawer, NDrawerContent, NScrollbar, NList, NListItem, useMessage } from 'naive-ui'
 import ProcessView from './views/ProcessView.vue'
 import DetailView from './views/DetailView.vue'
 import { LogParser } from './utils/logParser'
 import { getErrorMessage } from './utils/errorHandler'
+import type { LoadedTextFile } from './utils/fileDialog'
 import type { TaskInfo, NodeInfo } from './types'
 import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnHeightOutlined, InfoCircleOutlined, GithubOutlined, DashboardOutlined, SettingOutlined, MenuOutlined, ApartmentOutlined } from '@vicons/antd'
 import { version } from '../package.json'
@@ -130,6 +131,34 @@ const appLayoutState = readAppLayoutState()
 const splitSize = ref(clamp(appLayoutState.analysisSplitSize, 0.4, 1, 0.65))
 const splitVerticalSize = ref(clamp(appLayoutState.splitVerticalSize, 0.2, 0.8, 0.5))
 const parser = new LogParser()
+
+interface TextSearchLoadedTarget {
+  id: string
+  label: string
+  fileName: string
+  content: string
+}
+
+const textSearchLoadedTargets = ref<TextSearchLoadedTarget[]>([])
+const textSearchLoadedDefaultTargetId = ref<string>('')
+
+const setTextSearchLoadedTargets = (targets: TextSearchLoadedTarget[], defaultId?: string) => {
+  textSearchLoadedTargets.value = targets
+  textSearchLoadedDefaultTargetId.value = defaultId ?? (targets[0]?.id ?? '')
+}
+const pickPreferredLogTargetId = (targets: TextSearchLoadedTarget[]): string => {
+  if (targets.length === 0) return ''
+  const normalize = (name: string) => name.toLowerCase()
+  const priority = ['maafw.log', 'maa.log', 'maafw.bak.log', 'maa.bak.log']
+  for (const key of priority) {
+    const hit = targets.find(
+      (t) => normalize(t.fileName || '').endsWith(key) || normalize(t.label || '').endsWith(key),
+    )
+    if (hit) return hit.id
+  }
+  return targets[0].id
+}
+
 const tasks = ref<TaskInfo[]>([])
 const selectedTask = ref<TaskInfo | null>(null)
 const selectedNode = ref<NodeInfo | null>(null)
@@ -474,13 +503,27 @@ const handleFileUpload = async (file: File) => {
       const { extractZipContent } = await import('./utils/zipExtractor')
       const result = await extractZipContent(file)
       if (result) {
-        await processLogContent(result.content, result.errorImages, result.visionImages, result.waitFreezesImages)
+        const loadedTargets: TextSearchLoadedTarget[] = result.textFiles.map((textFile, index) => ({
+          id: 'zip:' + index + ':' + textFile.path,
+          label: textFile.path,
+          fileName: textFile.name,
+          content: textFile.content,
+        }))
+        const defaultTargetId = pickPreferredLogTargetId(loadedTargets)
+        await processLogContent(
+          result.content,
+          result.errorImages,
+          result.visionImages,
+          result.waitFreezesImages,
+          loadedTargets,
+          defaultTargetId,
+        )
       } else {
         message.warning('ZIP 文件中未找到有效的日志文件')
       }
     } else {
       const content = await file.text()
-      await processLogContent(content)
+      await processLogContent(content, undefined, undefined, undefined, [{ id: 'loaded:single', label: file.name, fileName: file.name, content }], 'loaded:single')
     }
   } catch (error) {
     message.error(getErrorMessage(error), { duration: 5000 })
@@ -490,10 +533,26 @@ const handleFileUpload = async (file: File) => {
 }
 
 // 处理文件内容
-const handleContentUpload = async (content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>) => {
+const handleContentUpload = async (
+  content: string,
+  errorImages?: Map<string, string>,
+  visionImages?: Map<string, string>,
+  waitFreezesImages?: Map<string, string>,
+  textFiles?: LoadedTextFile[],
+) => {
   loading.value = true
   try {
-    await processLogContent(content, errorImages, visionImages, waitFreezesImages)
+    const explicitTargets: TextSearchLoadedTarget[] = (textFiles ?? []).map((file, index) => ({
+      id: `loaded:text:${index}:${file.path}`,
+      label: file.path || file.name,
+      fileName: file.name,
+      content: file.content,
+    }))
+    const loadedTargets: TextSearchLoadedTarget[] = explicitTargets.length > 0
+      ? explicitTargets
+      : [{ id: 'loaded:content', label: 'loaded.log', fileName: 'loaded.log', content }]
+    const defaultTargetId = pickPreferredLogTargetId(loadedTargets)
+    await processLogContent(content, errorImages, visionImages, waitFreezesImages, loadedTargets, defaultTargetId)
   } catch (error) {
     message.error(getErrorMessage(error), { duration: 5000 })
   } finally {
@@ -502,7 +561,14 @@ const handleContentUpload = async (content: string, errorImages?: Map<string, st
 }
 
 // 处理文件内容
-const processLogContent = async (content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>) => {
+const processLogContent = async (
+  content: string,
+  errorImages?: Map<string, string>,
+  visionImages?: Map<string, string>,
+  waitFreezesImages?: Map<string, string>,
+  loadedTargets?: TextSearchLoadedTarget[],
+  loadedDefaultTargetId?: string,
+) => {
   // 清空所有状态，确保重新上传文件时不会显示旧数据
   tasks.value = []
   selectedTask.value = null
@@ -513,6 +579,18 @@ const processLogContent = async (content: string, errorImages?: Map<string, stri
   availableThreadIds.value = []
   selectedProcessId.value = ''
   selectedThreadId.value = ''
+
+  // 更新文本搜索默认数据源（优先使用调用方提供的目标列表）
+  const fallbackTargets: TextSearchLoadedTarget[] = [{
+    id: 'loaded:fallback',
+    label: '已加载日志',
+    fileName: 'loaded.log',
+    content,
+  }]
+  setTextSearchLoadedTargets(
+    loadedTargets && loadedTargets.length > 0 ? loadedTargets : fallbackTargets,
+    loadedDefaultTargetId,
+  )
 
   // 显示解析进度模态框
   showParsingModal.value = true
@@ -1103,7 +1181,7 @@ onBeforeUnmount(() => {
 
       <!-- 文本搜索模式（独立显示，占据整个屏幕） -->
       <div v-show="viewMode === 'search'" data-tour="search-main" style="height: 100%">
-        <text-search-view :is-dark="isDark" style="height: 100%" />
+        <text-search-view :is-dark="isDark" :loaded-targets="textSearchLoadedTargets" :loaded-default-target-id="textSearchLoadedDefaultTargetId" style="height: 100%" />
       </div>
 
       <!-- 节点统计模式（独立显示，占据整个屏幕） -->
@@ -1199,7 +1277,7 @@ onBeforeUnmount(() => {
 
           <!-- 下半部分：文本搜索 -->
           <template #2>
-            <text-search-view v-if="viewMode === 'split'" :is-dark="isDark" style="height: 100%" />
+            <text-search-view v-if="viewMode === 'split'" :is-dark="isDark" :loaded-targets="textSearchLoadedTargets" :loaded-default-target-id="textSearchLoadedDefaultTargetId" style="height: 100%" />
           </template>
         </n-split>
       </div>
@@ -1352,3 +1430,4 @@ onBeforeUnmount(() => {
     </n-modal>
   </div>
 </template>
+

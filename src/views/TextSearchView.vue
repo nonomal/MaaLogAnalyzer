@@ -20,7 +20,8 @@ import {
   NIcon,
   NSpin,
   NVirtualList,
-  NDivider
+  NDivider,
+  NSelect
 } from 'naive-ui'
 import { parseLogLine } from '../utils/logHighlighter'
 import { SearchOutlined, FileTextOutlined, CloseOutlined } from '@vicons/antd'
@@ -58,11 +59,39 @@ watch(textSearchSplitSize, (size) => {
     // ignore write errors
   }
 })
-// Props
-const props = defineProps<{
-  isDark?: boolean
-}>()
+interface LoadedSearchTarget {
+  id: string
+  label: string
+  fileName: string
+  content: string
+}
 
+// Props
+const props = withDefaults(defineProps<{
+  isDark?: boolean
+  loadedTargets?: LoadedSearchTarget[]
+  loadedDefaultTargetId?: string
+}>(), {
+  isDark: true,
+  loadedTargets: () => [],
+  loadedDefaultTargetId: ''
+})
+
+type SourceMode = 'loaded' | 'manual'
+const sourceMode = ref<SourceMode>('manual')
+const selectedLoadedTargetId = ref('')
+
+const sourceModeOptions = [
+  { label: '已加载目标', value: 'loaded' },
+  { label: '手动选择文件', value: 'manual' }
+]
+
+const loadedTargetOptions = computed(() => {
+  return (props.loadedTargets ?? []).map(target => ({
+    label: target.label,
+    value: target.id
+  }))
+})
 const searchText = ref('')
 const fileContent = ref('')  // 保留用于小文件（<5MB）
 const fileName = ref('')
@@ -87,6 +116,103 @@ const totalLines = ref(0)  // 总行数
 const contextLines = ref<string[]>([])  // 选中行的上下文（大文件模式）
 const contextStartLine = ref(0)  // 上下文起始行号
 
+// 搜索结果
+interface SearchResult {
+  lineNumber: number
+  line: string
+  matchStart: number
+  matchEnd: number
+  context: string
+}
+
+const searchResults = ref<SearchResult[]>([])
+const totalMatches = ref(0)
+
+const resetSearchResultsOnly = () => {
+  abortSearch = true
+  isSearching.value = false
+  searchResults.value = []
+  totalMatches.value = 0
+  selectedLine.value = null
+  contextLines.value = []
+  contextStartLine.value = 0
+}
+
+const applyLoadedTarget = async (target: LoadedSearchTarget | undefined) => {
+  if (!target) return
+  isLoadingFile.value = true
+  try {
+    resetSearchResultsOnly()
+    fileName.value = target.fileName || target.label
+    fileContent.value = target.content ?? ''
+    fileSizeInMB.value = new Blob([fileContent.value]).size / 1024 / 1024
+    isLargeFile.value = false
+    fileHandle.value = null
+    totalLines.value = fileContent.value ? fileContent.value.split('\n').length : 0
+    showFileContent.value = false
+    contentKey.value += 1
+  } finally {
+    isLoadingFile.value = false
+  }
+}
+
+watch(
+  () => [props.loadedTargets, props.loadedDefaultTargetId] as const,
+  async ([targets, defaultId]) => {
+    const safeTargets = targets ?? []
+    if (safeTargets.length === 0) {
+      if (sourceMode.value === 'loaded') {
+        sourceMode.value = 'manual'
+      }
+      return
+    }
+
+    if (sourceMode.value === 'loaded' || !fileName.value) {
+      sourceMode.value = 'loaded'
+    }
+
+    const preferredId = defaultId && safeTargets.some(item => item.id === defaultId)
+      ? defaultId
+      : safeTargets[0].id
+
+    if (preferredId && selectedLoadedTargetId.value !== preferredId) {
+      selectedLoadedTargetId.value = preferredId
+      return
+    }
+
+    if (preferredId) {
+      await applyLoadedTarget(safeTargets.find(item => item.id === preferredId))
+    }
+  },
+  { immediate: true, deep: true }
+)
+
+watch(selectedLoadedTargetId, async (id) => {
+  if (sourceMode.value !== 'loaded') return
+  const target = (props.loadedTargets ?? []).find(item => item.id === id)
+  await applyLoadedTarget(target)
+})
+
+watch(sourceMode, async (mode) => {
+  if (mode !== 'loaded') return
+  const targets = props.loadedTargets ?? []
+  if (targets.length === 0) {
+    sourceMode.value = 'manual'
+    return
+  }
+  const nextId = selectedLoadedTargetId.value && targets.some(item => item.id === selectedLoadedTargetId.value)
+    ? selectedLoadedTargetId.value
+    : (props.loadedDefaultTargetId && targets.some(item => item.id === props.loadedDefaultTargetId)
+      ? props.loadedDefaultTargetId
+      : targets[0].id)
+  if (!nextId) return
+  if (selectedLoadedTargetId.value !== nextId) {
+    selectedLoadedTargetId.value = nextId
+  } else {
+    await applyLoadedTarget(targets.find(item => item.id === nextId))
+  }
+})
+
 // 快捷搜索选项
 const quickSearchOptions = [
   'reco hit',
@@ -104,17 +230,7 @@ const filterDebugInfo = (line: string): string => {
   return line.replace(DEBUG_INFO_PATTERN, '').replace(/\s{2,}/g, ' ').trim()
 }
 
-// 搜索结果
-interface SearchResult {
-  lineNumber: number
-  line: string
-  matchStart: number
-  matchEnd: number
-  context: string
-}
 
-const searchResults = ref<SearchResult[]>([])
-const totalMatches = ref(0)
 
 // 加载搜索历史
 onMounted(() => {
@@ -188,7 +304,7 @@ const performSearch = async () => {
 
   // 检查是否有文件
   if (!fileName.value || (!fileContent.value && !fileHandle.value)) {
-    alert('请先选择文件')
+    alert(sourceMode.value === 'loaded' ? '请先选择已加载目标文件' : '请先选择文件')
     return
   }
   
@@ -381,7 +497,8 @@ const handleFileUpload = async (event: Event) => {
   const file = target.files?.[0]
   
   if (!file) return
-  
+
+  sourceMode.value = 'manual'
   isLoadingFile.value = true
   
   try {
@@ -512,6 +629,7 @@ const clearContent = () => {
 
 // 触发文件选择
 const triggerFileSelect = () => {
+  sourceMode.value = 'manual'
   fileInputRef.value?.click()
 }
 
@@ -666,12 +784,27 @@ const loadContextLines = async (targetLine: number) => {
             />
             <n-button size="small" type="primary" @click="triggerFileSelect">
               <template #icon><file-text-outlined /></template>
-              选择文件
+              选择其它文件
             </n-button>
             <n-button v-if="fileName" size="small" @click="clearContent" secondary type="warning">
               <template #icon><n-icon><close-outlined /></n-icon></template>
             </n-button>
           </n-flex>
+        </n-flex>
+        <n-flex vertical style="gap: 8px">
+          <n-select
+            v-model:value="sourceMode"
+            :options="sourceModeOptions"
+            size="small"
+          />
+          <n-select
+            v-if="sourceMode === 'loaded'"
+            v-model:value="selectedLoadedTargetId"
+            :options="loadedTargetOptions"
+            placeholder="选择已加载目标"
+            size="small"
+            :disabled="loadedTargetOptions.length === 0"
+          />
         </n-flex>
         <n-flex v-if="fileName && !isLoadingFile" align="center" style="gap: 8px">
           <n-text depth="3" style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1">
@@ -689,7 +822,21 @@ const loadContextLines = async (targetLine: number) => {
       <n-flex v-else align="center" justify="space-between" style="gap: 12px">
         <n-flex align="center" style="gap: 12px">
           <n-text strong style="font-size: 16px">📝 文本搜索</n-text>
-
+          <n-select
+            v-model:value="sourceMode"
+            :options="sourceModeOptions"
+            size="small"
+            style="width: 140px"
+          />
+          <n-select
+            v-if="sourceMode === 'loaded'"
+            v-model:value="selectedLoadedTargetId"
+            :options="loadedTargetOptions"
+            placeholder="选择已加载目标"
+            size="small"
+            style="width: 320px"
+            :disabled="loadedTargetOptions.length === 0"
+          />
           <input
             id="text-search-file-input"
             ref="fileInputRef"
@@ -706,7 +853,7 @@ const loadContextLines = async (targetLine: number) => {
             <template #icon>
               <file-text-outlined />
             </template>
-            选择文件
+            选择其它文件
           </n-button>
 
           <n-button

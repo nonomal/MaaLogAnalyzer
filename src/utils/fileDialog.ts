@@ -9,6 +9,49 @@ export { isTauri, isVSCode }
 
 const MAIN_LOG_CANDIDATES = ['maa.log', 'maafw.log'] as const
 const BAK_LOG_CANDIDATES = ['maa.bak.log', 'maafw.bak.log'] as const
+const TEXT_SEARCH_EXTENSIONS = ['.log', '.txt', '.jsonl'] as const
+
+export interface LoadedTextFile {
+  path: string
+  name: string
+  content: string
+}
+
+interface OpenFolderResult {
+  content: string
+  errorImages: Map<string, string>
+  visionImages: Map<string, string>
+  waitFreezesImages: Map<string, string>
+  textFiles: LoadedTextFile[]
+}
+
+const isTextSearchFileName = (name: string) => {
+  const lower = name.toLowerCase()
+  return TEXT_SEARCH_EXTENSIONS.some(ext => lower.endsWith(ext))
+}
+
+const toPosixPath = (value: string) => value.replace(/\\/g, '/')
+
+const normalizeLoadedPath = (rawPath: string, rootPath?: string) => {
+  let normalized = toPosixPath(rawPath)
+  if (rootPath) {
+    const root = toPosixPath(rootPath).replace(/\/+$/, '')
+    const rootLower = root.toLowerCase()
+    const normalizedLower = normalized.toLowerCase()
+    if (normalizedLower === rootLower) {
+      normalized = ''
+    } else if (normalizedLower.startsWith(rootLower + '/')) {
+      normalized = normalized.slice(root.length + 1)
+    }
+  }
+  const lower = normalized.toLowerCase()
+  if (lower.startsWith('debug/')) return normalized
+  const debugIdx = lower.indexOf('/debug/')
+  if (debugIdx >= 0) {
+    return normalized.slice(debugIdx + 1)
+  }
+  return normalized
+}
 
 /**
  * 解码文件内容，自动尝试多种编码
@@ -322,10 +365,62 @@ async function readVisionImages(debugPath: string): Promise<Map<string, string>>
   return imageMap
 }
 
+
+async function collectTextFilesTauri(rootPath: string): Promise<LoadedTextFile[]> {
+  const result: LoadedTextFile[] = []
+  const seen = new Set<string>()
+  const { readDir, readTextFile } = await import('@tauri-apps/plugin-fs')
+
+  const walk = async (dirPath: string) => {
+    const entries = await readDir(dirPath)
+    for (const entry of entries) {
+      const fullPath = `${dirPath}\\${entry.name}`
+      if (entry.isDirectory) {
+        await walk(fullPath)
+        continue
+      }
+      if (!isTextSearchFileName(entry.name)) continue
+      const path = normalizeLoadedPath(fullPath, rootPath) || entry.name
+      if (seen.has(path)) continue
+      seen.add(path)
+      const content = await readTextFile(fullPath)
+      result.push({ path, name: entry.name, content })
+    }
+  }
+
+  await walk(rootPath)
+  return result
+}
+
+async function collectTextFilesWeb(rootHandle: FileSystemDirectoryHandle): Promise<LoadedTextFile[]> {
+  const result: LoadedTextFile[] = []
+  const seen = new Set<string>()
+
+  const walk = async (handle: FileSystemDirectoryHandle, prefix: string) => {
+    for await (const entry of handle.values()) {
+      const nextPath = prefix ? `${prefix}/${entry.name}` : entry.name
+      if (entry.kind === 'directory') {
+        await walk(entry as FileSystemDirectoryHandle, nextPath)
+        continue
+      }
+      if (!isTextSearchFileName(entry.name)) continue
+      const path = normalizeLoadedPath(nextPath) || entry.name
+      if (seen.has(path)) continue
+      seen.add(path)
+      const file = await (entry as FileSystemFileHandle).getFile()
+      const content = await file.text()
+      result.push({ path, name: entry.name, content })
+    }
+  }
+
+  await walk(rootHandle, '')
+  return result
+}
+
 /**
  * 打开文件夹并读取日志
  */
-export async function openFolderDialog(): Promise<{ content: string; errorImages: Map<string, string>; visionImages: Map<string, string>; waitFreezesImages: Map<string, string> } | null> {
+export async function openFolderDialog(): Promise<OpenFolderResult | null> {
   if (isTauri()) {
     return await openFolderDialogTauri()
   } else {
@@ -336,7 +431,7 @@ export async function openFolderDialog(): Promise<{ content: string; errorImages
 /**
  * Tauri 版本：打开文件夹并读取日志
  */
-async function openFolderDialogTauri(): Promise<{ content: string; errorImages: Map<string, string>; visionImages: Map<string, string>; waitFreezesImages: Map<string, string> } | null> {
+async function openFolderDialogTauri(): Promise<OpenFolderResult | null> {
 
   try {
     const { open } = await import('@tauri-apps/plugin-dialog')
@@ -414,8 +509,14 @@ async function openFolderDialogTauri(): Promise<{ content: string; errorImages: 
     const errorImages = await readErrorImages(debugPath)
     const visionImages = await readVisionImages(debugPath)
     const waitFreezesImages = await readWaitFreezesImages(debugPath)
+    let textFiles: LoadedTextFile[] = []
+    try {
+      textFiles = await collectTextFilesTauri(selected)
+    } catch (error) {
+      console.warn('[文件夹] 收集文本文件失败(Tauri):', error)
+    }
 
-    return { content, errorImages, visionImages, waitFreezesImages }
+    return { content, errorImages, visionImages, waitFreezesImages, textFiles }
   } catch (error) {
     console.error('[文件夹] 打开失败:', error)
     alert('打开文件夹失败: ' + error)
@@ -554,7 +655,7 @@ async function readVisionImagesWeb(debugHandle: FileSystemDirectoryHandle): Prom
 /**
  * Web 版本：打开文件夹并读取日志
  */
-async function openFolderDialogWeb(): Promise<{ content: string; errorImages: Map<string, string>; visionImages: Map<string, string>; waitFreezesImages: Map<string, string> } | null> {
+async function openFolderDialogWeb(): Promise<OpenFolderResult | null> {
   try {
     if (!('showDirectoryPicker' in window)) {
       alert('您的浏览器不支持文件夹选择功能，请使用 Chrome/Edge 等现代浏览器')
@@ -633,8 +734,14 @@ async function openFolderDialogWeb(): Promise<{ content: string; errorImages: Ma
     const errorImages = await readErrorImagesWeb(debugHandle)
     const visionImages = await readVisionImagesWeb(debugHandle)
     const waitFreezesImages = await readWaitFreezesImagesWeb(debugHandle)
+    let textFiles: LoadedTextFile[] = []
+    try {
+      textFiles = await collectTextFilesWeb(dirHandle)
+    } catch (error) {
+      console.warn('[文件夹] 收集文本文件失败(Web):', error)
+    }
 
-    return { content, errorImages, visionImages, waitFreezesImages }
+    return { content, errorImages, visionImages, waitFreezesImages, textFiles }
   } catch (error) {
     console.error('[文件夹] 打开失败:', error)
     if ((error as Error).name === 'AbortError') {

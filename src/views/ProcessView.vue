@@ -55,7 +55,48 @@ const processLayoutState = readProcessLayoutState()
 
 const isMainLogFileName = (name: string) => name === 'maa.log' || name === 'maafw.log'
 const isBakLogFileName = (name: string) => name === 'maa.bak.log' || name === 'maafw.bak.log'
+const TEXT_SEARCH_EXTENSIONS = ['.log', '.txt', '.jsonl'] as const
 
+interface LoadedTextFile {
+  path: string
+  name: string
+  content: string
+}
+
+const isSearchTextFileName = (name: string) => {
+  const lower = name.toLowerCase()
+  return TEXT_SEARCH_EXTENSIONS.some((ext) => lower.endsWith(ext))
+}
+
+const normalizeLoadedPath = (rawPath: string) => {
+  const normalized = rawPath.replace(/\\/g, '/')
+  const lower = normalized.toLowerCase()
+  if (lower.startsWith('debug/')) return normalized
+  const debugIdx = lower.indexOf('/debug/')
+  if (debugIdx >= 0) {
+    return normalized.slice(debugIdx + 1)
+  }
+  const parts = normalized.split('/').filter(Boolean)
+  return parts.length > 1 ? parts.slice(1).join('/') : normalized
+}
+
+const collectTextFilesFromFiles = async (files: Iterable<File>): Promise<LoadedTextFile[]> => {
+  const result: LoadedTextFile[] = []
+  const seen = new Set<string>()
+  for (const file of files) {
+    if (!isSearchTextFileName(file.name)) continue
+    const rawPath = (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
+    const path = normalizeLoadedPath(rawPath)
+    if (seen.has(path)) continue
+    seen.add(path)
+    result.push({
+      path,
+      name: file.name,
+      content: await file.text(),
+    })
+  }
+  return result
+}
 const props = defineProps<{
   tasks: TaskInfo[]
   selectedTask: TaskInfo | null
@@ -70,7 +111,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'select-task': [task: TaskInfo]
   'upload-file': [file: File]
-  'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>]
+  'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>, textFiles?: LoadedTextFile[]]
   'select-node': [node: NodeInfo]
   'select-action': [node: NodeInfo]
   'select-recognition': [node: NodeInfo, attemptIndex: number]
@@ -334,7 +375,8 @@ const handleDirectoryEntry = async (dirEntry: FileSystemDirectoryEntry) => {
     }
 
     if (combinedContent) {
-      emit('upload-content', combinedContent)
+      const textFiles = await collectTextFilesFromFiles(files)
+      emit('upload-content', combinedContent, undefined, undefined, undefined, textFiles)
     }
   } catch (error) {
     alert('读取文件夹失败: ' + error)
@@ -426,7 +468,8 @@ const handleFolderChange = async (event: Event) => {
     }
 
     if (combinedContent) {
-      emit('upload-content', combinedContent)
+      const textFiles = await collectTextFilesFromFiles(files)
+      emit('upload-content', combinedContent, undefined, undefined, undefined, textFiles)
     }
   } catch (error) {
     alert('读取文件失败: ' + error)
@@ -441,23 +484,7 @@ const handleFolderChange = async (event: Event) => {
 // 触发文件夹选择
 const folderInputRef = ref<HTMLInputElement | null>(null)
 const triggerFolderSelect = async () => {
-  try {
-    const { openFolderDialog } = await import('../utils/fileDialog')
-
-    fileLoading.value = true
-    emit('file-loading-start')
-
-    const result = await openFolderDialog()
-
-    if (result) {
-      emit('upload-content', result.content, result.errorImages, result.visionImages, result.waitFreezesImages)
-    }
-  } catch (error) {
-    alert('打开文件夹失败: ' + error)
-  } finally {
-    fileLoading.value = false
-    emit('file-loading-end')
-  }
+  folderInputRef.value?.click()
 }
 
 // 触发文件选择
@@ -568,7 +595,8 @@ const handleTauriOpen = async () => {
           const content = await readTextFile(selected)
 
           if (content) {
-            emit('upload-content', content)
+            const fileName = selected.split(/[/\\]/).pop() || 'loaded.log'
+            emit('upload-content', content, undefined, undefined, undefined, [{ path: selected, name: fileName, content }])
           }
         }
       } finally {
@@ -594,7 +622,7 @@ const handleTauriOpenFolder = async () => {
     const result = await openFolderDialog()
 
     if (result) {
-      emit('upload-content', result.content, result.errorImages, result.visionImages, result.waitFreezesImages)
+      emit('upload-content', result.content, result.errorImages, result.visionImages, result.waitFreezesImages, result.textFiles)
     }
   } catch (error) {
     alert('打开文件夹失败: ' + error)
