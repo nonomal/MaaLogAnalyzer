@@ -1,4 +1,4 @@
-﻿import type { Node, Edge } from '@vue-flow/core'
+import type { Node, Edge } from '@vue-flow/core'
 import ELK from 'elkjs/lib/elk.bundled.js'
 import type { TaskInfo, NodeInfo } from '../types'
 
@@ -14,6 +14,7 @@ export interface FlowEdgeData {
   anchor: boolean
   jump_back: boolean
   edgeStatus: 'success' | 'failed' | 'topology'
+  flowMode?: 'none' | 'chevron' | 'dash'
   routePoints?: Array<{ x: number; y: number }>
 }
 

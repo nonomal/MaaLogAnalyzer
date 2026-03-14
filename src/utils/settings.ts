@@ -21,24 +21,35 @@ export interface AppSettings {
 
   // 流程图连线样式
   flowchartEdgeStyle: FlowchartEdgeStyle
+  // 流程图连线流动动画
+  flowchartEdgeFlowEnabled: boolean
   // 流程图顺序回放速度（ms）
   flowchartPlaybackIntervalMs: number
   // 流程图聚焦缩放
   flowchartFocusZoom: number
+  // 拖动节点后是否自动重算布局
+  flowchartRelayoutAfterDrag: boolean
 }
 
 const SETTINGS_KEY = 'maa-log-analyzer-settings'
 
 const defaultSettings: AppSettings = {
   defaultCollapseRecognition: false,
-  defaultCollapseNestedRecognition: false,
-  defaultCollapseAction: false,
-  defaultExpandRawJson: false,
+  defaultCollapseNestedRecognition: true,
+  defaultCollapseAction: true,
+  defaultExpandRawJson: true,
   displayMode: 'tree',
 
   flowchartEdgeStyle: 'orthogonal',
+  flowchartEdgeFlowEnabled: true,
   flowchartPlaybackIntervalMs: 900,
   flowchartFocusZoom: 1.0,
+  flowchartRelayoutAfterDrag: true,
+}
+
+
+export function getDefaultSettings(): AppSettings {
+  return { ...defaultSettings }
 }
 
 let settingsInstance: AppSettings | null = null
@@ -57,7 +68,7 @@ export function getSettings(): AppSettings {
     console.error('读取设置失败:', error)
   }
 
-  settingsInstance = reactive<AppSettings>({ ...defaultSettings, ...stored })
+  settingsInstance = reactive<AppSettings>({ ...getDefaultSettings(), ...stored })
   return settingsInstance
 }
 

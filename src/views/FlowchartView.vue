@@ -423,19 +423,6 @@ function closePopover() {
   popoverNodeId.value = null
 }
 
-function getEdgeRenderType(edge: any): string | undefined {
-  const routePoints = (edge.data as FlowEdgeData | undefined)?.routePoints
-  const hasRoutePoints = Array.isArray(routePoints) && routePoints.length >= 2
-  return settings.flowchartEdgeStyle === 'orthogonal' && hasRoutePoints ? 'orthogonalEdge' : undefined
-}
-
-function applyEdgeRenderTypes() {
-  flowEdges.value = flowEdges.value.map((edge: any) => ({
-    ...edge,
-    type: getEdgeRenderType(edge),
-  }))
-}
-
 function getBaseEdgeStyle(d: FlowEdgeData) {
   if (!d.executed) {
     const style: Record<string, string | number> = { stroke: '#999', strokeWidth: 1, opacity: 0.5 }
@@ -478,22 +465,47 @@ const highlightedEdgeIds = computed(() => {
   return ids
 })
 
+
+function getEdgeRenderType(edge: any): string | undefined {
+  const edgeData = (edge.data as FlowEdgeData | undefined)
+  const routePoints = edgeData?.routePoints
+  const hasRoutePoints = Array.isArray(routePoints) && routePoints.length >= 2
+  if (edgeData?.flowMode === 'chevron') return 'orthogonalEdge'
+  if (settings.flowchartEdgeStyle === 'orthogonal' && hasRoutePoints) return 'orthogonalEdge'
+  return undefined
+}
+
+function applyEdgeRenderTypes() {
+  flowEdges.value = flowEdges.value.map((edge: any) => ({
+    ...edge,
+    type: getEdgeRenderType(edge),
+  }))
+}
+
 function applyFocusStyles() {
   const activeEdgeIds = highlightedEdgeIds.value
   flowEdges.value = flowEdges.value.map((edge: any) => {
     const d = edge.data as FlowEdgeData
     const baseStyle = getBaseEdgeStyle(d)
+    const hasFocusedNode = activeEdgeIds != null
+    const isActiveEdge = !hasFocusedNode || activeEdgeIds.has(edge.id)
+    const shouldAnimate = settings.flowchartEdgeFlowEnabled && d.executed && isActiveEdge
+    const hasDashArray = Object.prototype.hasOwnProperty.call(baseStyle, 'strokeDasharray')
+    const flowMode: FlowEdgeData['flowMode'] = !shouldAnimate ? 'none' : (hasDashArray ? 'dash' : 'chevron')
+    const nextData: FlowEdgeData = { ...d, flowMode }
     const dimmed = activeEdgeIds != null && !activeEdgeIds.has(edge.id)
     return {
       ...edge,
+      data: nextData,
       style: {
         ...baseStyle,
         opacity: dimmed ? 0.12 : (baseStyle.opacity ?? 1),
       },
+      animated: flowMode === 'dash',
+      type: getEdgeRenderType({ ...edge, data: nextData }),
     }
   })
 }
-
 
 function clearPlaybackTimer() {
   if (playbackTimer.value != null) {
@@ -581,18 +593,52 @@ function scrollNavToIndex(index: number) {
   })
 }
 
-// Build graph when task changes
-watch(selectedTask, async (task) => {
-  const runId = ++layoutRunId.value
-  stopPlayback()
-  closePopover()
-  selectedTimelineIndex.value = null
-  if (!task) {
-    flowNodes.value = []
-    flowEdges.value = []
-    return
-  }
+const FLOW_NODE_WIDTH = 180
+const FLOW_NODE_HEIGHT = 60
 
+function recomputeEdgeRoutesForCurrentNodes() {
+  const fallbackNodeMap = new Map<string, any>(flowNodes.value.map((n: any) => [n.id, n]))
+
+  flowEdges.value = flowEdges.value.map((edge: any) => {
+    // Prefer live positions managed by VueFlow during drag; fall back to local array.
+    const sourceNode = getNode.value(edge.source) ?? fallbackNodeMap.get(edge.source)
+    const targetNode = getNode.value(edge.target) ?? fallbackNodeMap.get(edge.target)
+    if (!sourceNode || !targetNode) return edge
+
+    const start = {
+      x: sourceNode.position.x + FLOW_NODE_WIDTH / 2,
+      y: sourceNode.position.y + FLOW_NODE_HEIGHT,
+    }
+    const end = {
+      x: targetNode.position.x + FLOW_NODE_WIDTH / 2,
+      y: targetNode.position.y,
+    }
+
+    const points: Array<{ x: number; y: number }> = []
+    if (Math.abs(start.x - end.x) < 0.5) {
+      points.push(start, end)
+    } else {
+      const midY = (start.y + end.y) / 2
+      points.push(start, { x: start.x, y: midY }, { x: end.x, y: midY }, end)
+    }
+
+    const nextData: FlowEdgeData = {
+      ...(edge.data as FlowEdgeData),
+      routePoints: points,
+    }
+
+    return {
+      ...edge,
+      data: nextData,
+      type: getEdgeRenderType({ ...edge, data: nextData }),
+    }
+  })
+
+  applyFocusStyles()
+}
+// Build graph from selected task
+async function rebuildFlowchartLayout(task: TaskInfo, options?: { resetFocus?: boolean; fit?: boolean }) {
+  const runId = ++layoutRunId.value
   const { nodes, edges } = await buildFlowchartData(task)
   if (runId !== layoutRunId.value) return
 
@@ -606,15 +652,53 @@ watch(selectedTask, async (task) => {
 
   flowNodes.value = nodes
   flowEdges.value = edges
-  focusedNodeId.value = null
+
+  if (options?.resetFocus) {
+    focusedNodeId.value = null
+  }
+
   applyFocusStyles()
 
-  nextTick(() => {
-    setTimeout(() => fitView({ padding: 0.2 }), 50)
-  })
+  if (options?.fit) {
+    nextTick(() => {
+      setTimeout(() => fitView({ padding: 0.2 }), 50)
+    })
+  }
+
+  if (popoverNodeId.value) {
+    nextTick(() => {
+      updatePopoverPosition()
+      requestAnimationFrame(updatePopoverPosition)
+    })
+  }
+}
+
+// Build graph when task changes
+watch(selectedTask, async (task) => {
+  stopPlayback()
+  closePopover()
+  selectedTimelineIndex.value = null
+  if (!task) {
+    flowNodes.value = []
+    flowEdges.value = []
+    return
+  }
+
+  await rebuildFlowchartLayout(task, { resetFocus: true, fit: true })
 }, { immediate: true })
 
+const onNodeDragStop = async () => {
+  if (!settings.flowchartRelayoutAfterDrag) return
+
+  stopPlayback()
+  recomputeEdgeRoutesForCurrentNodes()
+}
+
 watch(focusedNodeId, () => {
+  applyFocusStyles()
+})
+
+watch(isPlaying, () => {
   applyFocusStyles()
 })
 
@@ -630,6 +714,11 @@ watch(focusZoom, () => {
 })
 
 watch(() => settings.flowchartEdgeStyle, () => {
+  applyEdgeRenderTypes()
+  applyFocusStyles()
+})
+
+watch(() => settings.flowchartEdgeFlowEnabled, () => {
   applyEdgeRenderTypes()
   applyFocusStyles()
 })
@@ -753,6 +842,7 @@ const onPaneClick = () => {
           :max-zoom="3"
           fit-view-on-init
           @node-click="onNodeClick"
+          @node-drag-stop="onNodeDragStop"
           @pane-click="onPaneClick"
         >
           <template #node-flowchartNode="nodeProps">
@@ -1060,6 +1150,17 @@ const onPaneClick = () => {
 .flowchart-canvas :deep(.vue-flow__pane) {
   cursor: grab;
 }
+
+/* 虚线边保留原样，通过 dash offset 产生流动感；实线边由白色 > 负责流动 */
+.flowchart-canvas :deep(.vue-flow__edge.animated .vue-flow__edge-path) {
+  animation: maa-flow-edge-dash 1.2s linear infinite;
+}
+
+@keyframes maa-flow-edge-dash {
+  to {
+    stroke-dashoffset: -36;
+  }
+}
 </style>
 
 <!-- Unscoped: theme CSS variables (must not be scoped to work on :root/body) -->
@@ -1086,6 +1187,8 @@ body {
   --flowchart-popover-close: #888;
   --flowchart-popover-close-hover: #ddd;
   --flowchart-popover-secondary: #999;
+  --flowchart-chevron-fill: #ffffff;
+  --flowchart-chevron-stroke-width: 1;
 }
 
 /* Vue Flow canvas: dark background (default) */
@@ -1116,6 +1219,8 @@ body {
     --flowchart-popover-close: #999;
     --flowchart-popover-close-hover: #333;
     --flowchart-popover-secondary: #888;
+    --flowchart-chevron-fill: #000000;
+    --flowchart-chevron-stroke-width: 0;
   }
 
   body:not(.force-dark) .vue-flow {
@@ -1145,6 +1250,8 @@ body.force-light {
   --flowchart-popover-close: #999;
   --flowchart-popover-close-hover: #333;
   --flowchart-popover-secondary: #888;
+  --flowchart-chevron-fill: #000000;
+  --flowchart-chevron-stroke-width: 0;
 }
 
 body.force-light .vue-flow {

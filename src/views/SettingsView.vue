@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { NCard, NSwitch, NButton, NFlex, NText, NSelect, NRadioGroup, NRadioButton, useMessage } from 'naive-ui'
-import { getSettings, saveSettings } from '../utils/settings'
+import { getSettings, saveSettings, getDefaultSettings } from '../utils/settings'
 
 const message = useMessage()
 const settings = getSettings()
@@ -26,17 +26,7 @@ const handleSave = () => {
 }
 
 const handleReset = () => {
-  Object.assign(settings, {
-    defaultCollapseRecognition: false,
-    defaultCollapseNestedRecognition: true,
-    defaultCollapseAction: true,
-    defaultExpandRawJson: true,
-    displayMode: 'tree',
-
-    flowchartEdgeStyle: 'orthogonal',
-    flowchartPlaybackIntervalMs: 900,
-    flowchartFocusZoom: 1.0,
-  })
+  Object.assign(settings, getDefaultSettings())
   saveSettings(settings)
   message.success('已恢复默认设置')
 }
@@ -96,6 +86,16 @@ const handleReset = () => {
                 <n-radio-button value="default">平滑曲线</n-radio-button>
               </n-radio-group>
             </td>
+          </tr>
+
+          <tr>
+            <td>连线流动动画</td>
+            <td><n-switch v-model:value="settings.flowchartEdgeFlowEnabled" /></td>
+          </tr>
+
+          <tr>
+            <td>拖动后自动重排</td>
+            <td><n-switch v-model:value="settings.flowchartRelayoutAfterDrag" /></td>
           </tr>
 
           <tr>
