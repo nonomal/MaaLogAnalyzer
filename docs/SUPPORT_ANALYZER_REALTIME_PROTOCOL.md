@@ -334,3 +334,87 @@ Analyzer 应映射为标准名：
 ---
 
 双方统一按本文档实现。
+
+---
+
+## 10. 联调最小消息样例（start / push / end）
+
+以下是最小可跑通的一组 JSON-RPC Notification。
+
+### 10.1 realtime.start
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "realtime.start",
+  "params": {
+    "sessionId": "demo-session-1",
+    "instanceId": "instance-1",
+    "source": "maa-support-extension",
+    "startedAt": 1760000000000
+  }
+}
+```
+
+### 10.2 realtime.push
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "realtime.push",
+  "params": {
+    "sessionId": "demo-session-1",
+    "mode": "live",
+    "seqStart": 1,
+    "seqEnd": 3,
+    "events": [
+      {
+        "seq": 1,
+        "at": 1760000000100,
+        "msg": "Task.Starting",
+        "details": {
+          "task_id": 200000001,
+          "uuid": "demo-uuid-1",
+          "entry": "Psychube"
+        }
+      },
+      {
+        "seq": 2,
+        "at": 1760000000200,
+        "msg": "PipelineNode.Succeeded",
+        "details": {
+          "task_id": 200000001,
+          "node_id": 1,
+          "name": "Start"
+        }
+      },
+      {
+        "seq": 3,
+        "at": 1760000000300,
+        "msg": "Task.Succeeded",
+        "details": {
+          "task_id": 200000001,
+          "uuid": "demo-uuid-1"
+        }
+      }
+    ]
+  }
+}
+```
+
+说明：Analyzer 会把 `Task.*`、`PipelineNode.*` 自动规范化为标准前缀消息。
+
+### 10.3 realtime.end
+
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "realtime.end",
+  "params": {
+    "sessionId": "demo-session-1",
+    "reason": "finished",
+    "finalSeq": 3,
+    "endedAt": 1760000000400
+  }
+}
+```
