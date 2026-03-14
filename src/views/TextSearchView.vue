@@ -104,6 +104,8 @@ const isSearching = ref(false)
 const isLoadingFile = ref(false)  // 是否正在加载文件
 const selectedLine = ref<number | null>(null)  // 当前选中的行
 const searchHistory = ref<string[]>([])  // 搜索历史
+const searchOptionExpandedNames = ref<Array<string | number>>(['search-options'])  // 搜索选项折叠状态
+const mobileControlExpandedNames = ref<Array<string | number>>([])  // 手机端顶部控制折叠状态
 const showFileContent = ref(false)  // 是否显示文件内容（默认关闭以节省内存）
 const contentKey = ref(0)  // 用于强制重新渲染，释放内存
 const hideDebugInfo = ref(true)  // 是否隐藏调试信息（如 [Px...][Tx...][...cpp]），默认隐藏
@@ -815,39 +817,74 @@ const loadContextLines = async (targetLine: number) => {
       <n-flex v-if="isMobile" vertical style="gap: 8px">
         <n-flex align="center" justify="space-between">
           <n-text strong style="font-size: 16px">文本搜索</n-text>
-          <n-flex align="center" style="gap: 8px">
-            <input
-              id="text-search-file-input"
-              ref="fileInputRef"
-              type="file"
-              accept=".txt,.log"
-              @change="handleFileUpload"
-              style="display: none"
-            />
-            <n-button size="small" type="primary" @click="triggerFileSelect">
-              <template #icon><file-text-outlined /></template>
-              选择其它文件
-            </n-button>
-            <n-button v-if="fileName" size="small" @click="clearContent" secondary type="warning">
-              <template #icon><n-icon><close-outlined /></n-icon></template>
-            </n-button>
-          </n-flex>
         </n-flex>
-        <n-flex vertical style="gap: 8px">
-          <n-select
-            v-model:value="sourceMode"
-            :options="sourceModeOptions"
-            size="small"
-          />
-          <n-select
-            v-if="sourceMode === 'loaded'"
-            v-model:value="selectedLoadedTargetId"
-            :options="loadedTargetOptions"
-            placeholder="选择已加载目标"
-            size="small"
-            :disabled="loadedTargetOptions.length === 0"
-          />
-        </n-flex>
+        <n-collapse v-model:expanded-names="mobileControlExpandedNames">
+          <n-collapse-item title="已加载目标 / 选择文件 / 搜索选项" name="mobile-controls">
+            <n-flex vertical style="gap: 8px">
+              <input
+                id="text-search-file-input"
+                ref="fileInputRef"
+                type="file"
+                accept=".txt,.log"
+                @change="handleFileUpload"
+                style="display: none"
+              />
+              <n-flex align="center" style="gap: 8px; flex-wrap: wrap">
+                <n-button size="small" type="primary" @click="triggerFileSelect">
+                  <template #icon><file-text-outlined /></template>
+                  选择其它文件
+                </n-button>
+                <n-button v-if="fileName" size="small" @click="clearContent" secondary type="warning">
+                  <template #icon><n-icon><close-outlined /></n-icon></template>
+                </n-button>
+              </n-flex>
+              <n-select
+                v-model:value="sourceMode"
+                :options="sourceModeOptions"
+                size="small"
+              />
+              <n-select
+                v-if="sourceMode === 'loaded'"
+                v-model:value="selectedLoadedTargetId"
+                :options="loadedTargetOptions"
+                placeholder="选择已加载目标"
+                size="small"
+                :disabled="loadedTargetOptions.length === 0"
+              />
+              <n-flex align="center" style="gap: 8px; flex-wrap: wrap">
+                <n-checkbox v-model:checked="caseSensitive" size="small">区分大小写</n-checkbox>
+                <n-checkbox v-model:checked="useRegex" size="small">正则</n-checkbox>
+                <n-checkbox v-model:checked="hideDebugInfo" size="small">隐藏调试</n-checkbox>
+              </n-flex>
+              <n-flex wrap style="gap: 6px">
+                <n-button
+                  v-for="option in quickSearchOptions"
+                  :key="`m-quick-${option}`"
+                  size="tiny"
+                  secondary
+                  @click="useHistoryItem(option)"
+                  :type="searchText === option ? 'primary' : 'default'"
+                >
+                  {{ option }}
+                </n-button>
+              </n-flex>
+              <n-flex v-if="searchHistory.length > 0" wrap style="gap: 6px">
+                <n-tag
+                  v-for="(item, idx) in searchHistory.slice(0, 8)"
+                  :key="`m-history-${idx}`"
+                  size="small"
+                  closable
+                  @close="removeFromHistory(item)"
+                  @click="useHistoryItem(item)"
+                  style="cursor: pointer"
+                  :type="searchText === item ? 'primary' : 'default'"
+                >
+                  {{ item.length > 24 ? item.substring(0, 24) + '...' : item }}
+                </n-tag>
+              </n-flex>
+            </n-flex>
+          </n-collapse-item>
+        </n-collapse>
         <n-flex v-if="fileName && !isLoadingFile" align="center" style="gap: 8px">
           <n-text depth="3" style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1">
             {{ fileName }}
@@ -859,7 +896,6 @@ const loadContextLines = async (targetLine: number) => {
         </n-flex>
         <n-text v-if="isLoadingFile" type="info" style="font-size: 13px">正在加载文件...</n-text>
       </n-flex>
-
       <!-- 桌面端工具栏 -->
       <n-flex v-else align="center" justify="space-between" style="gap: 12px">
         <n-flex align="center" style="gap: 12px">
@@ -958,23 +994,7 @@ const loadContextLines = async (targetLine: number) => {
               搜索
             </n-button>
           </n-input-group>
-          <n-flex align="center" style="gap: 8px; flex-wrap: wrap">
-            <n-checkbox v-model:checked="caseSensitive" size="small">区分大小写</n-checkbox>
-            <n-checkbox v-model:checked="useRegex" size="small">正则</n-checkbox>
-            <n-checkbox v-model:checked="hideDebugInfo" size="small">隐藏调试</n-checkbox>
-          </n-flex>
-          <n-flex wrap style="gap: 6px">
-            <n-button
-              v-for="option in quickSearchOptions"
-              :key="option"
-              size="tiny"
-              secondary
-              @click="useHistoryItem(option)"
-              :type="searchText === option ? 'primary' : 'default'"
-            >
-              {{ option }}
-            </n-button>
-          </n-flex>
+          
         </n-flex>
       </n-card>
 
@@ -1065,53 +1085,58 @@ const loadContextLines = async (targetLine: number) => {
               </n-input-group>
               
               <!-- 搜索选项 -->
-              <n-flex align="center" style="gap: 12px; flex-wrap: wrap">
-                <n-checkbox v-model:checked="caseSensitive">
-                  区分大小写
-                </n-checkbox>
-                <n-checkbox v-model:checked="useRegex">
-                  正则表达式
-                </n-checkbox>
-                <n-checkbox v-model:checked="hideDebugInfo">
-                  隐藏调试标签
-                </n-checkbox>
-              </n-flex>
-              
-              <!-- 快捷搜索 -->
-              <div>
-                <n-text depth="3" style="font-size: 12px; margin-bottom: 6px; display: block">
-                  快捷搜索：
-                </n-text>
-                <n-flex wrap style="gap: 6px">
-                  <n-button
-                    v-for="option in quickSearchOptions"
-                    :key="option"
-                    size="tiny"
-                    secondary
-                    @click="useHistoryItem(option)"
-                    :type="searchText === option ? 'primary' : 'default'"
-                  >
-                    {{ option }}
-                  </n-button>
-                </n-flex>
-              </div>
-              
-              <!-- 搜索历史 -->
-              <n-collapse v-if="searchHistory.length > 0" style="margin-top: 8px">
-                <n-collapse-item title="📝 搜索历史" name="history">
-                  <n-flex wrap style="gap: 6px">
-                    <n-tag
-                      v-for="(item, idx) in searchHistory.slice(0, 10)"
-                      :key="idx"
-                      size="small"
-                      closable
-                      @close="removeFromHistory(item)"
-                      @click="useHistoryItem(item)"
-                      style="cursor: pointer"
-                      :type="searchText === item ? 'primary' : 'default'"
-                    >
-                      {{ item.length > 30 ? item.substring(0, 30) + '...' : item }}
-                    </n-tag>
+              <n-collapse v-model:expanded-names="searchOptionExpandedNames">
+                <n-collapse-item title="搜索选项" name="search-options">
+                  <n-flex vertical style="gap: 10px">
+                    <n-flex align="center" style="gap: 12px; flex-wrap: wrap">
+                      <n-checkbox v-model:checked="caseSensitive">
+                        区分大小写
+                      </n-checkbox>
+                      <n-checkbox v-model:checked="useRegex">
+                        正则表达式
+                      </n-checkbox>
+                      <n-checkbox v-model:checked="hideDebugInfo">
+                        隐藏调试标签
+                      </n-checkbox>
+                    </n-flex>
+
+                    <div>
+                      <n-text depth="3" style="font-size: 12px; margin-bottom: 6px; display: block">
+                        快捷搜索：
+                      </n-text>
+                      <n-flex wrap style="gap: 6px">
+                        <n-button
+                          v-for="option in quickSearchOptions"
+                          :key="option"
+                          size="tiny"
+                          secondary
+                          @click="useHistoryItem(option)"
+                          :type="searchText === option ? 'primary' : 'default'"
+                        >
+                          {{ option }}
+                        </n-button>
+                      </n-flex>
+                    </div>
+
+                    <div v-if="searchHistory.length > 0">
+                      <n-text depth="3" style="font-size: 12px; margin-bottom: 6px; display: block">
+                        搜索历史：
+                      </n-text>
+                      <n-flex wrap style="gap: 6px">
+                        <n-tag
+                          v-for="(item, idx) in searchHistory.slice(0, 10)"
+                          :key="idx"
+                          size="small"
+                          closable
+                          @close="removeFromHistory(item)"
+                          @click="useHistoryItem(item)"
+                          style="cursor: pointer"
+                          :type="searchText === item ? 'primary' : 'default'"
+                        >
+                          {{ item.length > 30 ? item.substring(0, 30) + '...' : item }}
+                        </n-tag>
+                      </n-flex>
+                    </div>
                   </n-flex>
                 </n-collapse-item>
               </n-collapse>

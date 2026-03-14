@@ -1651,7 +1651,7 @@ onBeforeUnmount(() => {
               :detail-view-collapsed="detailViewCollapsed"
               :on-expand-detail-view="toggleDetailView"
               :pending-scroll-node-id="pendingScrollNodeId"
-            :is-realtime-streaming="isRealtimeContext"
+              :is-realtime-streaming="isRealtimeContext"
               @select-task="handleSelectTask"
               @upload-file="handleFileUpload"
               @upload-content="handleContentUpload"
@@ -1696,7 +1696,6 @@ onBeforeUnmount(() => {
           </template>
         </n-split>
       </div>
-
       <!-- 文本搜索模式（独立显示，占据整个屏幕） -->
       <div v-show="viewMode === 'search'" data-tour="search-main" style="height: 100%">
         <text-search-view :is-dark="isDark" :loaded-targets="textSearchLoadedTargets" :loaded-default-target-id="textSearchLoadedDefaultTargetId" style="height: 100%" />
@@ -1724,46 +1723,57 @@ onBeforeUnmount(() => {
       <!-- 分屏模式 -->
       <div v-show="viewMode === 'split'" data-tour="split-main" style="height: 100%">
         <template v-if="isMobile">
-          <n-split
-            direction="vertical"
-            v-model:size="splitVerticalSize"
-            :min="0.25"
-            :max="0.75"
-            style="height: 100%"
-          >
-            <template #1>
-              <process-view
-                :tasks="filteredTasks"
-                :selected-task="selectedTask"
-                :loading="loading"
-                :parser="parser"
-                :is-mobile="true"
-                :pending-scroll-node-id="pendingScrollNodeId"
-                :is-realtime-streaming="isRealtimeContext"
-                @select-task="handleSelectTask"
-                @upload-file="handleFileUpload"
-                @upload-content="handleContentUpload"
-                @select-node="handleSelectNode"
-                @select-action="handleSelectAction"
-                @select-recognition="handleSelectRecognition"
-                @select-nested="handleSelectNested"
-                @select-nested-action="handleSelectNestedAction"
-                @file-loading-start="handleFileLoadingStart"
-                @file-loading-end="handleFileLoadingEnd"
-                @open-task-drawer="showTaskDrawer = true"
-                @scroll-done="pendingScrollNodeId = null"
-              />
-            </template>
-            <template #2>
-              <text-search-view
-                v-if="viewMode === 'split'"
-                :is-dark="isDark"
-                :loaded-targets="textSearchLoadedTargets"
-                :loaded-default-target-id="textSearchLoadedDefaultTargetId"
-                style="height: 100%"
-              />
-            </template>
-          </n-split>
+          <div style="height: 100%; display: flex; flex-direction: column; gap: 8px; padding: 8px; box-sizing: border-box;">
+            <n-flex align="center" justify="space-between" style="gap: 8px">
+              <n-text depth="3" style="font-size: 12px">分屏比例</n-text>
+              <n-flex align="center" style="gap: 6px">
+                <n-button size="tiny" @click="splitVerticalSize = 0.72">分析优先</n-button>
+                <n-button size="tiny" @click="splitVerticalSize = 0.5">均分</n-button>
+                <n-button size="tiny" @click="splitVerticalSize = 0.28">搜索优先</n-button>
+              </n-flex>
+            </n-flex>
+
+            <n-split
+              direction="vertical"
+              v-model:size="splitVerticalSize"
+              :min="0.15"
+              :max="0.85"
+              style="flex: 1; min-height: 0"
+            >
+              <template #1>
+                <process-view
+                  :tasks="filteredTasks"
+                  :selected-task="selectedTask"
+                  :loading="loading"
+                  :parser="parser"
+                  :is-mobile="true"
+                  :pending-scroll-node-id="pendingScrollNodeId"
+                  :is-realtime-streaming="isRealtimeContext"
+                  style="height: 100%"
+                  @select-task="handleSelectTask"
+                  @upload-file="handleFileUpload"
+                  @upload-content="handleContentUpload"
+                  @select-node="handleSelectNode"
+                  @select-action="handleSelectAction"
+                  @select-recognition="handleSelectRecognition"
+                  @select-nested="handleSelectNested"
+                  @select-nested-action="handleSelectNestedAction"
+                  @file-loading-start="handleFileLoadingStart"
+                  @file-loading-end="handleFileLoadingEnd"
+                  @open-task-drawer="showTaskDrawer = true"
+                  @scroll-done="pendingScrollNodeId = null"
+                />
+              </template>
+              <template #2>
+                <text-search-view
+                  :is-dark="isDark"
+                  :loaded-targets="textSearchLoadedTargets"
+                  :loaded-default-target-id="textSearchLoadedDefaultTargetId"
+                  style="height: 100%"
+                />
+              </template>
+            </n-split>
+          </div>
 
           <!-- 左侧任务抽屉 -->
           <n-drawer
