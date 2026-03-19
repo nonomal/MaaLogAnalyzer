@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { NButton, NCard, NFlex, NText } from 'naive-ui'
 import type { TourStep } from '../tutorial/types'
 
@@ -37,10 +37,35 @@ const isLast = computed(() => props.stepIndex >= props.totalSteps - 1)
 const prevLabel = computed(() => props.step?.prevLabel || '上一步')
 const nextLabel = computed(() => props.step?.nextLabel || '下一步')
 
+const viewportWidth = ref(window.innerWidth)
+const viewportHeight = ref(window.innerHeight)
+
+const updateViewport = () => {
+  viewportWidth.value = window.innerWidth
+  viewportHeight.value = window.innerHeight
+}
+
+onMounted(() => {
+  window.addEventListener('resize', updateViewport)
+  window.addEventListener('orientationchange', updateViewport)
+})
+
+onBeforeUnmount(() => {
+  window.removeEventListener('resize', updateViewport)
+  window.removeEventListener('orientationchange', updateViewport)
+})
+
 const viewport = computed(() => ({
-  width: window.innerWidth,
-  height: window.innerHeight
+  width: viewportWidth.value,
+  height: viewportHeight.value
 }))
+
+const isMobileViewport = computed(() => viewport.value.width <= 900)
+
+const clamp = (value: number, min: number, max: number) => {
+  if (max < min) return min
+  return Math.max(min, Math.min(value, max))
+}
 
 // Hide card/highlight briefly while switching steps.
 const stepSwitching = ref(false)
@@ -159,31 +184,41 @@ const highlightStyle = computed(() => {
 })
 
 const cardStyle = computed(() => {
-  const width = Math.min(380, viewport.value.width - 24)
+  const safeGap = isMobileViewport.value ? 8 : 12
+  const width = Math.min(isMobileViewport.value ? 420 : 380, viewport.value.width - safeGap * 2)
+  const cardHeightEstimate = isMobileViewport.value ? 360 : 260
+  const maxTop = Math.max(safeGap, viewport.value.height - cardHeightEstimate - safeGap)
+  const maxLeft = Math.max(safeGap, viewport.value.width - width - safeGap)
+  const maxHeight = Math.max(220, viewport.value.height - safeGap * 2)
 
   if (!props.targetRect || !props.targetFound) {
+    const centerLeft = Math.round((viewport.value.width - width) / 2)
+    const centerTop = Math.round((viewport.value.height - cardHeightEstimate) / 2)
     return {
       width: `${width}px`,
-      left: `${Math.max(12, Math.round((viewport.value.width - width) / 2))}px`,
-      top: `${Math.max(12, Math.round((viewport.value.height - 240) / 2))}px`
+      left: `${clamp(centerLeft, safeGap, maxLeft)}px`,
+      top: `${clamp(centerTop, safeGap, maxTop)}px`,
+      maxHeight: `${maxHeight}px`
     }
   }
 
   const gap = 12
   const rect = props.targetRect
   const centerX = rect.left + rect.width / 2
-  const placeBottom = rect.top + rect.height + 260 <= viewport.value.height
-  const top = placeBottom
+  const placeBottom = rect.top + rect.height + cardHeightEstimate + safeGap <= viewport.value.height
+  const rawTop = placeBottom
     ? rect.top + rect.height + gap
-    : Math.max(12, rect.top - 220 - gap)
+    : rect.top - cardHeightEstimate - gap
 
-  let left = centerX - width / 2
-  left = Math.max(12, Math.min(left, viewport.value.width - width - 12))
+  const rawLeft = centerX - width / 2
+  const left = clamp(rawLeft, safeGap, maxLeft)
+  const top = clamp(rawTop, safeGap, maxTop)
 
   return {
     width: `${width}px`,
     left: `${Math.round(left)}px`,
-    top: `${Math.round(top)}px`
+    top: `${Math.round(top)}px`,
+    maxHeight: `${maxHeight}px`
   }
 })
 </script>
@@ -212,9 +247,9 @@ const cardStyle = computed(() => {
           当前步骤目标还未出现，可重试或先下一步。
         </n-text>
 
-        <n-flex justify="space-between" align="center" style="margin-top: 4px">
+        <n-flex justify="space-between" align="center" style="margin-top: 4px; gap: 8px; flex-wrap: wrap">
           <n-button tertiary @click="emit('skip')">跳过并完成</n-button>
-          <n-flex style="gap: 8px">
+          <n-flex style="gap: 8px; flex-wrap: wrap">
             <n-button v-if="!targetFound" tertiary @click="emit('retry')">重试定位</n-button>
             <n-button :disabled="!canPrev" @click="emit('prev')">{{ prevLabel }}</n-button>
             <n-button v-if="!isLast" type="primary" @click="emit('next')">{{ nextLabel }}</n-button>
@@ -252,6 +287,12 @@ const cardStyle = computed(() => {
   position: fixed;
   z-index: 5001;
   pointer-events: auto;
+  overflow: hidden;
+}
+
+.tour-card :deep(.n-card__content) {
+  overflow: auto;
+  max-height: calc(100vh - 96px);
 }
 </style>
 
