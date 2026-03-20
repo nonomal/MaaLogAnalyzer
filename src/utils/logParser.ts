@@ -21,6 +21,12 @@ function fnv1aHash(str: string): string {
   return hash.toString(36)
 }
 
+const parseEventTimestampMs = (timestamp: string): number => {
+  const normalized = timestamp.includes('T') ? timestamp : timestamp.replace(' ', 'T')
+  const parsed = Date.parse(normalized)
+  return Number.isFinite(parsed) ? parsed : NaN
+}
+
 /**
  * 子任务事件收集器
  * 统一管理非当前 task_id 的 Recognition/Action/PipelineNode 事件
@@ -128,7 +134,12 @@ export class LogParser {
 
     const rawLines = content.split('\n')
     const events: EventNotification[] = []
-    const seenEvents = new Set<string>()
+    const lastEventBySignature = new Map<string, {
+      timestampMs: number
+      processId: string
+      threadId: string
+    }>()
+    const dedupWindowMs = 10
     const totalLines = rawLines.length
     const chunkSize = 1000
 
@@ -145,10 +156,25 @@ export class LogParser {
           const event = this.parseEventLine(rawLine.trim(), lineNum)
           if (!event) continue
 
-          // IPC 去重：用 message + details 内容的 hash
-          if (!seenEvents.has(event._dedupKey)) {
-            seenEvents.add(event._dedupKey)
+          // IPC 去重：
+          // 同 msg+details 指纹在短时间窗口内由不同 process/thread 重复上报时，视作同一事件。
+          const previous = lastEventBySignature.get(event._dedupSignature)
+          const eventMs = event._timestampMs
+          const nearInTime = previous && Number.isFinite(previous.timestampMs) && Number.isFinite(eventMs)
+            ? Math.abs(eventMs - previous.timestampMs) <= dedupWindowMs
+            : false
+          const fromDifferentSource = previous
+            ? previous.processId !== event.processId || previous.threadId !== event.threadId
+            : false
+          const isDuplicate = !!(previous && nearInTime && fromDifferentSource)
+
+          if (!isDuplicate) {
             events.push(event)
+            lastEventBySignature.set(event._dedupSignature, {
+              timestampMs: eventMs,
+              processId: event.processId,
+              threadId: event.threadId,
+            })
 
             // 记录任务的进程和线程信息（只记录首次出现，避免 IPC 覆盖）
             if (event.message === 'Tasker.Task.Starting' && event.details.task_id) {
@@ -179,7 +205,10 @@ export class LogParser {
    * 直接从事件行提取所有需要的字段
    * 格式: [timestamp][level][Pxpid][Txthread][...] !!!OnEventNotify!!! [handle=xxx] [msg=EventName] [details={...json...}]
    */
-  private parseEventLine(line: string, lineNum: number): (EventNotification & { processId: string; threadId: string; _dedupKey: string }) | null {
+  private parseEventLine(
+    line: string,
+    lineNum: number
+  ): (EventNotification & { processId: string; threadId: string; _dedupSignature: string; _timestampMs: number }) | null {
     const match = line.match(EVENT_LINE_REGEX)
     if (!match) return null
 
@@ -200,7 +229,8 @@ export class LogParser {
       processId,
       threadId,
       _lineNumber: lineNum,
-      _dedupKey: `${timestamp.substring(0, 19)}|${msg}|${fnv1aHash(detailsJson)}`
+      _dedupSignature: `${msg}|${fnv1aHash(detailsJson)}`,
+      _timestampMs: parseEventTimestampMs(timestamp)
     }
   }
 
