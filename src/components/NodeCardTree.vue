@@ -3,6 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { NButton, NFlex, NText } from 'naive-ui'
 import { CheckCircleOutlined, CloseCircleOutlined } from '@vicons/antd'
 import type { NodeInfo, MergedRecognitionItem, RecognitionAttempt, UnifiedFlowItem } from '../types'
+import { buildNodeFlowItems } from '../utils/nodeFlow'
 
 const props = defineProps<{
   node: NodeInfo
@@ -128,7 +129,7 @@ const flattenFlowItemsForTree = (
   return rows
 }
 
-const rootFlowItems = computed(() => props.node.flow_items ?? [])
+const rootFlowItems = computed(() => buildNodeFlowItems(props.node))
 const flowRows = computed(() => flattenFlowItemsForTree(rootFlowItems.value, isFlowItemExpanded))
 const isRecognitionExpanded = computed(() => props.recognitionExpanded ?? true)
 const isActionExpanded = computed(() => props.actionExpanded ?? true)

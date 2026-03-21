@@ -1,7 +1,6 @@
 import { markRaw } from 'vue'
 import type { EventNotification, TaskInfo, NodeInfo, RecognitionAttempt } from '../types'
 import { StringPool } from './stringPool'
-import { buildNodeFlowItems } from './nodeFlow'
 
 export interface ParseProgress {
   current: number
@@ -1161,7 +1160,6 @@ export class LogParser {
               error_image: this.findErrorImage(event.timestamp, nodeName),
               wait_freezes_images: this.findWaitFreezesImages(event.timestamp, details.action_details?.name || details.node_details?.name || nodeName)
             }
-            node.flow_items = buildNodeFlowItems(node)
             nodes.push(node)
             nodeIdSet.add(nodeId)
             pipelineNodeStartTimes.delete(nodeId)

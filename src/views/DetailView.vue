@@ -9,6 +9,7 @@ import type { NodeInfo, UnifiedFlowItem } from '../types'
 import { isTauri } from '../utils/platform'
 import { useIsMobile } from '../composables/useIsMobile'
 import { getSettings } from '../utils/settings'
+import { buildNodeFlowItems } from '../utils/nodeFlow'
 
 const { isMobile } = useIsMobile()
 const settings = getSettings()
@@ -134,7 +135,7 @@ const resolveSyntheticFlowItem = (node: NodeInfo, flowItemId: string): UnifiedFl
 
 const selectedFlowItem = computed<UnifiedFlowItem | null>(() => {
   if (!props.selectedNode || !props.selectedFlowItemId) return null
-  const flattened = flattenFlowItems(props.selectedNode.flow_items)
+  const flattened = flattenFlowItems(buildNodeFlowItems(props.selectedNode))
   const direct = flattened.find(item => item.id === props.selectedFlowItemId)
   if (direct) return direct
   return resolveSyntheticFlowItem(props.selectedNode, props.selectedFlowItemId)

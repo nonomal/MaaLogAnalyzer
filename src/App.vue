@@ -11,6 +11,7 @@ import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnH
 import { version } from '../package.json'
 import { useIsMobile } from './composables/useIsMobile'
 import { formatDuration } from './utils/formatDuration'
+import { buildNodeFlowItems } from './utils/nodeFlow'
 import TourOverlay from './components/TourOverlay.vue'
 import { TOUR_STEPS, TOUR_STORAGE_KEY, TOUR_VERSION } from './tutorial/steps'
 import tutorialSampleLog from './assets/tutorial-sample.log?raw'
@@ -438,7 +439,7 @@ const hasSyntheticActionId = (node: NodeInfo, flowItemId: string): boolean => {
 
 const hasFlowItemId = (node: NodeInfo | null, flowItemId: string | null | undefined): boolean => {
   if (!node || !flowItemId) return false
-  if (flattenFlowItems(node.flow_items).some(item => item.id === flowItemId)) return true
+  if (flattenFlowItems(buildNodeFlowItems(node)).some(item => item.id === flowItemId)) return true
   if (hasSyntheticRecognitionId(node, flowItemId)) return true
   if (hasSyntheticActionId(node, flowItemId)) return true
   return false

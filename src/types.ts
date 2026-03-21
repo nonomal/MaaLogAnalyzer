@@ -109,7 +109,6 @@ export interface NodeInfo {
   focus?: any
   next_list: NextListItem[]  // Next 列表
   recognition_attempts: RecognitionAttempt[]  // 识别尝试历史（包括失败的）
-  flow_items?: UnifiedFlowItem[]  // Action 期递归事件流（task/pipeline/recognition/action，可递归）
   nested_action_nodes?: NestedActionGroup[]  // 嵌套的 ActionNode 事件（custom action）
   nested_recognition_in_action?: RecognitionAttempt[]  // 在 custom action 中产生的 RecognitionNode
   node_details?: {

@@ -1,5 +1,6 @@
 import type { EventNotification, NodeInfo, TaskInfo, UnifiedFlowItem } from '../types'
 import { maaKnowledgePack, searchKnowledge } from './knowledge'
+import { buildNodeFlowItems } from '../utils/nodeFlow'
 
 export interface AiLoadedTarget {
   id: string
@@ -140,7 +141,7 @@ const buildSelectedNodeFocus = (
   ].filter(Boolean)
   const allDirectRecoNames = directReco.map(item => item.name).filter(Boolean)
   const selectedPath = selectedFlowItemId
-    ? findFlowItemPath(selectedNode.flow_items, selectedFlowItemId)
+    ? findFlowItemPath(buildNodeFlowItems(selectedNode), selectedFlowItemId)
     : null
   const selectedFlowItem = selectedPath?.[selectedPath.length - 1] ?? null
 

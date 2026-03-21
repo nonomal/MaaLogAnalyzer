@@ -192,7 +192,7 @@ export const buildNodeFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
   // 顶层 PipelineNode 的 Node.Recognition / Node.Action 使用结构化字段展示：
   // - recognition_attempts
   // - action_details
-  // flow_items 仅承载 Action 期间递归产生的事件树（task / pipeline / recognition_node / action_node）。
+  // 这里返回 Action 期间递归产生的事件树（task / pipeline / recognition_node / action_node）。
   roots.push(...actionLevelRecognitionNodes)
   roots.push(...taskItems)
 
@@ -217,8 +217,5 @@ export const groupFlowItemsByType = (items: UnifiedFlowItem[]): UnifiedFlowGroup
 }
 
 export const buildNodeFlowGroups = (node: NodeInfo): UnifiedFlowGroup[] => {
-  const items = node.flow_items && node.flow_items.length > 0
-    ? node.flow_items
-    : buildNodeFlowItems(node)
-  return groupFlowItemsByType(items)
+  return groupFlowItemsByType(buildNodeFlowItems(node))
 }
