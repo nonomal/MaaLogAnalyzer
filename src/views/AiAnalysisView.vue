@@ -2169,14 +2169,17 @@ const handleAnalyze = async () => {
 
         <n-scrollbar ref="aiOutputScrollbarRef" class="ai-output-scroll" content-style="width: 100%">
           <div class="ai-output-wrap">
-            <n-empty v-if="!resultText && !conversationTurnViews.length" description="暂无结果，先测试连接或发起一次分析" />
+            <n-empty
+              v-if="!resultText && !conversationTurnViews.length && !showStreamingTurn"
+              description="暂无结果，先测试连接或发起一次分析"
+            />
             <div
-              v-else-if="!conversationTurnViews.length"
+              v-else-if="!conversationTurnViews.length && !showStreamingTurn"
               class="ai-output-markdown markdown-body"
               v-html="renderedResultHtml"
             ></div>
 
-            <n-card v-if="conversationTurnViews.length" size="small" class="conversation-card">
+            <n-card v-if="conversationTurnViews.length || showStreamingTurn" size="small" class="conversation-card">
               <n-flex vertical style="gap: 8px">
                 <div ref="turnListRef" class="turn-list">
                   <div v-for="turn in conversationTurnViews" :key="turn.id" class="turn-item">
