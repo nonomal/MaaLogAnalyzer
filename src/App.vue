@@ -436,34 +436,11 @@ const hasSyntheticActionId = (node: NodeInfo, flowItemId: string): boolean => {
   return false
 }
 
-const hasLegacyNestedActionId = (node: NodeInfo, flowItemId: string): boolean => {
-  const legacyActionMatch = /^task\.(\d+)\.action\.(\d+)\.(\d+)$/.exec(flowItemId)
-  if (legacyActionMatch) {
-    const groupIdx = Number(legacyActionMatch[1])
-    const nestedIdx = Number(legacyActionMatch[2])
-    const nodeId = Number(legacyActionMatch[3])
-    const nested = node.nested_action_nodes?.[groupIdx]?.nested_actions?.[nestedIdx]
-    return !!nested && nested.node_id === nodeId
-  }
-
-  const legacyRecoMatch = /^task\.(\d+)\.action\.(\d+)\.reco\.(\d+)$/.exec(flowItemId)
-  if (legacyRecoMatch) {
-    const groupIdx = Number(legacyRecoMatch[1])
-    const nestedIdx = Number(legacyRecoMatch[2])
-    const recoIdx = Number(legacyRecoMatch[3])
-    const nested = node.nested_action_nodes?.[groupIdx]?.nested_actions?.[nestedIdx]
-    return !!nested && recoIdx >= 0 && recoIdx < (nested.recognition_attempts?.length ?? 0)
-  }
-
-  return false
-}
-
 const hasFlowItemId = (node: NodeInfo | null, flowItemId: string | null | undefined): boolean => {
   if (!node || !flowItemId) return false
   if (flattenFlowItems(node.flow_items).some(item => item.id === flowItemId)) return true
   if (hasSyntheticRecognitionId(node, flowItemId)) return true
   if (hasSyntheticActionId(node, flowItemId)) return true
-  if (hasLegacyNestedActionId(node, flowItemId)) return true
   return false
 }
 

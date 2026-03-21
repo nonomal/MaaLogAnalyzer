@@ -129,37 +129,6 @@ const resolveSyntheticFlowItem = (node: NodeInfo, flowItemId: string): UnifiedFl
     }
   }
 
-  const legacyNestedActionMatch = /^task\.(\d+)\.action\.(\d+)\.(\d+)$/.exec(flowItemId)
-  if (legacyNestedActionMatch) {
-    const groupIdx = Number(legacyNestedActionMatch[1])
-    const nestedIdx = Number(legacyNestedActionMatch[2])
-    const nodeId = Number(legacyNestedActionMatch[3])
-    const nested = node.nested_action_nodes?.[groupIdx]?.nested_actions?.[nestedIdx]
-    if (!nested || nested.node_id !== nodeId) return null
-    return {
-      id: flowItemId,
-      type: 'action_node',
-      name: nested.action_details?.name || nested.name,
-      status: nested.action_details?.success ? 'success' : nested.status,
-      timestamp: nested.action_details?.start_timestamp || nested.start_timestamp || nested.timestamp,
-      start_timestamp: nested.action_details?.start_timestamp || nested.start_timestamp,
-      end_timestamp: nested.action_details?.end_timestamp || nested.end_timestamp,
-      action_id: nested.action_details?.action_id,
-      action_details: nested.action_details,
-      raw: nested.action_details ? { ...nested.action_details } : undefined,
-    }
-  }
-
-  const legacyNestedRecoMatch = /^task\.(\d+)\.action\.(\d+)\.reco\.(\d+)$/.exec(flowItemId)
-  if (legacyNestedRecoMatch) {
-    const groupIdx = Number(legacyNestedRecoMatch[1])
-    const nestedIdx = Number(legacyNestedRecoMatch[2])
-    const attemptIdx = Number(legacyNestedRecoMatch[3])
-    const attempt = node.nested_action_nodes?.[groupIdx]?.nested_actions?.[nestedIdx]?.recognition_attempts?.[attemptIdx]
-    if (!attempt) return null
-    return toRecognitionFlowItem(flowItemId, attempt, 'recognition_node')
-  }
-
   return null
 }
 
