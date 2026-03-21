@@ -446,13 +446,7 @@ const hasFlowItemId = (node: NodeInfo | null, flowItemId: string | null | undefi
 
 const pickMainActionFlowItemId = (node: NodeInfo): string | null => {
   if (!node.action_details) return null
-  const actionId = node.action_details.action_id
-  const candidates = flattenFlowItems(node.flow_items).filter(item => item.type === 'action')
-  const exact = candidates.find(item => item.action_id === actionId && item.id.startsWith('node.action.'))
-  if (exact) return exact.id
-  const fallback = candidates.find(item => item.action_id === actionId)
-  if (fallback) return fallback.id
-  return `node.action.${actionId}`
+  return `node.action.${node.action_details.action_id}`
 }
 
 const pickFlowId = (node: NodeInfo, preferredId: string): string | null => {

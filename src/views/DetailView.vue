@@ -46,7 +46,7 @@ const flattenFlowItems = (items: UnifiedFlowItem[] | undefined, output: UnifiedF
 const pickFirstErrorImage = (items: UnifiedFlowItem[] | undefined): string | null => {
   const flattened = flattenFlowItems(items)
   for (const item of flattened) {
-    if (item.type !== 'recognition') continue
+    if (item.type !== 'recognition' && item.type !== 'recognition_node') continue
     const candidate = item.error_image
     if (candidate) return candidate
   }

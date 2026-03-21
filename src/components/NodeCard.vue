@@ -261,18 +261,13 @@ const actionButtonType = computed<ButtonType>(() => {
           :recognition-expanded="recognitionExpanded"
           :action-expanded="actionExpanded"
           :default-collapse-nested-action-nodes="settings.defaultCollapseNestedActionNodes"
-          :is-expanded="isExpanded"
           @select-node="emit('select-node', $event)"
           @select-action="emit('select-action', $event)"
           @select-recognition="(n, i) => emit('select-recognition', n, i)"
-          @select-nested="(n, ai, ni) => emit('select-nested', n, ai, ni)"
-          @select-nested-action="(n, ai, ni) => emit('select-nested-action', n, ai, ni)"
           @select-action-recognition="(n, i) => emit('select-action-recognition', n, i)"
-          @select-nested-action-recognition="(n, ai, ni, i) => emit('select-nested-action-recognition', n, ai, ni, i)"
           @select-flow-item="(n, id) => emit('select-flow-item', n, id)"
           @toggle-recognition="recognitionExpanded = !recognitionExpanded"
           @toggle-action="actionExpanded = !actionExpanded"
-          @toggle-nested="toggleNestedNodes"
         />
       </n-flex>
     </n-card>
