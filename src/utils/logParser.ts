@@ -37,6 +37,86 @@ const formatEventTimestampMs = (timestampMs: number): string => {
   return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())} ${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}.${pad3(date.getMilliseconds())}`
 }
 
+type MaaDomain = 'Resource' | 'Controller' | 'Tasker' | 'Node' | 'Unknown'
+type MaaPhase = 'Starting' | 'Succeeded' | 'Failed' | 'Unknown'
+type MaaTaskerKind = 'Task' | 'Unknown'
+type MaaNodeKind = 'PipelineNode' | 'RecognitionNode' | 'ActionNode' | 'NextList' | 'Recognition' | 'Action' | 'Unknown'
+
+interface MaaMessageMeta {
+  domain: MaaDomain
+  phase: MaaPhase
+  taskerKind: MaaTaskerKind
+  nodeKind: MaaNodeKind
+}
+
+const normalizeMaaDomain = (value: string): MaaDomain => {
+  switch (value) {
+    case 'Resource':
+    case 'Controller':
+    case 'Tasker':
+    case 'Node':
+      return value
+    default:
+      return 'Unknown'
+  }
+}
+
+const normalizeMaaPhase = (value: string): MaaPhase => {
+  switch (value) {
+    case 'Starting':
+    case 'Succeeded':
+    case 'Failed':
+      return value
+    default:
+      return 'Unknown'
+  }
+}
+
+const normalizeMaaTaskerKind = (value: string): MaaTaskerKind => {
+  return value === 'Task' ? 'Task' : 'Unknown'
+}
+
+const normalizeMaaNodeKind = (value: string): MaaNodeKind => {
+  switch (value) {
+    case 'PipelineNode':
+    case 'RecognitionNode':
+    case 'ActionNode':
+    case 'NextList':
+    case 'Recognition':
+    case 'Action':
+      return value
+    default:
+      return 'Unknown'
+  }
+}
+
+const parseMaaMessageMeta = (message: string): MaaMessageMeta => {
+  const firstDot = message.indexOf('.')
+  if (firstDot < 0) {
+    return { domain: 'Unknown', phase: 'Unknown', taskerKind: 'Unknown', nodeKind: 'Unknown' }
+  }
+  const secondDot = message.indexOf('.', firstDot + 1)
+  if (secondDot < 0) {
+    return { domain: 'Unknown', phase: 'Unknown', taskerKind: 'Unknown', nodeKind: 'Unknown' }
+  }
+
+  const domainRaw = message.slice(0, firstDot)
+  const kindRaw = message.slice(firstDot + 1, secondDot)
+  const phaseRaw = message.slice(secondDot + 1)
+
+  const domain = normalizeMaaDomain(domainRaw)
+  const phase = normalizeMaaPhase(phaseRaw)
+  const taskerKind = domain === 'Tasker' ? normalizeMaaTaskerKind(kindRaw) : 'Unknown'
+  const nodeKind = domain === 'Node' ? normalizeMaaNodeKind(kindRaw) : 'Unknown'
+
+  return {
+    domain,
+    phase,
+    taskerKind,
+    nodeKind
+  }
+}
+
 /**
  * 强制复制字符串，避免 V8 sliced string 长时间持有整段日志 backing store。
  * 说明：日志很大时，子串若不复制可能导致旧日志内容在多次重载后难以及时释放。
@@ -237,7 +317,13 @@ export class LogParser {
             })
 
             // 记录任务的进程和线程信息（只记录首次出现，避免 IPC 覆盖）
-            if (event.message === 'Tasker.Task.Starting' && event.details.task_id) {
+            const eventMeta = parseMaaMessageMeta(event.message)
+            if (
+              eventMeta.domain === 'Tasker' &&
+              eventMeta.taskerKind === 'Task' &&
+              eventMeta.phase === 'Starting' &&
+              event.details.task_id
+            ) {
               if (!this.taskProcessMap.has(event.details.task_id)) {
                 this.taskProcessMap.set(event.details.task_id, event.processId)
                 this.taskThreadMap.set(event.details.task_id, event.threadId)
@@ -311,8 +397,9 @@ export class LogParser {
     for (let i = 0; i < this.events.length; i++) {
       const event = this.events[i]
       const { message, details } = event
+      const meta = parseMaaMessageMeta(message)
 
-      if (message === 'Tasker.Task.Starting') {
+      if (meta.domain === 'Tasker' && meta.taskerKind === 'Task' && meta.phase === 'Starting') {
         const taskId = details.task_id
         const uuid = details.uuid || ''
 
@@ -334,7 +421,11 @@ export class LogParser {
             _startEventIndex: i
           })
         }
-      } else if (message === 'Tasker.Task.Succeeded' || message === 'Tasker.Task.Failed') {
+      } else if (
+        meta.domain === 'Tasker' &&
+        meta.taskerKind === 'Task' &&
+        (meta.phase === 'Succeeded' || meta.phase === 'Failed')
+      ) {
         const taskId = details.task_id
         const uuid = details.uuid
 
@@ -346,7 +437,7 @@ export class LogParser {
         }
 
         if (matchedTask) {
-          matchedTask.status = message === 'Tasker.Task.Succeeded' ? 'succeeded' : 'failed'
+          matchedTask.status = meta.phase === 'Succeeded' ? 'succeeded' : 'failed'
           matchedTask.end_time = this.stringPool.intern(event.timestamp)
           matchedTask._endEventIndex = i
 
@@ -403,15 +494,19 @@ export class LogParser {
     const actionLevelRecognitionNodes: RecognitionAttempt[] = []
     const nestedActionNodes: any[] = []
     const pipelineNodeStartTimes = new Map<number, string>()
+    const recognitionNodeStartTimes = new Map<number, string>()
     const actionStartTimes = new Map<number, string>()
     const actionEndTimes = new Map<number, string>()
     const actionStartOrders = new Map<number, number>()
     const actionEndOrders = new Map<number, number>()
+    const actionNodeStartTimes = new Map<number, string>()
     const subTaskPipelineNodeStartTimes = new Map<string, string>()
+    const subTaskRecognitionNodeStartTimes = new Map<string, string>()
     const subTaskActionStartTimes = new Map<string, string>()
     const subTaskActionEndTimes = new Map<string, string>()
     const subTaskActionStartOrders = new Map<string, number>()
     const subTaskActionEndOrders = new Map<string, number>()
+    const subTaskActionNodeStartTimes = new Map<string, string>()
     const activeRecognitionAttempts = new Map<string, RecognitionAttempt>()
     const activeRecognitionStack: Array<{ taskId: number; recoId: number }> = []
     const finishedRecognitionKeys = new Set<string>()
@@ -764,6 +859,8 @@ export class LogParser {
       const event = taskEvents[eventIndex]
       const eventOrder = eventIndex
       const { message, details } = event
+      const messageMeta = parseMaaMessageMeta(message)
+      if (messageMeta.domain !== 'Node') continue
       const isCurrentTask = details.task_id === task.task_id
 
       // === 当前任务的事件 ===
@@ -776,7 +873,12 @@ export class LogParser {
             break
 
           case 'Node.NextList.Starting':
+          case 'Node.NextList.Succeeded':
             currentNextList = details.list || []
+            break
+
+          case 'Node.NextList.Failed':
+            currentNextList = []
             break
 
           case 'Node.Recognition.Starting':
@@ -794,6 +896,16 @@ export class LogParser {
             )
             if (attempt) {
               currentTaskRecognitions.push(attempt)
+            }
+            break
+          }
+
+          case 'Node.RecognitionNode.Starting': {
+            const recoId = normalizeRecoId(
+              details.reco_details?.reco_id ?? details.reco_id ?? details.node_id
+            )
+            if (recoId != null) {
+              recognitionNodeStartTimes.set(recoId, this.stringPool.intern(event.timestamp))
             }
             break
           }
@@ -826,17 +938,19 @@ export class LogParser {
             }
 
             const timestamp = this.stringPool.intern(event.timestamp)
+            const startTimestamp = recognitionNodeStartTimes.get(recoId) || timestamp
             const recoNodeAttempt: RecognitionAttempt = {
               reco_id: recoId,
               name: this.stringPool.intern(details.name || ''),
-              timestamp,
-              start_timestamp: timestamp,
+              timestamp: startTimestamp,
+              start_timestamp: startTimestamp,
               end_timestamp: timestamp,
               status: message === 'Node.RecognitionNode.Succeeded' ? 'success' : 'failed',
               reco_details: details.reco_details ? markRaw(details.reco_details) : undefined,
               error_image: this.findRecognitionImage(event.timestamp, details.name || ''),
               vision_image: this.findVisionImage(event.timestamp, details.name || '', recoId)
             }
+            recognitionNodeStartTimes.delete(recoId)
             recognitionOrderMeta.set(recoNodeAttempt, { startSeq: eventOrder, endSeq: eventOrder })
             if (parentRecognition && parentRecognition.reco_id !== recoId) {
               attachNodeToAttempt(parentRecognition, recoNodeAttempt)
@@ -862,6 +976,23 @@ export class LogParser {
               actionEndOrders.set(details.action_id, eventOrder)
             }
             break
+
+          case 'Node.ActionNode.Starting': {
+            const actionId = details.action_details?.action_id ?? details.action_id ?? details.node_id
+            if (actionId != null) {
+              actionNodeStartTimes.set(actionId, this.stringPool.intern(event.timestamp))
+            }
+            break
+          }
+
+          case 'Node.ActionNode.Succeeded':
+          case 'Node.ActionNode.Failed': {
+            const actionId = details.action_details?.action_id ?? details.action_id ?? details.node_id
+            if (actionId != null) {
+              actionNodeStartTimes.delete(actionId)
+            }
+            break
+          }
 
           case 'Node.PipelineNode.Succeeded':
           case 'Node.PipelineNode.Failed': {
@@ -978,6 +1109,11 @@ export class LogParser {
           }
           break
 
+        case 'Node.NextList.Starting':
+        case 'Node.NextList.Succeeded':
+        case 'Node.NextList.Failed':
+          break
+
         case 'Node.Recognition.Starting':
           if (subTaskId != null) {
             startRecognitionAttempt(subTaskId, details, event.timestamp, eventOrder)
@@ -1033,6 +1169,17 @@ export class LogParser {
           break
         }
 
+        case 'Node.RecognitionNode.Starting': {
+          if (subTaskId == null) break
+          const recoId = normalizeRecoId(
+            details.reco_details?.reco_id ?? details.reco_id ?? details.node_id
+          )
+          if (recoId != null) {
+            subTaskRecognitionNodeStartTimes.set(scopedKey(subTaskId, recoId), this.stringPool.intern(event.timestamp))
+          }
+          break
+        }
+
         case 'Node.RecognitionNode.Succeeded':
         case 'Node.RecognitionNode.Failed': {
           if (subTaskId == null) break
@@ -1049,18 +1196,22 @@ export class LogParser {
             }
             break
           }
+          const recoId = normalizeRecoId(details.reco_details?.reco_id ?? details.reco_id ?? details.node_id)
+          if (recoId == null) break
           const timestamp = this.stringPool.intern(event.timestamp)
+          const startTimestamp = subTaskRecognitionNodeStartTimes.get(scopedKey(subTaskId, recoId)) || timestamp
           const recoNodeAttempt: RecognitionAttempt = {
-            reco_id: details.reco_details?.reco_id || details.node_id,
+            reco_id: recoId,
             name: this.stringPool.intern(details.name || ''),
-            timestamp,
-            start_timestamp: timestamp,
+            timestamp: startTimestamp,
+            start_timestamp: startTimestamp,
             end_timestamp: timestamp,
             status: message === 'Node.RecognitionNode.Succeeded' ? 'success' : 'failed',
             reco_details: details.reco_details ? markRaw(details.reco_details) : undefined,
             error_image: this.findRecognitionImage(event.timestamp, details.name || ''),
-            vision_image: this.findVisionImage(event.timestamp, details.name || '', details.reco_details?.reco_id || details.node_id)
+            vision_image: this.findVisionImage(event.timestamp, details.name || '', recoId)
           }
+          subTaskRecognitionNodeStartTimes.delete(scopedKey(subTaskId, recoId))
           recognitionOrderMeta.set(recoNodeAttempt, { startSeq: eventOrder, endSeq: eventOrder })
           if (parentRecognition && parentRecognition.reco_id !== recoNodeAttempt.reco_id) {
             attachNodeToAttempt(parentRecognition, recoNodeAttempt)
@@ -1070,21 +1221,35 @@ export class LogParser {
           break
         }
 
+        case 'Node.ActionNode.Starting': {
+          if (subTaskId == null) break
+          const actionId = details.action_details?.action_id ?? details.action_id ?? details.node_id
+          if (actionId != null) {
+            subTaskActionNodeStartTimes.set(scopedKey(subTaskId, actionId), this.stringPool.intern(event.timestamp))
+          }
+          break
+        }
+
         case 'Node.ActionNode.Succeeded':
         case 'Node.ActionNode.Failed': {
+          if (subTaskId == null) break
           const nestedActions = subTasks.peekActions(subTaskId)
-          const actionId = details.action_details?.action_id
-          const actionKey = subTaskId != null && actionId != null ? scopedKey(subTaskId, actionId) : null
+          const actionId = details.action_details?.action_id ?? details.action_id ?? details.node_id
+          const actionKey = actionId != null ? scopedKey(subTaskId, actionId) : null
+          const actionNodeStartTimestamp = actionKey ? subTaskActionNodeStartTimes.get(actionKey) : undefined
           const actionStartTimestamp = actionKey ? subTaskActionStartTimes.get(actionKey) : undefined
           const actionEndTimestamp = actionKey ? subTaskActionEndTimes.get(actionKey) : undefined
           nestedActionNodes.push({
-            action_id: details.action_details?.action_id || details.node_id,
+            action_id: actionId,
             name: this.stringPool.intern(details.name || ''),
-            timestamp: this.stringPool.intern(event.timestamp),
+            timestamp: actionNodeStartTimestamp || this.stringPool.intern(event.timestamp),
             status: message === 'Node.ActionNode.Succeeded' ? 'success' : 'failed',
-            action_details: withActionTimestamps(details.action_details, actionStartTimestamp, actionEndTimestamp, event.timestamp),
+            action_details: withActionTimestamps(details.action_details, actionStartTimestamp || actionNodeStartTimestamp, actionEndTimestamp, event.timestamp),
             nested_actions: nestedActions.length > 0 ? nestedActions : undefined
           })
+          if (actionKey) {
+            subTaskActionNodeStartTimes.delete(actionKey)
+          }
           break
         }
 
@@ -1100,8 +1265,6 @@ export class LogParser {
           const actionKey = actionId != null ? scopedKey(subTaskId, actionId) : null
           const actionStartTimestamp = actionKey ? subTaskActionStartTimes.get(actionKey) : undefined
           const actionEndTimestamp = actionKey ? subTaskActionEndTimes.get(actionKey) : undefined
-          const actionStartOrder = actionKey ? subTaskActionStartOrders.get(actionKey) : undefined
-          const actionEndOrder = actionKey ? subTaskActionEndOrders.get(actionKey) : undefined
           const taskActions = subTasks.consumeActions(subTaskId)
           let matchedTaskAction: any | undefined
           let matchedTaskActionIndex = -1
@@ -1129,42 +1292,7 @@ export class LogParser {
           const mergedActionEndTimestamp = actionEndTimestamp || matchedTaskAction?.end_timestamp
           const taskRecognitions = dedupeRecognitionAttempts(subTasks.consumeRecognitions(subTaskId))
           const recognitionNodes = dedupeRecognitionAttempts(subTasks.consumeRecognitionNodes(subTaskId))
-          const scopedTaskRecognitions: RecognitionAttempt[] = []
-          const scopedRecognitionNodes: RecognitionAttempt[] = []
-          const outOfScopeActionRecognitions: RecognitionAttempt[] = []
-
-          const isInActionScope = (attempt: RecognitionAttempt): boolean => {
-            if (actionStartOrder == null) return true
-            const meta = recognitionOrderMeta.get(attempt)
-            if (!meta) return true
-            if (meta.endSeq < actionStartOrder) return false
-            if (actionEndOrder != null && meta.startSeq > actionEndOrder) return false
-            return true
-          }
-
-          for (const attempt of taskRecognitions) {
-            if (isInActionScope(attempt)) {
-              scopedTaskRecognitions.push(attempt)
-            } else {
-              outOfScopeActionRecognitions.push(attempt)
-            }
-          }
-          for (const nodeAttempt of recognitionNodes) {
-            if (isInActionScope(nodeAttempt)) {
-              scopedRecognitionNodes.push(nodeAttempt)
-            } else {
-              outOfScopeActionRecognitions.push(nodeAttempt)
-            }
-          }
-
-          const attachedRecognitions = attachRecognitionNodesToAttempts(scopedTaskRecognitions, scopedRecognitionNodes)
-          const escapedActionRecognitions = dedupeRecognitionAttempts([
-            ...outOfScopeActionRecognitions,
-            ...attachedRecognitions.orphans
-          ])
-          if (escapedActionRecognitions.length > 0) {
-            actionLevelRecognitionNodes.push(...escapedActionRecognitions)
-          }
+          const attachedRecognitions = attachRecognitionNodesToAttempts(taskRecognitions, recognitionNodes)
           const fallbackRecoDetails =
             details.reco_details ||
             (attachedRecognitions.attempts.length > 0
@@ -1179,7 +1307,9 @@ export class LogParser {
             status: message === 'Node.PipelineNode.Succeeded' ? 'success' : 'failed',
             reco_details: fallbackRecoDetails ? markRaw(fallbackRecoDetails) : undefined,
             action_details: withActionTimestamps(mergedActionDetails, mergedActionStartTimestamp, mergedActionEndTimestamp, endTimestamp),
-            recognition_attempts: attachedRecognitions.attempts.length > 0 ? attachedRecognitions.attempts : undefined
+            recognition_attempts: attachedRecognitions.attempts.length > 0
+              ? attachedRecognitions.attempts
+              : (attachedRecognitions.orphans.length > 0 ? attachedRecognitions.orphans : undefined)
           })
           if (nodeId != null) {
             subTaskPipelineNodeStartTimes.delete(scopedKey(subTaskId, nodeId))
