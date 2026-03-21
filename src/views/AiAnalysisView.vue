@@ -677,7 +677,7 @@ const renderedResultHtml = computed(() => renderMarkdown(resultText.value))
 const streamingAnswerHtml = computed(() => renderMarkdown(streamingRenderText.value))
 const showStreamingTurn = computed(() =>
   analyzing.value
-  && analyzingStage.value === 'streaming'
+  && analyzingStage.value !== 'idle'
   && !!streamingRenderText.value.trim()
   && !!activeRoundQuestion.value.trim()
 )
