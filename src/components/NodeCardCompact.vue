@@ -3,6 +3,11 @@ import { computed } from 'vue'
 import { NButton, NFlex, NText } from 'naive-ui'
 import { CheckCircleOutlined, CloseCircleOutlined } from '@vicons/antd'
 import type { NodeInfo, MergedRecognitionItem } from '../types'
+import {
+  buildNodeActionLevelRecognitionItems,
+  buildNodeRecognitionAttempts,
+  buildNodeTaskFlowItems,
+} from '../utils/nodeFlow'
 
 const props = defineProps<{
   node: NodeInfo
@@ -20,10 +25,14 @@ const emit = defineEmits<{
   'select-flow-item': [node: NodeInfo, flowItemId: string]
 }>()
 
+const recognitionAttempts = computed(() => buildNodeRecognitionAttempts(props.node))
+const actionLevelRecoItems = computed(() => buildNodeActionLevelRecognitionItems(props.node))
+const taskItems = computed(() => buildNodeTaskFlowItems(props.node))
+
 // Recognition 摘要
 const recognitionSummary = computed(() => {
   const list = props.mergedRecognitionList.filter(i => !i.isRoundSeparator)
-  const actionLevelRecoCount = props.node.nested_recognition_in_action?.length ?? 0
+  const actionLevelRecoCount = actionLevelRecoItems.value.length
   if (list.length === 0 && actionLevelRecoCount === 0) return null
   const tried = list.filter(i => i.status !== 'not-recognized').length
   const matched = list.find(i => i.status === 'success')
@@ -38,12 +47,13 @@ const recognitionSummary = computed(() => {
 
 // Task 嵌套摘要
 const taskSummary = computed(() => {
-  const groups = props.node.nested_action_nodes
-  if (!groups || groups.length === 0) return null
+  const groups = taskItems.value
+  if (groups.length === 0) return null
   let totalNodes = 0
   let successNodes = 0
   for (const g of groups) {
-    for (const n of g.nested_actions) {
+    const nestedNodes = (g.children ?? []).filter(item => item.type === 'pipeline_node')
+    for (const n of nestedNodes) {
       totalNodes++
       if (n.status === 'success') successNodes++
     }
@@ -55,11 +65,12 @@ const taskSummary = computed(() => {
 })
 
 const taskGroups = computed(() => {
-  const groups = props.node.nested_action_nodes
-  if (!groups || groups.length === 0) return []
+  const groups = taskItems.value
+  if (groups.length === 0) return []
   return groups.map((group, groupIdx) => ({
     groupIdx,
-    taskId: group.task_id,
+    taskId: group.task_id || 0,
+    flowItemId: group.id,
     name: group.name,
     status: group.status,
   }))
@@ -90,8 +101,8 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
 
   if (recognitionSummary.value) {
     const timestamps = [
-      ...props.node.recognition_attempts.map(attempt => attempt.timestamp),
-      ...(props.node.nested_recognition_in_action ?? []).map(attempt => attempt.timestamp),
+      ...recognitionAttempts.value.map(attempt => attempt.ts),
+      ...actionLevelRecoItems.value.map(item => item.ts),
     ]
     sections.push({
       type: 'recognition',
@@ -102,20 +113,20 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
   if (taskSummary.value) {
     sections.push({
       type: 'task',
-      ts: pickEarliest((props.node.nested_action_nodes ?? []).map(group => group.timestamp)),
+      ts: pickEarliest(taskItems.value.map(group => group.ts)),
     })
   }
 
   if (actionSummary.value) {
     const actionTs = pickEarliest([
-      props.node.action_details?.start_timestamp,
-      props.node.action_details?.end_timestamp,
+      props.node.action_details?.ts,
+      props.node.action_details?.end_ts,
     ])
     sections.push({
       type: 'action',
       ts: Number.isFinite(actionTs)
         ? actionTs
-        : pickEarliest([props.node.end_timestamp, props.node.timestamp]),
+        : pickEarliest([props.node.end_ts, props.node.ts]),
     })
   }
 
@@ -161,7 +172,7 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
           text
           size="tiny"
           :type="group.status === 'success' ? 'success' : 'error'"
-          @click="emit('select-flow-item', node, `node.task.${group.groupIdx}.${group.taskId}`)"
+          @click="emit('select-flow-item', node, group.flowItemId)"
         >
           <template #icon>
             <check-circle-outlined v-if="group.status === 'success'" />

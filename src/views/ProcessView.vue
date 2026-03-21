@@ -1006,7 +1006,7 @@ const handleFlowItemClick = (node: NodeInfo, flowItemId: string) => {
               :active="active"
               :data-index="index"
               :size-dependencies="[
-                item.recognition_attempts?.length,
+                item.node_flow?.length,
                 item.next_list?.length,
                 item.action_details,
                 settings.displayMode
@@ -1213,7 +1213,7 @@ const handleFlowItemClick = (node: NodeInfo, flowItemId: string) => {
                           <n-flex align="center" style="gap: 8px">
                             <n-text strong style="font-size: 13px">{{ node.name || '未命名节点' }}</n-text>
                             <n-text depth="3" style="font-size: 11px">
-                              {{ extractTime(node.timestamp) }}
+                              {{ extractTime(node.ts) }}
                             </n-text>
                           </n-flex>
                           <n-flex align="center" style="gap: 8px">
@@ -1230,14 +1230,14 @@ const handleFlowItemClick = (node: NodeInfo, flowItemId: string) => {
                         <n-flex v-else-if="settings.displayMode === 'compact'" align="center" style="gap: 6px">
                           <span class="nav-status-dot" :class="node.status === 'success' ? 'nav-dot-success' : 'nav-dot-failed'" />
                           <n-text style="font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">{{ node.name || '未命名节点' }}</n-text>
-                          <n-text depth="3" style="font-size: 10px; flex-shrink: 0">{{ extractTime(node.timestamp) }}</n-text>
+                          <n-text depth="3" style="font-size: 10px; flex-shrink: 0">{{ extractTime(node.ts) }}</n-text>
                         </n-flex>
 
                         <!-- 树形模式：紧凑，带时间 -->
                         <n-flex v-else align="center" style="gap: 4px">
                           <span class="nav-status-dot" :class="node.status === 'success' ? 'nav-dot-success' : 'nav-dot-failed'" />
                           <n-text style="font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1">{{ node.name || '未命名节点' }}</n-text>
-                          <n-text depth="3" style="font-size: 10px; flex-shrink: 0">{{ extractTime(node.timestamp) }}</n-text>
+                          <n-text depth="3" style="font-size: 10px; flex-shrink: 0">{{ extractTime(node.ts) }}</n-text>
                         </n-flex>
                       </n-list-item>
                     </n-list>
@@ -1285,7 +1285,7 @@ const handleFlowItemClick = (node: NodeInfo, flowItemId: string) => {
                         :active="active"
                         :data-index="index"
                         :size-dependencies="[
-                          item.recognition_attempts?.length,
+                          item.node_flow?.length,
                           item.next_list?.length,
                           item.action_details,
                           settings.displayMode

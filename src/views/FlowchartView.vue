@@ -13,6 +13,7 @@ import type { LogParser } from '../utils/logParser'
 import { useIsMobile } from '../composables/useIsMobile'
 import { isTauri } from '../utils/platform'
 import { getSettings, saveSettings } from '../utils/settings'
+import { buildNodeFlowItems, buildNodeRecognitionAttempts } from '../utils/nodeFlow'
 
 const convertFileSrc = (filePath: string) => {
   if (!isTauri()) return filePath
@@ -293,7 +294,7 @@ const executionTimeline = computed(() => {
     index,
     name: node.name,
     status: node.status,
-    timestamp: node.timestamp,
+    ts: node.ts,
     nodeInfo: node,
   }))
 })
@@ -319,59 +320,66 @@ function findImageInAttempts(attempts: import('../types').RecognitionAttempt[]):
   return undefined
 }
 
+function findImageInFlowItems(items: import('../types').UnifiedFlowItem[] | undefined): string | undefined {
+  if (!items || items.length === 0) return undefined
+  for (let i = items.length - 1; i >= 0; i--) {
+    const item = items[i]
+    if (item.type === 'recognition' || item.type === 'recognition_node') {
+      if (item.vision_image) return item.vision_image
+      if (item.error_image) return item.error_image
+    }
+    const nested = findImageInFlowItems(item.children)
+    if (nested) return nested
+  }
+  return undefined
+}
+
 // 查找单个 NodeInfo 的关联截图
 function findNodeInfoImage(info: import('../types').NodeInfo, parser?: LogParser): string | undefined {
   // 1. NodeInfo.error_image
   if (info.error_image) return info.error_image
 
-  // 2. recognition_attempts
-  if (info.recognition_attempts) {
-    const img = findImageInAttempts(info.recognition_attempts)
-    if (img) return img
-  }
+  // 2. recognition flow
+  const recognitionAttempts = buildNodeRecognitionAttempts(info)
+  const recognitionImage = findImageInAttempts(recognitionAttempts)
+  if (recognitionImage) return recognitionImage
 
-  // 3. nested_recognition_in_action
-  if (info.nested_recognition_in_action) {
-    const img = findImageInAttempts(info.nested_recognition_in_action)
-    if (img) return img
-  }
+  // 3. node_flow（统一递归结构）
+  const nodeFlowImage = findImageInFlowItems(buildNodeFlowItems(info))
+  if (nodeFlowImage) return nodeFlowImage
 
-  // 4. nested_action_nodes 的 recognition_attempts
-  if (info.nested_action_nodes) {
-    for (const group of info.nested_action_nodes) {
-      for (const action of group.nested_actions) {
-        if (action.recognition_attempts) {
-          const img = findImageInAttempts(action.recognition_attempts)
-          if (img) return img
-        }
-      }
-    }
-  }
-
-  // 5. parser 实时查找（含嵌套节点名）
+  // 4. parser 实时查找（含 node_flow 的识别节点名）
   if (parser) {
-    const nodeErr = parser.findErrorImage(info.timestamp, info.name)
+    const nodeErr = parser.findErrorImage(info.ts, info.name)
     if (nodeErr) return nodeErr
 
-    if (info.nested_action_nodes) {
-      for (const group of info.nested_action_nodes) {
-        const groupErr = parser.findErrorImage(group.timestamp, group.name)
-        if (groupErr) return groupErr
-        for (const action of group.nested_actions) {
-          const actionErr = parser.findErrorImage(action.timestamp, action.name)
-          if (actionErr) return actionErr
+    const flowItems = buildNodeFlowItems(info)
+    const stack: import('../types').UnifiedFlowItem[] = [...flowItems]
+    while (stack.length > 0) {
+      const item = stack.pop()!
+      if (item.type === 'recognition' || item.type === 'recognition_node') {
+        const recoId = item.reco_id ?? item.reco_details?.reco_id
+        if (recoId != null) {
+          const vision = parser.findVisionImage(item.ts, item.name, recoId)
+          if (vision) return vision
         }
+        const recognition = parser.findRecognitionImage(item.ts, item.name)
+        if (recognition) return recognition
+      } else {
+        const err = parser.findErrorImage(item.ts, item.name)
+        if (err) return err
+      }
+      if (item.children && item.children.length > 0) {
+        stack.push(...item.children)
       }
     }
 
-    if (info.recognition_attempts) {
-      for (let i = info.recognition_attempts.length - 1; i >= 0; i--) {
-        const a = info.recognition_attempts[i]
-        const v = parser.findVisionImage(a.timestamp, a.name, a.reco_id)
-        if (v) return v
-        const e = parser.findRecognitionImage(a.timestamp, a.name)
-        if (e) return e
-      }
+    for (let i = recognitionAttempts.length - 1; i >= 0; i--) {
+      const a = recognitionAttempts[i]
+      const v = parser.findVisionImage(a.ts, a.name, a.reco_id)
+      if (v) return v
+      const e = parser.findRecognitionImage(a.ts, a.name)
+      if (e) return e
     }
   }
 
@@ -892,7 +900,7 @@ const onPaneClick = () => {
                 <n-tag size="tiny" :type="info.status === 'success' ? 'success' : 'error'">
                   {{ info.status === 'success' ? '成功' : '失败' }}
                 </n-tag>
-                <span class="popover-time">{{ info.timestamp }}</span>
+                <span class="popover-time">{{ info.ts }}</span>
                 <span class="popover-locate" @click="navigateToNode(info)">定位</span>
               </div>
               <div v-if="info.reco_details" class="popover-row">

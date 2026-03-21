@@ -1,5 +1,6 @@
 import type {
   NodeInfo,
+  NestedActionGroup,
   RecognitionAttempt,
   NestedActionNode,
   UnifiedFlowGroup,
@@ -23,7 +24,7 @@ const toTimestampMs = (timestamp?: string): number => {
 }
 
 const flowItemTimestampMs = (item: UnifiedFlowItem): number => {
-  return toTimestampMs(item.start_timestamp || item.timestamp || item.end_timestamp)
+  return toTimestampMs(item.ts || item.end_ts)
 }
 
 const sortFlowItems = (items: UnifiedFlowItem[]): UnifiedFlowItem[] => {
@@ -59,23 +60,39 @@ const mapRecognitionAttempt = (
     type: nestedNode ? 'recognition_node' : 'recognition',
     name: attempt.name,
     status: attempt.status,
-    timestamp: attempt.timestamp,
-    start_timestamp: attempt.start_timestamp,
-    end_timestamp: attempt.end_timestamp,
+    ts: attempt.ts,
+    end_ts: attempt.end_ts,
     reco_id: attempt.reco_id,
-    raw: {
-      reco_id: attempt.reco_id,
-      name: attempt.name,
-      timestamp: attempt.timestamp,
-      start_timestamp: attempt.start_timestamp,
-      end_timestamp: attempt.end_timestamp,
-      status: attempt.status,
-    },
     reco_details: attempt.reco_details,
     error_image: attempt.error_image,
     vision_image: attempt.vision_image,
     children: children.length > 0 ? sortFlowItems(children) : undefined,
   }
+}
+
+const mapFlowRecognitionToAttempt = (item: UnifiedFlowItem): RecognitionAttempt => {
+  const nestedNodes = (item.children ?? [])
+    .filter(child => child.type === 'recognition_node')
+    .map(mapFlowRecognitionToAttempt)
+  const recoId = item.reco_id ?? item.reco_details?.reco_id
+  return {
+    reco_id: typeof recoId === 'number' ? recoId : 0,
+    name: item.name,
+    ts: item.ts,
+    end_ts: item.end_ts,
+    status: item.status,
+    reco_details: item.reco_details,
+    error_image: item.error_image,
+    vision_image: item.vision_image,
+    nested_nodes: nestedNodes.length > 0 ? nestedNodes : undefined,
+  }
+}
+
+export const buildRecognitionFlowItems = (attempts: RecognitionAttempt[]): UnifiedFlowItem[] => {
+  const roots = attempts.map((attempt, attemptIndex) =>
+    mapRecognitionAttempt(attempt, `node.recognition.${attemptIndex}`)
+  )
+  return sortFlowItems(roots).map(sortFlowTree)
 }
 
 const mapActionItem = (
@@ -94,12 +111,10 @@ const mapActionItem = (
     type,
     name,
     status,
-    timestamp: fallbackTs,
-    start_timestamp: startTimestamp,
-    end_timestamp: endTimestamp,
+    ts: fallbackTs,
+    end_ts: endTimestamp,
     action_id: actionId,
     action_details: actionDetails,
-    raw: actionDetails ? { ...actionDetails } : undefined,
   }
 }
 
@@ -110,7 +125,7 @@ const mapNestedPipelineNode = (
   ownerTaskId: number
 ): UnifiedFlowItem => {
   const baseId = `task.${groupIndex}.pipeline.${nodeIndex}.${nestedNode.node_id}`
-  const recognitionChildren = (nestedNode.recognition_attempts ?? []).map((attempt, attemptIndex) =>
+  const recognitionChildren = (nestedNode.recognitions ?? []).map((attempt, attemptIndex) =>
     mapRecognitionAttempt(attempt, `${baseId}.recognition.${attemptIndex}`)
   )
   const actionChild = nestedNode.action_details
@@ -118,8 +133,8 @@ const mapNestedPipelineNode = (
         `${baseId}.action.${nestedNode.action_details.action_id ?? nestedNode.node_id}`,
         nestedNode.action_details.name || nestedNode.name,
         nestedNode.action_details.success ? 'success' : 'failed',
-        nestedNode.action_details.start_timestamp || nestedNode.start_timestamp,
-        nestedNode.action_details.end_timestamp || nestedNode.end_timestamp,
+        nestedNode.action_details.ts || nestedNode.ts,
+        nestedNode.action_details.end_ts || nestedNode.end_ts,
         nestedNode.action_details,
         nestedNode.action_details.action_id,
         'action'
@@ -133,26 +148,18 @@ const mapNestedPipelineNode = (
     type: 'pipeline_node',
     name: nestedNode.name,
     status: nestedNode.status,
-    timestamp: nestedNode.start_timestamp || nestedNode.timestamp || nestedNode.end_timestamp || '',
-    start_timestamp: nestedNode.start_timestamp || nestedNode.timestamp,
-    end_timestamp: nestedNode.end_timestamp,
+    ts: nestedNode.ts || nestedNode.end_ts || '',
+    end_ts: nestedNode.end_ts,
     task_id: ownerTaskId,
     node_id: nestedNode.node_id,
     reco_details: nestedNode.reco_details,
     action_details: nestedNode.action_details,
-    raw: {
-      node_id: nestedNode.node_id,
-      name: nestedNode.name,
-      status: nestedNode.status,
-      reco_details: nestedNode.reco_details,
-      action_details: nestedNode.action_details,
-    },
     children: children.length > 0 ? children : undefined,
   }
 }
 
-const buildTaskFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
-  return (node.nested_action_nodes ?? []).map((group, groupIndex) => {
+const buildTaskFlowItemsFromGroups = (groups: NestedActionGroup[]): UnifiedFlowItem[] => {
+  return groups.map((group, groupIndex) => {
     const pipelineChildren = (group.nested_actions ?? []).map((nested, nodeIndex) =>
       mapNestedPipelineNode(nested, groupIndex, nodeIndex, group.task_id)
     )
@@ -161,42 +168,60 @@ const buildTaskFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
       type: 'task' as const,
       name: group.name,
       status: group.status,
-      timestamp: group.timestamp,
-      start_timestamp: group.start_timestamp || group.timestamp,
-      end_timestamp: group.end_timestamp,
+      ts: group.ts,
+      end_ts: group.end_ts,
       task_id: group.task_id,
       task_details: group.task_details,
-      raw: group.task_details
-        ? { ...group.task_details }
-        : {
-            task_id: group.task_id,
-            name: group.name,
-            status: group.status,
-            start_timestamp: group.start_timestamp || group.timestamp,
-            end_timestamp: group.end_timestamp,
-          },
       children: pipelineChildren.length > 0 ? sortFlowItems(pipelineChildren) : undefined,
     }
   })
 }
 
-export const buildNodeFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
+export const buildActionFlowItems = (
+  actionLevelRecognitionNodes: RecognitionAttempt[],
+  nestedActionGroups: NestedActionGroup[]
+): UnifiedFlowItem[] => {
   const roots: UnifiedFlowItem[] = []
 
-  const actionLevelRecognitionNodes = (node.nested_recognition_in_action ?? []).map((attempt, attemptIndex) =>
+  const actionLevelRecognitionItems = actionLevelRecognitionNodes.map((attempt, attemptIndex) =>
     mapRecognitionAttempt(attempt, `node.action.recognition.${attemptIndex}`, true)
   )
 
-  const taskItems = buildTaskFlowItems(node)
+  const taskItems = buildTaskFlowItemsFromGroups(nestedActionGroups)
 
-  // 顶层 PipelineNode 的 Node.Recognition / Node.Action 使用结构化字段展示：
-  // - recognition_attempts
-  // - action_details
-  // 这里返回 Action 期间递归产生的事件树（task / pipeline / recognition_node / action_node）。
-  roots.push(...actionLevelRecognitionNodes)
+  roots.push(...actionLevelRecognitionItems)
   roots.push(...taskItems)
 
   return sortFlowItems(roots).map(sortFlowTree)
+}
+
+export const buildNodeFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
+  return sortFlowItems(node.node_flow ?? []).map(sortFlowTree)
+}
+
+export const buildNodeRecognitionFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
+  return buildNodeFlowItems(node).filter(item => item.type === 'recognition')
+}
+
+export const buildNodeRecognitionAttempts = (node: NodeInfo): RecognitionAttempt[] => {
+  return buildNodeRecognitionFlowItems(node).map(mapFlowRecognitionToAttempt)
+}
+
+export const buildNodeActionRootItem = (node: NodeInfo): UnifiedFlowItem | null => {
+  return buildNodeFlowItems(node).find(item => item.type === 'action') || null
+}
+
+export const buildNodeActionFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
+  const root = buildNodeActionRootItem(node)
+  return sortFlowItems(root?.children ?? []).map(sortFlowTree)
+}
+
+export const buildNodeActionLevelRecognitionItems = (node: NodeInfo): UnifiedFlowItem[] => {
+  return buildNodeActionFlowItems(node).filter(item => item.type === 'recognition_node')
+}
+
+export const buildNodeTaskFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
+  return buildNodeActionFlowItems(node).filter(item => item.type === 'task')
 }
 
 export const groupFlowItemsByType = (items: UnifiedFlowItem[]): UnifiedFlowGroup[] => {

@@ -1,4 +1,5 @@
 import type { TaskInfo } from '../types'
+import { buildNodeRecognitionAttempts } from './nodeFlow'
 
 /**
  * 节点统计信息
@@ -73,12 +74,12 @@ export class NodeStatisticsAnalyzer {
         let duration = 0
         if (nextNode) {
           // 使用下一个节点的时间戳减去当前节点的时间戳
-          const currentTime = new Date(node.timestamp).getTime()
-          const nextTime = new Date(nextNode.timestamp).getTime()
+          const currentTime = new Date(node.ts).getTime()
+          const nextTime = new Date(nextNode.ts).getTime()
           duration = nextTime - currentTime
         } else if (task.end_time) {
           // 最后一个节点，使用任务结束时间
-          const currentTime = new Date(node.timestamp).getTime()
+          const currentTime = new Date(node.ts).getTime()
           const endTime = new Date(task.end_time).getTime()
           duration = endTime - currentTime
         } else {
@@ -190,7 +191,7 @@ export class NodeStatisticsAnalyzer {
       const nodes = task.nodes
 
       for (const node of nodes) {
-        const attempts = node.recognition_attempts || []
+        const attempts = buildNodeRecognitionAttempts(node)
 
         // 跳过没有识别尝试的节点
         if (attempts.length === 0) continue
@@ -213,9 +214,9 @@ export class NodeStatisticsAnalyzer {
 
         // 计算识别阶段时间（从第一次识别到最后一次识别）
         if (attempts.length > 0) {
-          const firstAttemptTime = new Date(attempts[0].timestamp).getTime()
-          const lastAttemptTime = new Date(attempts[attempts.length - 1].timestamp).getTime()
-          const recognitionDuration = lastAttemptTime - firstAttemptTime
+          const firstAttemptTs = new Date(attempts[0].ts).getTime()
+          const lastAttemptTime = new Date(attempts[attempts.length - 1].ts).getTime()
+          const recognitionDuration = lastAttemptTime - firstAttemptTs
 
           // 只有当有多次识别尝试时，识别时间才有意义
           if (attempts.length > 1 && recognitionDuration >= 0 && recognitionDuration < 3600000) {
@@ -223,7 +224,7 @@ export class NodeStatisticsAnalyzer {
           }
 
           // 计算动作阶段时间（从最后一次识别到节点完成）
-          const nodeCompleteTime = new Date(node.timestamp).getTime()
+          const nodeCompleteTime = new Date(node.ts).getTime()
           const actionDuration = nodeCompleteTime - lastAttemptTime
 
           if (actionDuration >= 0 && actionDuration < 3600000) {

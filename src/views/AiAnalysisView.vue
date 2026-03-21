@@ -13,6 +13,7 @@ import {
 import { tryParseStructuredOutput, type StructuredAiOutput } from '../ai/structuredOutput'
 import { getAiSettings, getSessionApiKey, saveAiSettings, setSessionApiKey } from '../utils/aiSettings'
 import { saveFile } from '../utils/fileDialog'
+import { buildNodeFlowItems } from '../utils/nodeFlow'
 
 interface Props {
   tasks: TaskInfo[]
@@ -358,7 +359,7 @@ const buildContextKey = (): string => {
   const task = props.selectedTask
   const focusNode = effectiveSelectedNode.value
   const focusNodePart = focusNode
-    ? `focusNode:${focusNode.node_id}@${focusNode.timestamp}`
+    ? `focusNode:${focusNode.node_id}@${focusNode.ts}`
     : 'focusNode:none'
   const focusFlowPart = `focusFlow:${effectiveSelectedFlowItemId.value ?? 'none'}`
   const focusModePart = `focusMode:${selectedNodeFocusEnabled.value ? 'enabled' : 'disabled'}`
@@ -374,7 +375,7 @@ const buildContextKey = (): string => {
     `status:${task.status}`,
     `nodes:${task.nodes.length}`,
     `tailNode:${tailNode?.node_id ?? -1}`,
-    `tailTs:${tailNode?.timestamp ?? task.end_time ?? task.start_time}`,
+    `tailTs:${tailNode?.ts ?? task.end_time ?? task.start_time}`,
     focusModePart,
     focusNodePart,
     focusFlowPart,
@@ -1458,15 +1459,13 @@ const collectParentRelationFacts = (task: TaskInfo | null): ParentRelationFacts 
   }
 
   for (const node of task.nodes) {
-    const groups = node.nested_action_nodes ?? []
-    if (!groups.length) continue
-    let hasFailed = false
-    for (const group of groups) {
-      if (group.status === 'failed') hasFailed = true
-      for (const action of group.nested_actions ?? []) {
-        if (action.status === 'failed') hasFailed = true
-      }
-    }
+    const flowItems = buildNodeFlowItems(node)
+    const taskItems = flowItems.filter(item => item.type === 'task')
+    if (!taskItems.length) continue
+    const nestedActions = taskItems.flatMap(item =>
+      (item.children ?? []).filter(child => child.type === 'pipeline_node')
+    )
+    const hasFailed = taskItems.some(item => item.status === 'failed') || nestedActions.some(item => item.status === 'failed')
     if (!hasFailed) continue
     const parent = resolveDirectParentName(node)
     parentFailedCount.set(parent, (parentFailedCount.get(parent) ?? 0) + 1)

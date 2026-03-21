@@ -1,6 +1,15 @@
 import { markRaw } from 'vue'
-import type { EventNotification, TaskInfo, NodeInfo, RecognitionAttempt } from '../types'
+import type {
+  EventNotification,
+  TaskInfo,
+  NodeInfo,
+  RecognitionAttempt,
+  NestedActionGroup,
+  NestedActionNode,
+  UnifiedFlowItem,
+} from '../types'
 import { StringPool } from './stringPool'
+import { buildActionFlowItems, buildRecognitionFlowItems } from './nodeFlow'
 
 export interface ParseProgress {
   current: number
@@ -212,7 +221,7 @@ class SubTaskCollector {
     const groups = Array.from(this.pipelineNodes.entries()).map(([taskId, nodes]) => ({
       task_id: taskId,
       name: stringPool.intern(nodes[0]?.name || 'SubTask'),
-      timestamp: stringPool.intern(nodes[0]?.timestamp || ''),
+      ts: stringPool.intern(nodes[0]?.ts || ''),
       status: nodes.every((n: any) => n.status === 'success') ? 'success' : 'failed',
       nested_actions: nodes
     }))
@@ -462,7 +471,7 @@ export class LogParser {
       if (task.status === 'running' && task.nodes.length > 0) {
         const lastNode = task.nodes[task.nodes.length - 1]
         const start = new Date(task.start_time).getTime()
-        const end = new Date(lastNode.end_timestamp || lastNode.timestamp).getTime()
+        const end = new Date(lastNode.end_ts || lastNode.ts).getTime()
         task.duration = end - start
       }
     }
@@ -494,8 +503,8 @@ export class LogParser {
       hash?: string
       uuid?: string
       status: SubTaskStatus
-      start_timestamp?: string
-      end_timestamp?: string
+      ts?: string
+      end_ts?: string
       start_message?: string
       end_message?: string
       start_details?: Record<string, any>
@@ -506,7 +515,7 @@ export class LogParser {
     let currentNextList: any[] = []
     const currentTaskRecognitions: RecognitionAttempt[] = []
     const actionLevelRecognitionNodes: RecognitionAttempt[] = []
-    const nestedActionNodes: any[] = []
+    const nestedActionNodes: NestedActionNode[] = []
     const pipelineNodeStartTimes = new Map<number, string>()
     const recognitionNodeStartTimes = new Map<number, string>()
     const actionStartTimes = new Map<number, string>()
@@ -535,12 +544,12 @@ export class LogParser {
       fallbackEndTimestamp?: string
     ) => {
       if (!actionDetails) return undefined
-      const resolvedEnd = endTimestamp ?? actionDetails.end_timestamp ?? fallbackEndTimestamp
-      const resolvedStart = startTimestamp ?? actionDetails.start_timestamp ?? resolvedEnd
+      const resolvedEnd = endTimestamp ?? actionDetails.end_ts ?? fallbackEndTimestamp
+      const resolvedStart = startTimestamp ?? actionDetails.ts ?? resolvedEnd
       return markRaw({
         ...actionDetails,
-        ...(resolvedStart ? { start_timestamp: this.stringPool.intern(resolvedStart) } : {}),
-        ...(resolvedEnd ? { end_timestamp: this.stringPool.intern(resolvedEnd) } : {})
+        ...(resolvedStart ? { ts: this.stringPool.intern(resolvedStart) } : {}),
+        ...(resolvedEnd ? { end_ts: this.stringPool.intern(resolvedEnd) } : {})
       })
     }
     const markRawTaskDetails = (details: Record<string, any> | undefined): Record<string, any> | undefined => {
@@ -585,9 +594,8 @@ export class LogParser {
       const attempt: RecognitionAttempt = {
         reco_id: recoId,
         name: this.stringPool.intern(details.name || ''),
-        timestamp: startTimestamp,
-        start_timestamp: startTimestamp,
-        end_timestamp: startTimestamp,
+        ts: startTimestamp,
+        end_ts: startTimestamp,
         status: 'failed',
       }
       recognitionOrderMeta.set(attempt, { startSeq: eventOrder, endSeq: eventOrder })
@@ -611,17 +619,15 @@ export class LogParser {
       const attempt: RecognitionAttempt = existing ?? {
         reco_id: recoId,
         name: this.stringPool.intern(details.name || ''),
-        timestamp: endTimestamp,
-        start_timestamp: endTimestamp,
-        end_timestamp: endTimestamp,
+        ts: endTimestamp,
+        end_ts: endTimestamp,
         status,
       }
 
       attempt.status = status
       attempt.name = attempt.name || this.stringPool.intern(details.name || '')
-      attempt.start_timestamp = attempt.start_timestamp || attempt.timestamp || endTimestamp
-      attempt.end_timestamp = endTimestamp
-      attempt.timestamp = attempt.start_timestamp || endTimestamp
+      attempt.ts = attempt.ts || endTimestamp
+      attempt.end_ts = endTimestamp
       if (details.reco_details) {
         attempt.reco_details = markRaw(details.reco_details)
       }
@@ -643,7 +649,7 @@ export class LogParser {
       const seen = new Set<string>()
       const result: RecognitionAttempt[] = []
       for (const item of items) {
-        const key = `${item.reco_id}|${item.name}|${item.timestamp}|${item.status}`
+        const key = `${item.reco_id}|${item.name}|${item.ts}|${item.status}`
         if (seen.has(key)) continue
         seen.add(key)
         result.push(item)
@@ -830,7 +836,7 @@ export class LogParser {
         ...group,
         nested_actions: (group.nested_actions ?? []).map((action: any) => ({
           ...action,
-          recognition_attempts: (action.recognition_attempts ?? []).map(cloneRecognitionAttempt)
+          recognitions: (action.recognitions ?? []).map(cloneRecognitionAttempt)
         }))
       }))
       const remaining: RecognitionAttempt[] = []
@@ -842,7 +848,7 @@ export class LogParser {
         // 1) 优先挂到 nested action 的识别尝试（如 CCUpdate 下的 count_xxx）
         for (const group of mergedNestedGroups) {
           for (const action of group.nested_actions ?? []) {
-            const attempts: RecognitionAttempt[] = action.recognition_attempts ?? []
+            const attempts: RecognitionAttempt[] = action.recognitions ?? []
             if (!attempts.length) continue
             const idx = pickBestAttemptIndex(attempts, node)
             if (idx < 0) continue
@@ -903,12 +909,12 @@ export class LogParser {
           snapshot.hash = this.stringPool.intern(details.hash || '')
           snapshot.uuid = this.stringPool.intern(details.uuid || '')
           snapshot.status = 'running'
-          snapshot.start_timestamp = this.stringPool.intern(event.timestamp)
+          snapshot.ts = this.stringPool.intern(event.timestamp)
           snapshot.start_message = this.stringPool.intern(message)
           snapshot.start_details = markRawTaskDetails(details)
         } else if (messageMeta.phase === 'Succeeded' || messageMeta.phase === 'Failed') {
           snapshot.status = messageMeta.phase === 'Succeeded' ? 'succeeded' : 'failed'
-          snapshot.end_timestamp = this.stringPool.intern(event.timestamp)
+          snapshot.end_ts = this.stringPool.intern(event.timestamp)
           snapshot.end_message = this.stringPool.intern(message)
           snapshot.end_details = markRawTaskDetails(details)
         }
@@ -996,9 +1002,8 @@ export class LogParser {
             const recoNodeAttempt: RecognitionAttempt = {
               reco_id: recoId,
               name: this.stringPool.intern(details.name || ''),
-              timestamp: startTimestamp,
-              start_timestamp: startTimestamp,
-              end_timestamp: timestamp,
+              ts: startTimestamp,
+              end_ts: timestamp,
               status: message === 'Node.RecognitionNode.Succeeded' ? 'success' : 'failed',
               reco_details: details.reco_details ? markRaw(details.reco_details) : undefined,
               error_image: this.findRecognitionImage(event.timestamp, details.name || ''),
@@ -1087,15 +1092,14 @@ export class LogParser {
                 snapshot.status === 'failed' ? 'failed' : 'success'
               const mergedStatus: 'success' | 'failed' =
                 group.status === 'failed' || snapshotStatus === 'failed' ? 'failed' : 'success'
-              const startTimestamp = snapshot.start_timestamp || group.timestamp
-              const endTimestamp = snapshot.end_timestamp
+              const startTimestamp = snapshot.ts || group.ts
+              const endTimestamp = snapshot.end_ts
 
               return {
                 ...group,
                 name: this.stringPool.intern(snapshot.entry || group.name),
-                timestamp: this.stringPool.intern(startTimestamp || group.timestamp),
-                start_timestamp: startTimestamp ? this.stringPool.intern(startTimestamp) : undefined,
-                end_timestamp: endTimestamp ? this.stringPool.intern(endTimestamp) : undefined,
+                ts: this.stringPool.intern(startTimestamp || group.ts),
+                end_ts: endTimestamp ? this.stringPool.intern(endTimestamp) : undefined,
                 status: mergedStatus,
                 task_details: markRaw({
                   task_id: snapshot.task_id,
@@ -1103,8 +1107,8 @@ export class LogParser {
                   hash: snapshot.hash || '',
                   uuid: snapshot.uuid || '',
                   status: snapshot.status,
-                  start_timestamp: snapshot.start_timestamp,
-                  end_timestamp: snapshot.end_timestamp,
+                  ts: snapshot.ts,
+                  end_ts: snapshot.end_ts,
                   start_message: snapshot.start_message,
                   end_message: snapshot.end_message,
                   start_details: snapshot.start_details,
@@ -1127,35 +1131,72 @@ export class LogParser {
               actionStartOrder
             )
             const nestedRecognitionInAction = scopedAttachResult.remaining
+            const resolvedNestedActionGroups: NestedActionGroup[] =
+              scopedAttachResult.nestedActionGroups.length > 0
+                ? scopedAttachResult.nestedActionGroups
+                : (
+                  nestedActionNodes.length > 0
+                    ? [
+                        {
+                          task_id: task.task_id,
+                          name: this.stringPool.intern('ActionNode'),
+                          ts: startTimestamp,
+                          end_ts: endTimestamp,
+                          status: nestedActionNodes.every(item => item.status === 'success') ? 'success' : 'failed',
+                          nested_actions: nestedActionNodes.slice(),
+                        },
+                      ]
+                    : []
+                )
+            const actionFlow = buildActionFlowItems(
+              nestedRecognitionInAction,
+              resolvedNestedActionGroups
+            )
+            const recognitionFlow = buildRecognitionFlowItems(scopedAttachResult.topLevelAttempts)
             const fallbackRecoDetails =
               details.reco_details ||
               (scopedAttachResult.topLevelAttempts.length > 0
                 ? scopedAttachResult.topLevelAttempts[scopedAttachResult.topLevelAttempts.length - 1].reco_details
                 : undefined)
+            const mergedActionDetails = withActionTimestamps(details.action_details, actionStartTimestamp, actionEndTimestamp, endTimestamp)
+            const resolvedActionId = mergedActionDetails?.action_id ?? actionId ?? nodeId
+            const hasActionRoot = !!mergedActionDetails || actionFlow.length > 0
+            const actionStatus: 'success' | 'failed' = mergedActionDetails
+              ? (mergedActionDetails.success ? 'success' : 'failed')
+              : (message === 'Node.PipelineNode.Succeeded' ? 'success' : 'failed')
+            const actionRoot: UnifiedFlowItem | null = hasActionRoot
+              ? {
+                  id: `node.action.${resolvedActionId}`,
+                  type: 'action',
+                  name: mergedActionDetails?.name || this.stringPool.intern(nodeName),
+                  status: actionStatus,
+                  ts: mergedActionDetails?.ts || mergedActionDetails?.end_ts || endTimestamp,
+                  end_ts: mergedActionDetails?.end_ts,
+                  action_id: resolvedActionId,
+                  action_details: mergedActionDetails,
+                  children: actionFlow.length > 0 ? actionFlow : undefined,
+                }
+              : null
+            const nodeFlow = actionRoot
+              ? [...recognitionFlow, actionRoot]
+              : recognitionFlow
 
             const node: NodeInfo = {
               node_id: nodeId,
               name: this.stringPool.intern(nodeName),
-              timestamp: startTimestamp,
-              start_timestamp: startTimestamp,
-              end_timestamp: endTimestamp,
+              ts: startTimestamp,
+              end_ts: endTimestamp,
               status: message === 'Node.PipelineNode.Succeeded' ? 'success' : 'failed',
               task_id: task.task_id,
               reco_details: fallbackRecoDetails ? markRaw(fallbackRecoDetails) : undefined,
-              action_details: withActionTimestamps(details.action_details, actionStartTimestamp, actionEndTimestamp, endTimestamp),
+              action_details: mergedActionDetails,
               focus: details.focus ? markRaw(details.focus) : undefined,
               next_list: currentNextList.map((item: any) => ({
                 name: this.stringPool.intern(item.name || ''),
                 anchor: item.anchor || false,
                 jump_back: item.jump_back || false
               })),
-              recognition_attempts: scopedAttachResult.topLevelAttempts,
-              nested_recognition_in_action: nestedRecognitionInAction.length > 0
-                ? nestedRecognitionInAction
-                : undefined,
-              nested_action_nodes: scopedAttachResult.nestedActionGroups.length > 0
-                ? scopedAttachResult.nestedActionGroups
-                : (nestedActionNodes.length > 0 ? nestedActionNodes.slice() : undefined),
+              node_flow: nodeFlow.length > 0 ? nodeFlow : undefined,
               node_details: details.node_details ? markRaw(details.node_details) : undefined,
               error_image: this.findErrorImage(event.timestamp, nodeName),
               wait_freezes_images: this.findWaitFreezesImages(event.timestamp, details.action_details?.name || details.node_details?.name || nodeName)
@@ -1171,7 +1212,7 @@ export class LogParser {
             }
 
             // 如果嵌套动作组中有失败的，节点整体标记为失败
-            if (node.status === 'success' && node.nested_action_nodes?.some(g => g.status === 'failed')) {
+            if (node.status === 'success' && actionFlow.some(item => item.type === 'task' && item.status === 'failed')) {
               node.status = 'failed'
             }
 
@@ -1247,9 +1288,8 @@ export class LogParser {
           subTasks.addAction(subTaskId, {
             action_id: details.action_id,
             name: this.stringPool.intern(details.name || ''),
-            timestamp: startTimestamp,
-            start_timestamp: startTimestamp,
-            end_timestamp: endTimestamp,
+            ts: startTimestamp,
+            end_ts: endTimestamp,
             status: message === 'Node.Action.Succeeded' ? 'success' : 'failed',
             action_details: withActionTimestamps(details.action_details, startTimestamp, endTimestamp, endTimestamp)
           })
@@ -1290,9 +1330,8 @@ export class LogParser {
           const recoNodeAttempt: RecognitionAttempt = {
             reco_id: recoId,
             name: this.stringPool.intern(details.name || ''),
-            timestamp: startTimestamp,
-            start_timestamp: startTimestamp,
-            end_timestamp: timestamp,
+            ts: startTimestamp,
+            end_ts: timestamp,
             status: message === 'Node.RecognitionNode.Succeeded' ? 'success' : 'failed',
             reco_details: details.reco_details ? markRaw(details.reco_details) : undefined,
             error_image: this.findRecognitionImage(event.timestamp, details.name || ''),
@@ -1320,19 +1359,23 @@ export class LogParser {
         case 'Node.ActionNode.Succeeded':
         case 'Node.ActionNode.Failed': {
           if (subTaskId == null) break
-          const nestedActions = subTasks.peekActions(subTaskId)
           const actionId = details.action_details?.action_id ?? details.action_id ?? details.node_id
           const actionKey = actionId != null ? scopedKey(subTaskId, actionId) : null
           const actionNodeStartTimestamp = actionKey ? subTaskActionNodeStartTimes.get(actionKey) : undefined
           const actionStartTimestamp = actionKey ? subTaskActionStartTimes.get(actionKey) : undefined
           const actionEndTimestamp = actionKey ? subTaskActionEndTimes.get(actionKey) : undefined
           nestedActionNodes.push({
-            action_id: actionId,
+            node_id: typeof actionId === 'number' ? actionId : -(nestedActionNodes.length + 1),
             name: this.stringPool.intern(details.name || ''),
-            timestamp: actionNodeStartTimestamp || this.stringPool.intern(event.timestamp),
+            ts: actionNodeStartTimestamp || this.stringPool.intern(event.timestamp),
+            end_ts: actionEndTimestamp || this.stringPool.intern(event.timestamp),
             status: message === 'Node.ActionNode.Succeeded' ? 'success' : 'failed',
-            action_details: withActionTimestamps(details.action_details, actionStartTimestamp || actionNodeStartTimestamp, actionEndTimestamp, event.timestamp),
-            nested_actions: nestedActions.length > 0 ? nestedActions : undefined
+            action_details: withActionTimestamps(
+              details.action_details,
+              actionStartTimestamp || actionNodeStartTimestamp,
+              actionEndTimestamp,
+              event.timestamp
+            ),
           })
           if (actionKey) {
             subTaskActionNodeStartTimes.delete(actionKey)
@@ -1375,8 +1418,8 @@ export class LogParser {
             }
           }
           const mergedActionDetails = details.action_details || matchedTaskAction?.action_details
-          const mergedActionStartTimestamp = actionStartTimestamp || matchedTaskAction?.start_timestamp
-          const mergedActionEndTimestamp = actionEndTimestamp || matchedTaskAction?.end_timestamp
+          const mergedActionStartTimestamp = actionStartTimestamp || matchedTaskAction?.ts
+          const mergedActionEndTimestamp = actionEndTimestamp || matchedTaskAction?.end_ts
           const taskRecognitions = dedupeRecognitionAttempts(subTasks.consumeRecognitions(subTaskId))
           const recognitionNodes = dedupeRecognitionAttempts(subTasks.consumeRecognitionNodes(subTaskId))
           const attachedRecognitions = attachRecognitionNodesToAttempts(taskRecognitions, recognitionNodes)
@@ -1388,13 +1431,12 @@ export class LogParser {
           subTasks.addPipelineNode(subTaskId, {
             node_id: nodeId,
             name: this.stringPool.intern(details.reco_details?.name || details.action_details?.name || details.name || ''),
-            timestamp: startTimestamp,
-            start_timestamp: startTimestamp,
-            end_timestamp: endTimestamp,
+            ts: startTimestamp,
+            end_ts: endTimestamp,
             status: message === 'Node.PipelineNode.Succeeded' ? 'success' : 'failed',
             reco_details: fallbackRecoDetails ? markRaw(fallbackRecoDetails) : undefined,
             action_details: withActionTimestamps(mergedActionDetails, mergedActionStartTimestamp, mergedActionEndTimestamp, endTimestamp),
-            recognition_attempts: attachedRecognitions.attempts.length > 0
+            recognitions: attachedRecognitions.attempts.length > 0
               ? attachedRecognitions.attempts
               : (attachedRecognitions.orphans.length > 0 ? attachedRecognitions.orphans : undefined)
           })

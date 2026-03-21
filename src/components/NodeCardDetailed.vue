@@ -2,8 +2,13 @@
 import { computed } from 'vue'
 import { NCard, NButton, NFlex, NTag, NImage, NText } from 'naive-ui'
 import { CheckCircleOutlined, CloseCircleOutlined } from '@vicons/antd'
-import type { NodeInfo, MergedRecognitionItem, NestedActionNode, RecognitionAttempt } from '../types'
+import type { NodeInfo, MergedRecognitionItem, RecognitionAttempt, UnifiedFlowItem } from '../types'
 import { isTauri } from '../utils/platform'
+import {
+  buildNodeActionLevelRecognitionItems,
+  buildNodeRecognitionAttempts,
+  buildNodeTaskFlowItems,
+} from '../utils/nodeFlow'
 
 const convertFileSrc = (filePath: string) => {
   if (!isTauri()) return filePath
@@ -38,7 +43,7 @@ const dedupeRecognitionAttempts = (items: RecognitionAttempt[]) => {
   const seen = new Set<string>()
   const result: RecognitionAttempt[] = []
   for (const item of items) {
-    const key = `${item.reco_id}|${item.name}|${item.timestamp}|${item.status}`
+    const key = `${item.reco_id}|${item.name}|${item.ts}|${item.status}`
     if (seen.has(key)) continue
     seen.add(key)
     result.push(item)
@@ -55,13 +60,23 @@ interface FlattenedNestedRecognition {
 interface TaskGroupItem {
   groupIdx: number
   taskId: number
+  flowItemId: string
   name: string
+  ts: string
   status: 'success' | 'failed'
   actions: Array<{
     groupIdx: number
     nestedIdx: number
-    nested: NestedActionNode
-    recognitionItems: RecognitionAttempt[]
+    flowItemId: string
+    nested: {
+      name: string
+      status: 'success' | 'failed'
+      action_details?: any
+    }
+    recognitionItems: Array<{
+      flowItemId: string
+      attempt: RecognitionAttempt
+    }>
   }>
 }
 
@@ -88,47 +103,68 @@ const flattenNestedRecognitionNodes = (
   return result
 }
 
+const getFlowItemRecoId = (item: UnifiedFlowItem): number => {
+  if (typeof item.reco_id === 'number') return item.reco_id
+  return typeof item.reco_details?.reco_id === 'number' ? item.reco_details.reco_id : 0
+}
+
+const toRecognitionAttemptFromFlowItem = (item: UnifiedFlowItem): RecognitionAttempt => ({
+  reco_id: getFlowItemRecoId(item),
+  name: item.name,
+  ts: item.ts,
+  end_ts: item.end_ts,
+  status: item.status,
+  reco_details: item.reco_details,
+  error_image: item.error_image,
+  vision_image: item.vision_image,
+  nested_nodes: undefined
+})
+
+const toRecognitionItemsFromFlowChildren = (item: UnifiedFlowItem) => {
+  const children = item.children ?? []
+  return children
+    .filter(child => child.type === 'recognition' || child.type === 'recognition_node')
+    .map(child => ({
+      flowItemId: child.id,
+      attempt: toRecognitionAttemptFromFlowItem(child),
+    }))
+}
+
+const recognitionAttempts = computed(() => buildNodeRecognitionAttempts(props.node))
+const actionLevelRecoItems = computed(() => buildNodeActionLevelRecognitionItems(props.node))
+const taskFlowItems = computed(() => buildNodeTaskFlowItems(props.node))
+
 const actionTree = computed(() => {
-  const actions: Array<{
-    groupIdx: number
-    nestedIdx: number
-    nested: NestedActionNode
-    recognitionItems: RecognitionAttempt[]
-  }> = []
-
-  if (props.node.nested_action_nodes) {
-    for (let gi = 0; gi < props.node.nested_action_nodes.length; gi++) {
-      const group = props.node.nested_action_nodes[gi]
-      for (let ni = 0; ni < group.nested_actions.length; ni++) {
-        const nested = group.nested_actions[ni]
-        actions.push({
-          groupIdx: gi,
-          nestedIdx: ni,
-          nested,
-          recognitionItems: [...(nested.recognition_attempts ?? [])]
-        })
-      }
-    }
-  }
-
-  for (const action of actions) {
-    action.recognitionItems = dedupeRecognitionAttempts(action.recognitionItems)
-  }
-
   return {
-    actions,
-    actionLevelReco: dedupeRecognitionAttempts(props.node.nested_recognition_in_action ?? []),
+    actionLevelReco: dedupeRecognitionAttempts(
+      actionLevelRecoItems.value.map(toRecognitionAttemptFromFlowItem)
+    ),
   }
 })
 
 const taskGroups = computed<TaskGroupItem[]>(() => {
-  if (!props.node.nested_action_nodes || props.node.nested_action_nodes.length === 0) return []
-  return props.node.nested_action_nodes.map((group, groupIdx) => ({
+  const taskItems = taskFlowItems.value
+  if (taskItems.length === 0) return []
+  return taskItems.map((group, groupIdx) => ({
     groupIdx,
-    taskId: group.task_id,
+    taskId: group.task_id || 0,
+    flowItemId: group.id,
     name: group.name,
+    ts: group.ts,
     status: group.status,
-    actions: actionTree.value.actions.filter(item => item.groupIdx === groupIdx),
+    actions: (group.children ?? [])
+      .filter(item => item.type === 'pipeline_node')
+      .map((nested, nestedIdx) => ({
+        groupIdx,
+        nestedIdx,
+        flowItemId: nested.id,
+        nested: {
+          name: nested.name,
+          status: nested.status,
+          action_details: nested.action_details,
+        },
+        recognitionItems: toRecognitionItemsFromFlowChildren(nested),
+      })),
   }))
 })
 
@@ -161,8 +197,8 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
 
   if (hasRecognitionSection.value) {
     const recoTimestamps = [
-      ...props.node.recognition_attempts.map(attempt => attempt.timestamp),
-      ...actionTree.value.actionLevelReco.map(attempt => attempt.timestamp),
+      ...recognitionAttempts.value.map(attempt => attempt.ts),
+      ...actionTree.value.actionLevelReco.map(attempt => attempt.ts),
     ]
     sections.push({
       type: 'recognition',
@@ -171,7 +207,7 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
   }
 
   if (hasTaskSection.value) {
-    const taskTimestamps = props.node.nested_action_nodes?.map(group => group.timestamp) ?? []
+    const taskTimestamps = taskGroups.value.map(group => group.ts)
     sections.push({
       type: 'task',
       ts: pickEarliest(taskTimestamps),
@@ -180,14 +216,14 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
 
   if (hasActionSection.value) {
     const actionTs = pickEarliest([
-      props.node.action_details?.start_timestamp,
-      props.node.action_details?.end_timestamp,
+      props.node.action_details?.ts,
+      props.node.action_details?.end_ts,
     ])
     sections.push({
       type: 'action',
       ts: Number.isFinite(actionTs)
         ? actionTs
-        : pickEarliest([props.node.end_timestamp, props.node.timestamp]),
+        : pickEarliest([props.node.end_ts, props.node.ts]),
     })
   }
 
@@ -398,7 +434,7 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
                 size="small"
                 :type="group.status === 'success' ? 'success' : 'error'"
                 ghost
-                @click="emit('select-flow-item', node, `node.task.${group.groupIdx}.${group.taskId}`)"
+                @click="emit('select-flow-item', node, group.flowItemId)"
               >
                 {{ group.name }}
               </n-button>
@@ -418,7 +454,7 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
                 <n-flex justify="space-between" align="center">
                   <n-button
                     size="small"
-                    @click="emit('select-nested-action', node, item.groupIdx, item.nestedIdx)"
+                    @click="emit('select-flow-item', node, item.flowItemId)"
                   >
                     {{ item.nested.name }}
                   </n-button>
@@ -432,18 +468,18 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
                 <n-card v-if="item.recognitionItems.length > 0" size="small" title="Recognition">
                   <n-flex wrap style="gap: 8px">
                     <n-button
-                      v-for="(attempt, attemptIdx) in item.recognitionItems"
+                      v-for="(entry, attemptIdx) in item.recognitionItems"
                       :key="`nested-reco-${group.groupIdx}-${idx}-${attemptIdx}`"
                       size="small"
-                      :type="attempt.status === 'success' ? 'success' : 'warning'"
+                      :type="entry.attempt.status === 'success' ? 'success' : 'warning'"
                       ghost
-                      @click="emit('select-nested-action-recognition', node, item.groupIdx, item.nestedIdx, attemptIdx)"
+                      @click="emit('select-flow-item', node, entry.flowItemId)"
                     >
                       <template #icon>
-                        <check-circle-outlined v-if="attempt.status === 'success'" />
+                        <check-circle-outlined v-if="entry.attempt.status === 'success'" />
                         <close-circle-outlined v-else />
                       </template>
-                      {{ attempt.name }}
+                      {{ entry.attempt.name }}
                     </n-button>
                   </n-flex>
                 </n-card>
@@ -454,7 +490,7 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
                     size="small"
                     :type="item.nested.action_details.success ? 'success' : 'error'"
                     ghost
-                    @click="emit('select-nested-action', node, item.groupIdx, item.nestedIdx)"
+                    @click="emit('select-flow-item', node, item.flowItemId)"
                   >
                     <template #icon>
                       <check-circle-outlined v-if="item.nested.action_details.success" />
@@ -467,7 +503,7 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
                     <n-button
                       size="tiny"
                       ghost
-                      @click="emit('select-nested-action', node, item.groupIdx, item.nestedIdx)"
+                      @click="emit('select-flow-item', node, item.flowItemId)"
                     >
                       查看节点
                     </n-button>

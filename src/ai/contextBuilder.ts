@@ -1,6 +1,11 @@
 import type { EventNotification, NodeInfo, TaskInfo, UnifiedFlowItem } from '../types'
 import { maaKnowledgePack, searchKnowledge } from './knowledge'
-import { buildNodeFlowItems } from '../utils/nodeFlow'
+import {
+  buildNodeActionFlowItems,
+  buildNodeActionLevelRecognitionItems,
+  buildNodeFlowItems,
+  buildNodeRecognitionAttempts,
+} from '../utils/nodeFlow'
 
 export interface AiLoadedTarget {
   id: string
@@ -43,7 +48,7 @@ interface TimelineNodeItem {
   node_id: number
   name: string
   status: 'success' | 'failed'
-  timestamp: string
+  ts: string
   action: string
   actionName: string
   nestedActionGroupCount: number
@@ -125,23 +130,68 @@ const findFlowItemPath = (
   return null
 }
 
+const collectFlowItems = (
+  items: UnifiedFlowItem[] | undefined,
+  predicate: (item: UnifiedFlowItem) => boolean,
+  output: UnifiedFlowItem[] = []
+): UnifiedFlowItem[] => {
+  if (!items || items.length === 0) return output
+  for (const item of items) {
+    if (predicate(item)) output.push(item)
+    if (item.children && item.children.length > 0) {
+      collectFlowItems(item.children, predicate, output)
+    }
+  }
+  return output
+}
+
+interface NodeActionFlowView {
+  roots: UnifiedFlowItem[]
+  actionLevelRecognitionItems: UnifiedFlowItem[]
+  taskItems: UnifiedFlowItem[]
+  nestedPipelineItems: UnifiedFlowItem[]
+  nestedRecognitionItems: UnifiedFlowItem[]
+}
+
+const buildNodeActionFlowView = (node: NodeInfo): NodeActionFlowView => {
+  const roots = buildNodeFlowItems(node)
+  const actionLevelRecognitionItems = buildNodeActionLevelRecognitionItems(node)
+  const taskItems = buildNodeActionFlowItems(node).filter(item => item.type === 'task')
+  const nestedPipelineItems = taskItems.flatMap(task =>
+    (task.children ?? []).filter(item => item.type === 'pipeline_node')
+  )
+  const nestedRecognitionItems = nestedPipelineItems.flatMap(item =>
+    collectFlowItems(
+      item.children,
+      child => child.type === 'recognition' || child.type === 'recognition_node'
+    )
+  )
+  return {
+    roots,
+    actionLevelRecognitionItems,
+    taskItems,
+    nestedPipelineItems,
+    nestedRecognitionItems,
+  }
+}
+
 const buildSelectedNodeFocus = (
   selectedNode: NodeInfo | null | undefined,
   selectedFlowItemId: string | null | undefined
 ): Record<string, unknown> | null => {
   if (!selectedNode) return null
 
-  const nestedGroups = selectedNode.nested_action_nodes ?? []
-  const nestedActions = nestedGroups.flatMap(group => group.nested_actions ?? [])
-  const actionLevelReco = selectedNode.nested_recognition_in_action ?? []
-  const directReco = selectedNode.recognition_attempts ?? []
+  const actionFlowView = buildNodeActionFlowView(selectedNode)
+  const nestedActions = actionFlowView.nestedPipelineItems
+  const actionLevelReco = actionFlowView.actionLevelRecognitionItems
+  const directReco = buildNodeRecognitionAttempts(selectedNode)
   const allNestedRecoNames = [
     ...actionLevelReco.map(item => item.name),
-    ...nestedActions.flatMap(item => (item.recognition_attempts ?? []).map(reco => reco.name)),
+    ...actionFlowView.nestedRecognitionItems.map(item => item.name),
   ].filter(Boolean)
   const allDirectRecoNames = directReco.map(item => item.name).filter(Boolean)
   const selectedPath = selectedFlowItemId
-    ? findFlowItemPath(buildNodeFlowItems(selectedNode), selectedFlowItemId)
+    ? findFlowItemPath(actionFlowView.roots, selectedFlowItemId)
     : null
   const selectedFlowItem = selectedPath?.[selectedPath.length - 1] ?? null
 
@@ -151,14 +201,13 @@ const buildSelectedNodeFocus = (
       node_id: selectedNode.node_id,
       name: selectedNode.name,
       status: selectedNode.status,
-      timestamp: selectedNode.timestamp,
-      start_timestamp: selectedNode.start_timestamp ?? null,
-      end_timestamp: selectedNode.end_timestamp ?? null,
+      ts: selectedNode.ts,
+      end_ts: selectedNode.end_ts ?? null,
       action: selectedNode.action_details?.action ?? '',
       actionName: selectedNode.action_details?.name ?? '',
       recognitionCount: directReco.length,
       actionLevelRecognitionCount: actionLevelReco.length,
-      nestedActionGroupCount: nestedGroups.length,
+      nestedActionGroupCount: actionFlowView.taskItems.length,
       nestedActionNodeCount: nestedActions.length,
       nestedActionFailedNodeCount: nestedActions.filter(item => item.status === 'failed').length,
       nextListCount: selectedNode.next_list.length,
@@ -169,7 +218,7 @@ const buildSelectedNodeFocus = (
       })),
       topRecognitionNames: toTopNameCounts(allDirectRecoNames, 6),
       topNestedRecognitionNames: toTopNameCounts(allNestedRecoNames, 6),
-      topNestedActionNames: toTopNameCounts(nestedActions.map(item => item.name).filter(Boolean), 6),
+      topNestedActionNames: toTopNameCounts(nestedActions.map(item => item.name).filter(Boolean) as string[], 6),
     },
     selectedFlowItem: selectedFlowItem
       ? {
@@ -177,13 +226,12 @@ const buildSelectedNodeFocus = (
           type: selectedFlowItem.type,
           name: selectedFlowItem.name,
           status: selectedFlowItem.status,
-          timestamp: selectedFlowItem.timestamp,
-          start_timestamp: selectedFlowItem.start_timestamp ?? null,
-          end_timestamp: selectedFlowItem.end_timestamp ?? null,
+          ts: selectedFlowItem.ts,
+          end_ts: selectedFlowItem.end_ts ?? null,
           task_id: selectedFlowItem.task_id ?? null,
           node_id: selectedFlowItem.node_id ?? null,
-          reco_id: selectedFlowItem.reco_id ?? null,
-          action_id: selectedFlowItem.action_id ?? null,
+          reco_id: selectedFlowItem.reco_id ?? selectedFlowItem.reco_details?.reco_id ?? null,
+          action_id: selectedFlowItem.action_id ?? selectedFlowItem.action_details?.action_id ?? null,
           childCount: selectedFlowItem.children?.length ?? 0,
           ancestry: (selectedPath ?? []).slice(0, -1).map(item => ({
             id: item.id,
@@ -1523,18 +1571,18 @@ const buildQuestionNodeDiagnostics = (
     for (const nodeName of matchedNames) {
       const nodeRows = task.nodes.filter(item => item.name === nodeName)
       const timestamps = nodeRows
-        .map(item => toTimestampMs(item.timestamp))
+        .map(item => toTimestampMs(item.ts))
         .filter((value): value is number => value != null)
       const firstTs = timestamps.length > 0 ? Math.min(...timestamps) : null
       const lastTs = timestamps.length > 0 ? Math.max(...timestamps) : null
       const spanMs = firstTs != null && lastTs != null ? Math.max(0, lastTs - firstTs) : 0
       const failedNodeCount = nodeRows.filter(item => item.status === 'failed').length
       const failedRecoCount = nodeRows.reduce(
-        (sum, item) => sum + item.recognition_attempts.filter(reco => reco.status === 'failed').length,
+        (sum, item) => sum + buildNodeRecognitionAttempts(item).filter(reco => reco.status === 'failed').length,
         0
       )
       const successRecoCount = nodeRows.reduce(
-        (sum, item) => sum + item.recognition_attempts.filter(reco => reco.status === 'success').length,
+        (sum, item) => sum + buildNodeRecognitionAttempts(item).filter(reco => reco.status === 'success').length,
         0
       )
 
@@ -1552,7 +1600,7 @@ const buildQuestionNodeDiagnostics = (
         const actionKind = typeof actionKindRaw === 'string' ? actionKindRaw.trim() : ''
         if (actionKind) actionKindStats.set(actionKind, (actionKindStats.get(actionKind) ?? 0) + 1)
 
-        for (const reco of row.recognition_attempts) {
+        for (const reco of buildNodeRecognitionAttempts(row)) {
           const current = recoStats.get(reco.name) ?? { failed: 0, success: 0, total: 0 }
           current.total += 1
           if (reco.status === 'failed') current.failed += 1
@@ -1568,21 +1616,16 @@ const buildQuestionNodeDiagnostics = (
           jumpBackCandidateStats.set(nextItem.name, current)
         }
 
-        const nestedGroups = row.nested_action_nodes ?? []
-        const nestedRecognitionNodes = row.nested_recognition_in_action ?? []
+        const actionFlowView = buildNodeActionFlowView(row)
+        const nestedRecognitionNodes = actionFlowView.actionLevelRecognitionItems
         nestedRecognitionInActionCount += nestedRecognitionNodes.length
         for (const nestedReco of nestedRecognitionNodes) {
           if (nestedReco?.name) nestedRecognitionNodeNames.push(nestedReco.name)
         }
-        nestedActionGroupCount += nestedGroups.length
-        for (const group of nestedGroups) {
-          const nestedActions = group.nested_actions ?? []
-          nestedActionNodeCount += nestedActions.length
-          nestedActionFailedNodeCount += nestedActions.filter(item => item.status === 'failed').length
-          for (const nestedAction of nestedActions) {
-            nestedRecognitionInActionCount += nestedAction.recognition_attempts?.length ?? 0
-          }
-        }
+        nestedActionGroupCount += actionFlowView.taskItems.length
+        nestedActionNodeCount += actionFlowView.nestedPipelineItems.length
+        nestedActionFailedNodeCount += actionFlowView.nestedPipelineItems.filter(item => item.status === 'failed').length
+        nestedRecognitionInActionCount += actionFlowView.nestedRecognitionItems.length
       }
 
       const jumpBackCandidates = Array.from(jumpBackCandidateStats.entries())
@@ -1610,7 +1653,10 @@ const buildQuestionNodeDiagnostics = (
             candidateWithNextListCount,
             candidateWithoutNextListCount,
             candidateActionKinds,
-            candidateNestedActionGroupCount: candidateNodes.reduce((sum, item) => sum + (item.nested_action_nodes?.length ?? 0), 0),
+            candidateNestedActionGroupCount: candidateNodes.reduce(
+              (sum, item) => sum + buildNodeActionFlowView(item).taskItems.length,
+              0
+            ),
           }
         })
         .sort((a, b) => {
@@ -1693,7 +1739,7 @@ const buildNestedActionDiagnostics = (
       topParentNodes: [] as Array<{
         node: string
         nodeId: number
-        timestamp: string
+        ts: string
         nestedGroupCount: number
         nestedGroupFailedCount: number
         nestedActionCount: number
@@ -1707,7 +1753,7 @@ const buildNestedActionDiagnostics = (
     }
   }
 
-  const withNested = task.nodes.filter(node => (node.nested_action_nodes?.length ?? 0) > 0)
+  const withNested = task.nodes.filter(node => buildNodeActionFlowView(node).taskItems.length > 0)
   const pairStats = Array.isArray(jumpBackFlowDiagnostics?.pairStats)
     ? jumpBackFlowDiagnostics.pairStats as Array<Record<string, unknown>>
     : []
@@ -1724,7 +1770,7 @@ const buildNestedActionDiagnostics = (
   const byParent: Array<{
     node: string
     nodeId: number
-    timestamp: string
+    ts: string
     nestedGroupCount: number
     nestedGroupFailedCount: number
     nestedActionCount: number
@@ -1741,28 +1787,21 @@ const buildNestedActionDiagnostics = (
   let nestedActionFailedCount = 0
 
   for (const node of withNested) {
-    const groups = node.nested_action_nodes ?? []
-    let groupFailed = 0
-    let actionCount = 0
-    let actionFailed = 0
+    const actionFlowView = buildNodeActionFlowView(node)
+    const groups = actionFlowView.taskItems
+    const nestedActions = actionFlowView.nestedPipelineItems
+    let groupFailed = groups.filter(group => group.status === 'failed').length
+    let actionCount = nestedActions.length
+    let actionFailed = nestedActions.filter(action => action.status === 'failed').length
     const failedNames: string[] = []
 
-    for (const group of groups) {
-      nestedGroupCount += 1
-      if (group.status === 'failed') {
-        nestedGroupFailedCount += 1
-        groupFailed += 1
-      }
-
-      const nestedActions = group.nested_actions ?? []
-      actionCount += nestedActions.length
-      nestedActionCount += nestedActions.length
-      for (const action of nestedActions) {
-        if (action.status === 'failed') {
-          actionFailed += 1
-          nestedActionFailedCount += 1
-          if (action.name) failedNames.push(action.name)
-        }
+    nestedGroupCount += groups.length
+    nestedGroupFailedCount += groupFailed
+    nestedActionCount += actionCount
+    nestedActionFailedCount += actionFailed
+    for (const action of nestedActions) {
+      if (action.status === 'failed' && action.name) {
+        failedNames.push(action.name)
       }
     }
 
@@ -1786,7 +1825,7 @@ const buildNestedActionDiagnostics = (
       byParent.push({
         node: directParentName,
         nodeId: node.node_id,
-        timestamp: node.timestamp,
+        ts: node.ts,
         nestedGroupCount: groups.length,
         nestedGroupFailedCount: groupFailed,
         nestedActionCount: actionCount,
@@ -1830,16 +1869,17 @@ const collectFailureNodes = (task: TaskInfo | null, limit = 24) => {
 
   const rows: Array<Record<string, unknown>> = []
   for (const node of task.nodes) {
+    const nodeRecognitions = buildNodeRecognitionAttempts(node)
     let reason = ''
     if (node.status === 'failed') {
       reason = 'node_failed'
-    } else if (node.recognition_attempts.some(item => item.status === 'failed')) {
+    } else if (nodeRecognitions.some(item => item.status === 'failed')) {
       reason = 'recognition_failed'
     }
 
     if (!reason) continue
 
-    const lastReco = [...node.recognition_attempts].reverse().find(item => item.status === 'failed')
+    const lastReco = [...nodeRecognitions].reverse().find(item => item.status === 'failed')
     rows.push({
       node_id: node.node_id,
       node: node.name,
@@ -1933,7 +1973,7 @@ const buildKnowledgeDigest = (question: string, task: TaskInfo | null) => {
     tokens.push(task.entry)
     for (const node of task.nodes) {
       if (node.status === 'failed') tokens.push(node.name)
-      for (const attempt of node.recognition_attempts) {
+      for (const attempt of buildNodeRecognitionAttempts(node)) {
         if (attempt.status === 'failed') tokens.push(attempt.name)
       }
       if (tokens.length > 30) break
@@ -1994,7 +2034,7 @@ const buildTimelineDiagnostics = (timeline: TimelineNodeItem[]) => {
   const recoIdToName = new Map<number, string>()
 
   for (const node of timeline) {
-    const ts = toTimestampMs(node.timestamp)
+    const ts = toTimestampMs(node.ts)
     const nodeStats = byNodeName.get(node.name) ?? {
       name: node.name,
       occurrences: 0,
@@ -2118,8 +2158,8 @@ const buildTimelineDiagnostics = (timeline: TimelineNodeItem[]) => {
       const runEnd = i - 1
       const count = runEnd - runStart + 1
       if (count >= 2) {
-        const startTs = toTimestampMs(timeline[runStart].timestamp)
-        const endTs = toTimestampMs(timeline[runEnd].timestamp)
+        const startTs = toTimestampMs(timeline[runStart].ts)
+        const endTs = toTimestampMs(timeline[runEnd].ts)
         const spanMs = startTs != null && endTs != null ? Math.max(0, endTs - startTs) : 0
         repeatedRuns.push({
           node: timeline[runStart].name,
@@ -2127,8 +2167,8 @@ const buildTimelineDiagnostics = (timeline: TimelineNodeItem[]) => {
           spanMs,
           fromNodeId: timeline[runStart].node_id,
           toNodeId: timeline[runEnd].node_id,
-          fromTs: timeline[runStart].timestamp,
-          toTs: timeline[runEnd].timestamp,
+          fromTs: timeline[runStart].ts,
+          toTs: timeline[runEnd].ts,
         })
       }
       runStart = i
@@ -2590,28 +2630,21 @@ export function buildAiAnalysisContext(input: BuildAiContextInput): Record<strin
   const fullTaskTimeline: TimelineNodeItem[] = selectedTask
     ? selectedTask.nodes.map(node => ({
       ...(() => {
-        const nestedGroups = node.nested_action_nodes ?? []
-        const nestedActions = nestedGroups.flatMap(group => group.nested_actions ?? [])
-        const nestedRecognitionNodes = node.nested_recognition_in_action ?? []
-        const nestedActionNames = nestedActions.map(item => item.name).filter(Boolean)
+        const actionFlowView = buildNodeActionFlowView(node)
+        const nestedActions = actionFlowView.nestedPipelineItems
+        const nestedRecognitionNodes = actionFlowView.actionLevelRecognitionItems
+        const nestedActionNames = nestedActions.map(item => item.name).filter(Boolean) as string[]
         const nestedRecognitionNames = [
-          ...nestedActions
-            .flatMap(item => item.recognition_attempts ?? [])
-            .map(item => item.name)
-            .filter(Boolean),
-          ...nestedRecognitionNodes
-            .map(item => item.name)
-            .filter(Boolean),
+          ...actionFlowView.nestedRecognitionItems.map(item => item.name).filter(Boolean),
+          ...nestedRecognitionNodes.map(item => item.name).filter(Boolean),
         ]
         return {
           action: node.action_details?.action || '',
           actionName: node.action_details?.name || '',
-          nestedActionGroupCount: nestedGroups.length,
+          nestedActionGroupCount: actionFlowView.taskItems.length,
           nestedActionNodeCount: nestedActions.length,
           nestedActionFailedNodeCount: nestedActions.filter(item => item.status === 'failed').length,
-          nestedRecognitionInActionCount:
-            nestedActions.reduce((sum, item) => sum + (item.recognition_attempts?.length ?? 0), 0) +
-            nestedRecognitionNodes.length,
+          nestedRecognitionInActionCount: actionFlowView.nestedRecognitionItems.length + nestedRecognitionNodes.length,
           nestedActionTopNames: toTopNameCounts(nestedActionNames),
           nestedRecognitionTopNames: toTopNameCounts(nestedRecognitionNames),
         }
@@ -2619,8 +2652,8 @@ export function buildAiAnalysisContext(input: BuildAiContextInput): Record<strin
       node_id: node.node_id,
       name: node.name,
       status: node.status,
-      timestamp: node.timestamp,
-      recognition: node.recognition_attempts.map(item => ({
+      ts: node.ts,
+      recognition: buildNodeRecognitionAttempts(node).map(item => ({
         reco_id: item.reco_id,
         name: item.name,
         status: item.status,

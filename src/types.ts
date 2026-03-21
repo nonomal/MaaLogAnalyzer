@@ -48,9 +48,8 @@ export interface TaskInfo {
 export interface RecognitionAttempt {
   reco_id: number
   name: string
-  timestamp: string
-  start_timestamp?: string
-  end_timestamp?: string
+  ts: string
+  end_ts?: string
   status: 'success' | 'failed'
   reco_details?: RecognitionDetail
   nested_nodes?: RecognitionAttempt[]
@@ -62,9 +61,8 @@ export interface RecognitionAttempt {
 export interface NestedActionGroup {
   task_id: number
   name: string
-  timestamp: string
-  start_timestamp?: string
-  end_timestamp?: string
+  ts: string
+  end_ts?: string
   status: 'success' | 'failed'
   nested_actions: NestedActionNode[]
   task_details?: {
@@ -73,8 +71,8 @@ export interface NestedActionGroup {
     hash?: string
     uuid?: string
     status: 'running' | 'succeeded' | 'failed'
-    start_timestamp?: string
-    end_timestamp?: string
+    ts?: string
+    end_ts?: string
     start_message?: string
     end_message?: string
     start_details?: Record<string, any>
@@ -86,31 +84,27 @@ export interface NestedActionGroup {
 export interface NestedActionNode {
   node_id: number
   name: string
-  timestamp: string
-  start_timestamp?: string
-  end_timestamp?: string
+  ts: string
+  end_ts?: string
   status: 'success' | 'failed'
   reco_details?: RecognitionDetail
   action_details?: ActionDetail
-  recognition_attempts?: RecognitionAttempt[]
+  recognitions?: RecognitionAttempt[]
 }
 
 // 节点信息
 export interface NodeInfo {
   node_id: number
   name: string
-  timestamp: string
-  start_timestamp?: string
-  end_timestamp?: string
+  ts: string
+  end_ts?: string
   status: 'success' | 'failed'
   task_id: number
   reco_details?: RecognitionDetail
   action_details?: ActionDetail
   focus?: any
   next_list: NextListItem[]  // Next 列表
-  recognition_attempts: RecognitionAttempt[]  // 识别尝试历史（包括失败的）
-  nested_action_nodes?: NestedActionGroup[]  // 嵌套的 ActionNode 事件（custom action）
-  nested_recognition_in_action?: RecognitionAttempt[]  // 在 custom action 中产生的 RecognitionNode
+  node_flow?: UnifiedFlowItem[]  // 统一节点流（recognition 在前，action 在后）
   node_details?: {
     action_id: number
     completed: boolean
@@ -137,7 +131,7 @@ export interface MergedRecognitionItem {
   status: 'success' | 'failed' | 'not-recognized'
   isRoundSeparator?: boolean
   roundIndex?: number
-  attemptIndex?: number  // 在 recognition_attempts 中的索引
+  attemptIndex?: number  // 在 recognition flow 中的索引
   attempt?: RecognitionAttempt  // 原始 attempt 对象
   hasNestedNodes?: boolean
 }
@@ -150,8 +144,8 @@ export interface ActionDetail {
   detail: any
   name: string
   success: boolean
-  start_timestamp?: string
-  end_timestamp?: string
+  ts?: string
+  end_ts?: string
 }
 
 export type UnifiedFlowType =
@@ -167,15 +161,13 @@ export interface UnifiedFlowItem {
   type: UnifiedFlowType
   name: string
   status: 'success' | 'failed'
-  timestamp: string
-  start_timestamp?: string
-  end_timestamp?: string
+  ts: string
+  end_ts?: string
   task_id?: number
   node_id?: number
   reco_id?: number
   action_id?: number
   task_details?: NestedActionGroup['task_details']
-  raw?: Record<string, any>
   reco_details?: RecognitionDetail
   action_details?: ActionDetail
   error_image?: string

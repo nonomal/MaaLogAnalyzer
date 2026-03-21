@@ -4,6 +4,7 @@ import { NCard, NButton, NFlex, NText } from 'naive-ui'
 import type { NodeInfo, RecognitionAttempt, MergedRecognitionItem } from '../types'
 import { getSettings } from '../utils/settings'
 import { extractTime } from '../utils/formatDuration'
+import { buildNodeRecognitionAttempts } from '../utils/nodeFlow'
 import NodeCardDetailed from './NodeCardDetailed.vue'
 import NodeCardCompact from './NodeCardCompact.vue'
 import NodeCardTree from './NodeCardTree.vue'
@@ -73,11 +74,11 @@ const isExpanded = (attemptIndex: number) => {
   return value !== undefined ? value : !settings.defaultCollapseNestedRecognition
 }
 
-// 合并 next_list 和 recognition_attempts
+// 合并 next_list 和 node_flow 中的 recognition
 const mergedRecognitionList = computed<MergedRecognitionItem[]>(() => {
   const result: MergedRecognitionItem[] = []
 
-  const attempts = props.node.recognition_attempts ?? []
+  const attempts = buildNodeRecognitionAttempts(props.node)
   const nextList = props.node.next_list ?? []
 
   if (!attempts.length) {
@@ -213,7 +214,7 @@ const actionButtonType = computed<ButtonType>(() => {
             {{ node.name }}
           </n-button>
           <n-text depth="3" style="font-size: 12px">
-            {{ extractTime(node.timestamp) }}
+            {{ extractTime(node.ts) }}
           </n-text>
         </n-flex>
       </template>

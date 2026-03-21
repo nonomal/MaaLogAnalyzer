@@ -11,7 +11,7 @@ import { BulbOutlined, BulbFilled, FileSearchOutlined, BarChartOutlined, ColumnH
 import { version } from '../package.json'
 import { useIsMobile } from './composables/useIsMobile'
 import { formatDuration } from './utils/formatDuration'
-import { buildNodeFlowItems } from './utils/nodeFlow'
+import { buildNodeFlowItems, buildNodeRecognitionFlowItems, buildNodeTaskFlowItems } from './utils/nodeFlow'
 import TourOverlay from './components/TourOverlay.vue'
 import { TOUR_STEPS, TOUR_STORAGE_KEY, TOUR_VERSION } from './tutorial/steps'
 import tutorialSampleLog from './assets/tutorial-sample.log?raw'
@@ -404,44 +404,18 @@ const flattenFlowItems = (items: UnifiedFlowItem[] | undefined, output: UnifiedF
   return output
 }
 
-const hasSyntheticRecognitionId = (node: NodeInfo, flowItemId: string): boolean => {
-  const rootMatch = /^node\.recognition\.(\d+)(.*)$/.exec(flowItemId)
-  if (!rootMatch) return false
-
-  let attempt: any = node.recognition_attempts?.[Number(rootMatch[1])]
-  if (!attempt) return false
-
-  let remaining = rootMatch[2] || ''
-  while (remaining.length > 0) {
-    const nestedMatch = /^\.nested\.(\d+)(.*)$/.exec(remaining)
-    if (!nestedMatch) return false
-    attempt = attempt.nested_nodes?.[Number(nestedMatch[1])]
-    if (!attempt) return false
-    remaining = nestedMatch[2] || ''
-  }
-
-  return true
-}
-
-const hasSyntheticActionId = (node: NodeInfo, flowItemId: string): boolean => {
+const hasMainActionFlowId = (node: NodeInfo, flowItemId: string): boolean => {
   if (/^node\.action\.\d+$/.test(flowItemId)) {
     return !!node.action_details
   }
-
-  const actionRecoMatch = /^node\.action\.recognition\.(\d+)$/.exec(flowItemId)
-  if (actionRecoMatch) {
-    const idx = Number(actionRecoMatch[1])
-    return idx >= 0 && idx < (node.nested_recognition_in_action?.length ?? 0)
-  }
-
   return false
 }
 
 const hasFlowItemId = (node: NodeInfo | null, flowItemId: string | null | undefined): boolean => {
   if (!node || !flowItemId) return false
+  if (flattenFlowItems(buildNodeRecognitionFlowItems(node)).some(item => item.id === flowItemId)) return true
   if (flattenFlowItems(buildNodeFlowItems(node)).some(item => item.id === flowItemId)) return true
-  if (hasSyntheticRecognitionId(node, flowItemId)) return true
-  if (hasSyntheticActionId(node, flowItemId)) return true
+  if (hasMainActionFlowId(node, flowItemId)) return true
   return false
 }
 
@@ -1294,26 +1268,29 @@ const handleSelectNested = (node: NodeInfo, attemptIndex: number, nestedIndex: n
 // 选择嵌套动作节点
 const handleSelectNestedAction = (node: NodeInfo, actionIndex: number, nestedIndex: number) => {
   selectedNode.value = node
-  const nestedAction = node.nested_action_nodes?.[actionIndex]?.nested_actions?.[nestedIndex]
+  const taskItems = buildNodeTaskFlowItems(node)
+  const nestedAction = (taskItems[actionIndex]?.children ?? []).filter(item => item.type === 'pipeline_node')[nestedIndex]
   if (!nestedAction) {
     selectedFlowItemId.value = null
     return
   }
-  selectedFlowItemId.value = pickFlowId(node, `task.${actionIndex}.pipeline.${nestedIndex}.${nestedAction.node_id}`)
+  selectedFlowItemId.value = pickFlowId(node, nestedAction.id)
 }
 
 // 选择嵌套动作中的识别尝试（例如 CCUpdate 下的某次识别）
 const handleSelectNestedActionRecognition = (node: NodeInfo, actionIndex: number, nestedIndex: number, attemptIndex: number) => {
   selectedNode.value = node
-  const nestedAction = node.nested_action_nodes?.[actionIndex]?.nested_actions?.[nestedIndex]
+  const taskItems = buildNodeTaskFlowItems(node)
+  const nestedAction = (taskItems[actionIndex]?.children ?? []).filter(item => item.type === 'pipeline_node')[nestedIndex]
   if (!nestedAction) {
     selectedFlowItemId.value = null
     return
   }
-  selectedFlowItemId.value = pickFlowId(
-    node,
-    `task.${actionIndex}.pipeline.${nestedIndex}.${nestedAction.node_id}.recognition.${attemptIndex}`
+  const recognitionItems = (nestedAction.children ?? []).filter(item =>
+    item.type === 'recognition' || item.type === 'recognition_node'
   )
+  const target = recognitionItems[attemptIndex]
+  selectedFlowItemId.value = target ? pickFlowId(node, target.id) : null
 }
 
 // 选择任意 flow item（用于深层嵌套识别）

@@ -54,66 +54,7 @@ const pickFirstErrorImage = (items: UnifiedFlowItem[] | undefined): string | nul
   return null
 }
 
-const toRecognitionFlowItem = (
-  flowItemId: string,
-  attempt: any,
-  type: 'recognition' | 'recognition_node'
-): UnifiedFlowItem => {
-  return {
-    id: flowItemId,
-    type,
-    name: attempt.name || '',
-    status: attempt.status === 'success' ? 'success' : 'failed',
-    timestamp: attempt.timestamp || attempt.start_timestamp || attempt.end_timestamp || '',
-    start_timestamp: attempt.start_timestamp,
-    end_timestamp: attempt.end_timestamp,
-    reco_id: attempt.reco_id,
-    reco_details: attempt.reco_details,
-    error_image: attempt.error_image,
-    vision_image: attempt.vision_image,
-    raw: {
-      reco_id: attempt.reco_id,
-      name: attempt.name,
-      timestamp: attempt.timestamp,
-      start_timestamp: attempt.start_timestamp,
-      end_timestamp: attempt.end_timestamp,
-      status: attempt.status,
-    },
-  }
-}
-
-const resolveRecognitionPath = (node: NodeInfo, flowItemId: string): UnifiedFlowItem | null => {
-  const rootMatch = /^node\.recognition\.(\d+)(.*)$/.exec(flowItemId)
-  if (!rootMatch) return null
-
-  let attempt: any = node.recognition_attempts?.[Number(rootMatch[1])]
-  if (!attempt) return null
-
-  let remaining = rootMatch[2] || ''
-  let isNested = false
-  while (remaining.length > 0) {
-    const nestedMatch = /^\.nested\.(\d+)(.*)$/.exec(remaining)
-    if (!nestedMatch) return null
-    attempt = attempt.nested_nodes?.[Number(nestedMatch[1])]
-    if (!attempt) return null
-    remaining = nestedMatch[2] || ''
-    isNested = true
-  }
-
-  return toRecognitionFlowItem(flowItemId, attempt, isNested ? 'recognition_node' : 'recognition')
-}
-
 const resolveSyntheticFlowItem = (node: NodeInfo, flowItemId: string): UnifiedFlowItem | null => {
-  const recognitionItem = resolveRecognitionPath(node, flowItemId)
-  if (recognitionItem) return recognitionItem
-
-  const actionRecoMatch = /^node\.action\.recognition\.(\d+)$/.exec(flowItemId)
-  if (actionRecoMatch) {
-    const attempt = node.nested_recognition_in_action?.[Number(actionRecoMatch[1])]
-    if (!attempt) return null
-    return toRecognitionFlowItem(flowItemId, attempt, 'recognition_node')
-  }
-
   if (/^node\.action\.\d+$/.test(flowItemId) && node.action_details) {
     const action = node.action_details
     return {
@@ -121,12 +62,10 @@ const resolveSyntheticFlowItem = (node: NodeInfo, flowItemId: string): UnifiedFl
       type: 'action',
       name: action.name || node.name,
       status: action.success ? 'success' : 'failed',
-      timestamp: action.start_timestamp || action.end_timestamp || node.end_timestamp || node.timestamp,
-      start_timestamp: action.start_timestamp,
-      end_timestamp: action.end_timestamp,
+      ts: action.ts || action.end_ts || node.end_ts || node.ts,
+      end_ts: action.end_ts,
       action_id: action.action_id,
       action_details: action,
-      raw: { ...action },
     }
   }
 
@@ -165,7 +104,8 @@ const pickStartTime = (startTimestamp?: string | null, fallbackTimestamp?: strin
 
 const toFallbackRecognition = (source: any) => {
   if (!source) return null
-  const recoId = typeof source.reco_id === 'number' ? source.reco_id : Number(source.reco_id)
+  const rawRecoId = source?.reco_details?.reco_id ?? source?.reco_id
+  const recoId = typeof rawRecoId === 'number' ? rawRecoId : Number(rawRecoId)
   return {
     reco_id: Number.isFinite(recoId) ? recoId : 0,
     algorithm: 'Unknown',
@@ -186,7 +126,7 @@ const currentAttempt = computed(() => currentRecognitionItem.value)
 
 const recognitionExecutionTime = computed(() => {
   const recognition = currentRecognitionItem.value as any
-  return pickStartTime(recognition?.start_timestamp, recognition?.timestamp, recognition?.end_timestamp)
+  return pickStartTime(recognition?.ts, recognition?.end_ts)
 })
 
 // 当前显示的识别详情（可能是选中的识别尝试、嵌套节点，或节点的最终识别）
@@ -220,8 +160,8 @@ const currentActionDetails = computed(() => {
     detail: {},
     name: action.name,
     success: action.status === 'success',
-    start_timestamp: action.start_timestamp,
-    end_timestamp: action.end_timestamp,
+    ts: action.ts,
+    end_ts: action.end_ts,
   }
 })
 
@@ -230,19 +170,19 @@ const hasAction = computed(() => !!currentActionDetails.value)
 const actionExecutionTime = computed(() => {
   const actionItem = currentActionItem.value as any
   const actionDetails = currentActionDetails.value as any
-  if (actionDetails?.start_timestamp || actionDetails?.end_timestamp) {
-    return pickStartTime(actionDetails.start_timestamp, actionDetails.end_timestamp)
+  if (actionDetails?.ts || actionDetails?.end_ts) {
+    return pickStartTime(actionDetails.ts, actionDetails.end_ts)
   }
-  return pickStartTime(actionItem?.start_timestamp, actionItem?.timestamp, actionItem?.end_timestamp)
+  return pickStartTime(actionItem?.ts, actionItem?.end_ts)
 })
 
 const selectedFlowExecutionTime = computed(() => {
   const selected = selectedFlowItem.value as any
-  return pickStartTime(selected?.start_timestamp, selected?.timestamp, selected?.end_timestamp)
+  return pickStartTime(selected?.ts, selected?.end_ts)
 })
 
 const nodeExecutionTime = computed(() => {
-  return pickStartTime(props.selectedNode?.start_timestamp, props.selectedNode?.timestamp, props.selectedNode?.end_timestamp)
+  return pickStartTime(props.selectedNode?.ts, props.selectedNode?.end_ts)
 })
 
 const showFlowFallback = computed(() => {

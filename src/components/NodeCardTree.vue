@@ -3,7 +3,7 @@ import { computed, ref, watch } from 'vue'
 import { NButton, NFlex, NText } from 'naive-ui'
 import { CheckCircleOutlined, CloseCircleOutlined } from '@vicons/antd'
 import type { NodeInfo, MergedRecognitionItem, RecognitionAttempt, UnifiedFlowItem } from '../types'
-import { buildNodeFlowItems } from '../utils/nodeFlow'
+import { buildNodeActionFlowItems, buildNodeActionLevelRecognitionItems } from '../utils/nodeFlow'
 
 const props = defineProps<{
   node: NodeInfo
@@ -129,11 +129,13 @@ const flattenFlowItemsForTree = (
   return rows
 }
 
-const rootFlowItems = computed(() => buildNodeFlowItems(props.node))
-const flowRows = computed(() => flattenFlowItemsForTree(rootFlowItems.value, isFlowItemExpanded))
+const actionLevelRecognitionItems = computed(() => buildNodeActionLevelRecognitionItems(props.node))
+const taskFlowItems = computed(() =>
+  buildNodeActionFlowItems(props.node).filter(item => item.type !== 'recognition_node')
+)
+const flowRows = computed(() => flattenFlowItemsForTree(taskFlowItems.value, isFlowItemExpanded))
 const isRecognitionExpanded = computed(() => props.recognitionExpanded ?? true)
 const isActionExpanded = computed(() => props.actionExpanded ?? true)
-const actionLevelRecognitions = computed(() => props.node.nested_recognition_in_action ?? [])
 
 const getFlowItemButtonType = (item: UnifiedFlowItem): 'success' | 'warning' | 'error' | 'info' => {
   if (item.status === 'success') return 'success'
@@ -294,24 +296,24 @@ const getFlowItemTypeLabel = (type: UnifiedFlowItem['type']) => {
       </n-flex>
     </div>
 
-    <ul v-if="isActionExpanded && (actionLevelRecognitions.length > 0 || flowRows.length > 0)" class="tree-list">
+    <ul v-if="isActionExpanded && (actionLevelRecognitionItems.length > 0 || flowRows.length > 0)" class="tree-list">
       <li
-        v-for="(attempt, attemptIndex) in actionLevelRecognitions"
+        v-for="(item, attemptIndex) in actionLevelRecognitionItems"
         :key="`tree-action-reco-${attemptIndex}`"
         class="tree-item"
       >
         <n-button
           text
           size="tiny"
-          :type="attempt.status === 'success' ? 'success' : 'warning'"
+          :type="item.status === 'success' ? 'success' : 'warning'"
           style="margin-left: 12px"
           @click="emit('select-action-recognition', node, attemptIndex)"
         >
           <template #icon>
-            <check-circle-outlined v-if="attempt.status === 'success'" />
+            <check-circle-outlined v-if="item.status === 'success'" />
             <close-circle-outlined v-else />
           </template>
-          [RecNode] {{ attempt.name }}
+          [RecNode] {{ item.name }}
         </n-button>
       </li>
 

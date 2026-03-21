@@ -225,7 +225,7 @@ describe('buildDeterministicFindings', () => {
             {
               node: 'CCBuyCard',
               nodeId: 33001,
-              timestamp: '2026-03-18 10:00:00.000',
+              ts: '2026-03-18 10:00:00.000',
               nestedGroupCount: 2,
               nestedGroupFailedCount: 1,
               nestedActionCount: 5,
@@ -695,16 +695,24 @@ describe('buildAiAnalysisContext', () => {
         {
           node_id: 1001,
           name: 'MainNode',
-          timestamp: '2026-03-18 13:00:01.200',
+          ts: '2026-03-18 13:00:01.200',
           status: 'failed',
           task_id: 42,
           next_list: [{ name: 'FallbackNode', anchor: false, jump_back: false }],
-          recognition_attempts: [
+          node_flow: [
             {
-              reco_id: 5001,
+              id: 'node.recognition.0',
+              type: 'recognition',
               name: 'RecoA',
-              timestamp: '2026-03-18 13:00:01.050',
               status: 'failed',
+              ts: '2026-03-18 13:00:01.050',
+              reco_details: {
+                reco_id: 5001,
+                algorithm: 'TemplateMatch',
+                box: null,
+                detail: {},
+                name: 'RecoA',
+              },
             },
           ],
         },
@@ -755,39 +763,98 @@ describe('buildAiAnalysisContext', () => {
         {
           node_id: 7701,
           name: 'CCFlagInCombatMain',
-          timestamp: '2026-03-18 14:00:00.100',
+          ts: '2026-03-18 14:00:00.100',
           status: 'success',
           task_id: 77,
           next_list: [{ name: 'CCBuyCard', anchor: false, jump_back: true }],
-          recognition_attempts: [
-            { reco_id: 8701, name: 'CCBuyCard', timestamp: '2026-03-18 14:00:00.120', status: 'success' },
+          node_flow: [
+            {
+              id: 'node.recognition.0',
+              type: 'recognition',
+              name: 'CCBuyCard',
+              ts: '2026-03-18 14:00:00.120',
+              status: 'success',
+              reco_details: {
+                reco_id: 8701,
+                algorithm: 'TemplateMatch',
+                box: null,
+                detail: {},
+                name: 'CCBuyCard',
+              },
+            },
           ],
         },
         {
           node_id: 7702,
           name: 'CCBuyCard',
-          timestamp: '2026-03-18 14:00:00.300',
+          ts: '2026-03-18 14:00:00.300',
           status: 'success',
           task_id: 77,
           action_details: { action_id: 9701, action: 'Custom', box: [0, 0, 0, 0], detail: null, name: 'CCBuyCard', success: true },
           next_list: [],
-          recognition_attempts: [
-            { reco_id: 8702, name: 'CritterCrash', timestamp: '2026-03-18 14:00:00.310', status: 'failed' },
-          ],
-          nested_action_nodes: [
+          node_flow: [
             {
-              task_id: 177,
-              name: 'SubTask',
-              timestamp: '2026-03-18 14:00:00.320',
+              id: 'node.recognition.0',
+              type: 'recognition',
+              name: 'CritterCrash',
+              ts: '2026-03-18 14:00:00.310',
+              status: 'failed',
+              reco_details: {
+                reco_id: 8702,
+                algorithm: 'TemplateMatch',
+                box: null,
+                detail: {},
+                name: 'CritterCrash',
+              },
+            },
+            {
+              id: 'node.action.9701',
+              type: 'action',
+              name: 'CCBuyCard',
+              ts: '2026-03-18 14:00:00.320',
               status: 'success',
-              nested_actions: [
+              action_details: {
+                action_id: 9701,
+                action: 'Custom',
+                box: [0, 0, 0, 0],
+                detail: null,
+                name: 'CCBuyCard',
+                success: true,
+              },
+              children: [
                 {
-                  node_id: 17701,
-                  name: 'SubActionNode',
-                  timestamp: '2026-03-18 14:00:00.321',
+                  id: 'node.task.0.177',
+                  type: 'task',
+                  task_id: 177,
+                  name: 'SubTask',
+                  ts: '2026-03-18 14:00:00.320',
                   status: 'success',
-                  recognition_attempts: [
-                    { reco_id: 18701, name: 'SubReco', timestamp: '2026-03-18 14:00:00.322', status: 'success' },
+                  children: [
+                    {
+                      id: 'task.0.pipeline.0.17701',
+                      type: 'pipeline_node',
+                      task_id: 177,
+                      node_id: 17701,
+                      name: 'SubActionNode',
+                      ts: '2026-03-18 14:00:00.321',
+                      status: 'success',
+                      children: [
+                        {
+                          id: 'task.0.pipeline.0.17701.recognition.0',
+                          type: 'recognition',
+                          name: 'SubReco',
+                          ts: '2026-03-18 14:00:00.322',
+                          status: 'success',
+                          reco_details: {
+                            reco_id: 18701,
+                            algorithm: 'TemplateMatch',
+                            box: null,
+                            detail: {},
+                            name: 'SubReco',
+                          },
+                        },
+                      ],
+                    },
                   ],
                 },
               ],
@@ -837,23 +904,36 @@ describe('buildAiAnalysisContext', () => {
         {
           node_id: 8801,
           name: 'ParentNode',
-          timestamp: '2026-03-18 15:00:01.000',
+          ts: '2026-03-18 15:00:01.000',
           status: 'success',
           task_id: 88,
           next_list: [],
-          recognition_attempts: [],
-          nested_action_nodes: [
+          node_flow: [
             {
-              task_id: 188,
-              name: 'SubTaskA',
-              timestamp: '2026-03-18 15:00:01.100',
+              id: 'node.action.8801',
+              type: 'action',
+              name: 'ParentNode',
+              ts: '2026-03-18 15:00:01.100',
               status: 'failed',
-              nested_actions: [
+              children: [
                 {
-                  node_id: 18801,
-                  name: 'SubActionA',
-                  timestamp: '2026-03-18 15:00:01.110',
+                  id: 'node.task.0.188',
+                  type: 'task',
+                  task_id: 188,
+                  name: 'SubTaskA',
+                  ts: '2026-03-18 15:00:01.100',
                   status: 'failed',
+                  children: [
+                    {
+                      id: 'task.0.pipeline.0.18801',
+                      type: 'pipeline_node',
+                      task_id: 188,
+                      node_id: 18801,
+                      name: 'SubActionA',
+                      ts: '2026-03-18 15:00:01.110',
+                      status: 'failed',
+                    },
+                  ],
                 },
               ],
             },
@@ -897,23 +977,36 @@ describe('buildAiAnalysisContext', () => {
         {
           node_id: 8901,
           name: 'CCBuyCard',
-          timestamp: '2026-03-18 15:10:01.000',
+          ts: '2026-03-18 15:10:01.000',
           status: 'success',
           task_id: 89,
           next_list: [],
-          recognition_attempts: [],
-          nested_action_nodes: [
+          node_flow: [
             {
-              task_id: 189,
-              name: 'CCUpdate',
-              timestamp: '2026-03-18 15:10:01.100',
+              id: 'node.action.8901',
+              type: 'action',
+              name: 'CCBuyCard',
+              ts: '2026-03-18 15:10:01.100',
               status: 'failed',
-              nested_actions: [
+              children: [
                 {
-                  node_id: 18901,
-                  name: 'CCUpdateAction',
-                  timestamp: '2026-03-18 15:10:01.110',
+                  id: 'node.task.0.189',
+                  type: 'task',
+                  task_id: 189,
+                  name: 'CCUpdate',
+                  ts: '2026-03-18 15:10:01.100',
                   status: 'failed',
+                  children: [
+                    {
+                      id: 'task.0.pipeline.0.18901',
+                      type: 'pipeline_node',
+                      task_id: 189,
+                      node_id: 18901,
+                      name: 'CCUpdateAction',
+                      ts: '2026-03-18 15:10:01.110',
+                      status: 'failed',
+                    },
+                  ],
                 },
               ],
             },
@@ -976,7 +1069,7 @@ describe('buildAiAnalysisContext', () => {
         {
           node_id: 9001,
           name: 'CCFlagInCombatMain',
-          timestamp: '2026-03-18 15:20:01.000',
+          ts: '2026-03-18 15:20:01.000',
           status: 'success',
           task_id: 90,
           action_details: {
@@ -988,19 +1081,40 @@ describe('buildAiAnalysisContext', () => {
             success: false,
           },
           next_list: [],
-          recognition_attempts: [],
-          nested_action_nodes: [
+          node_flow: [
             {
-              task_id: 190,
-              name: 'CCUpdate',
-              timestamp: '2026-03-18 15:20:01.100',
+              id: 'node.action.90011',
+              type: 'action',
+              name: 'CCBuyCard',
+              ts: '2026-03-18 15:20:01.100',
               status: 'failed',
-              nested_actions: [
+              action_details: {
+                action_id: 90011,
+                action: 'Click',
+                box: [0, 0, 0, 0],
+                detail: null,
+                name: 'CCBuyCard',
+                success: false,
+              },
+              children: [
                 {
-                  node_id: 19001,
-                  name: 'CCUpdateAction',
-                  timestamp: '2026-03-18 15:20:01.110',
+                  id: 'node.task.0.190',
+                  type: 'task',
+                  task_id: 190,
+                  name: 'CCUpdate',
+                  ts: '2026-03-18 15:20:01.100',
                   status: 'failed',
+                  children: [
+                    {
+                      id: 'task.0.pipeline.0.19001',
+                      type: 'pipeline_node',
+                      task_id: 190,
+                      node_id: 19001,
+                      name: 'CCUpdateAction',
+                      ts: '2026-03-18 15:20:01.110',
+                      status: 'failed',
+                    },
+                  ],
                 },
               ],
             },
