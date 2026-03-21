@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue'
 import { NButton, NCard, NCheckbox, NEmpty, NFlex, NInput, NModal, NScrollbar, NTag, NText, useMessage } from 'naive-ui'
-import type { TaskInfo } from '../types'
+import type { NodeInfo, TaskInfo } from '../types'
 import { requestChatCompletion, type ChatCompletionResult } from '../ai/client'
 import {
   buildAiAnalysisContext,
@@ -11,11 +11,13 @@ import {
   type AiLoadedTarget,
 } from '../ai/contextBuilder'
 import { tryParseStructuredOutput, type StructuredAiOutput } from '../ai/structuredOutput'
-import { getAiSettings, getSessionApiKey, setSessionApiKey } from '../utils/aiSettings'
+import { getAiSettings, getSessionApiKey, saveAiSettings, setSessionApiKey } from '../utils/aiSettings'
 
 interface Props {
   tasks: TaskInfo[]
   selectedTask: TaskInfo | null
+  selectedNode: NodeInfo | null
+  selectedFlowItemId?: string | null
   loadedTargets: AiLoadedTarget[]
   loadedDefaultTargetId: string
 }
@@ -314,9 +316,34 @@ const sourceLabel = computed(() => {
   return props.loadedTargets[0].fileName || props.loadedTargets[0].label
 })
 
+const selectedNodeFocusEnabled = computed(() => settings.includeSelectedNodeFocus)
+const effectiveSelectedNode = computed(() => (selectedNodeFocusEnabled.value ? props.selectedNode : null))
+const effectiveSelectedFlowItemId = computed(() => (selectedNodeFocusEnabled.value ? (props.selectedFlowItemId ?? null) : null))
+const selectedNodeFocusDetail = computed(() => {
+  if (!selectedNodeFocusEnabled.value) {
+    return '仅发送任务级上下文。'
+  }
+  if (!effectiveSelectedNode.value) {
+    return '当前未选中节点，按任务级上下文分析。'
+  }
+  const task = props.selectedTask
+  const flowPart = effectiveSelectedFlowItemId.value ? ` · 流项: ${effectiveSelectedFlowItemId.value}` : ''
+  if (task && task.task_id === effectiveSelectedNode.value.task_id) {
+    return `已聚焦节点 #${effectiveSelectedNode.value.node_id} ${effectiveSelectedNode.value.name}${flowPart}`
+  }
+  return `已聚焦任务 #${effectiveSelectedNode.value.task_id} 的节点 #${effectiveSelectedNode.value.node_id} ${effectiveSelectedNode.value.name}${flowPart}`
+})
+
 watch(apiKey, (value) => {
   setSessionApiKey(value)
 })
+
+watch(
+  () => settings.includeSelectedNodeFocus,
+  () => {
+    saveAiSettings(settings)
+  }
+)
 
 watch(memoryStateStore, (value) => {
   saveSessionMemoryStateStore(value)
@@ -328,10 +355,16 @@ watch(conversationTurns, (value) => {
 
 const buildContextKey = (): string => {
   const task = props.selectedTask
+  const focusNode = effectiveSelectedNode.value
+  const focusNodePart = focusNode
+    ? `focusNode:${focusNode.node_id}@${focusNode.timestamp}`
+    : 'focusNode:none'
+  const focusFlowPart = `focusFlow:${effectiveSelectedFlowItemId.value ?? 'none'}`
+  const focusModePart = `focusMode:${selectedNodeFocusEnabled.value ? 'enabled' : 'disabled'}`
   const source = sourceLabel.value
 
   if (!task) {
-    return `none|tasks:${props.tasks.length}|source:${source}`
+    return `none|tasks:${props.tasks.length}|${focusModePart}|${focusNodePart}|${focusFlowPart}|source:${source}`
   }
 
   const tailNode = task.nodes.length > 0 ? task.nodes[task.nodes.length - 1] : null
@@ -341,6 +374,9 @@ const buildContextKey = (): string => {
     `nodes:${task.nodes.length}`,
     `tailNode:${tailNode?.node_id ?? -1}`,
     `tailTs:${tailNode?.timestamp ?? task.end_time ?? task.start_time}`,
+    focusModePart,
+    focusNodePart,
+    focusFlowPart,
     `source:${source}`,
   ].join('|')
 }
@@ -921,6 +957,8 @@ const getSystemPrompt = (profile: AnalysisPromptProfile, focusMode: AnalysisFocu
       '{"answer":"...","memory_update":"..."}',
       'answer 必须是 Markdown。',
       '追问场景优先“先答问题，再补依据”，除非用户明确要求，否则不要强制输出“结论/根因候选/证据/排查步骤”四段模板。',
+      '若上下文提供 selectedNodeFocus，必须先给“节点级结论”（当前选中节点/流项），再补任务级影响。',
+      '识别/动作/任务归属必须以解析顺序为准，不能仅按时间先后推断父子关系。',
       '若上下文提供量化数据，应优先引用关键数字支持判断。',
       '若涉及 on_error / jump_back / nested action 关系，必须明确区分触发源、直接父节点与上游来源节点。',
       '证据描述面向用户可读，禁止输出内部字段路径（例如 timelineDiagnostics.longStayNodes[0]）。',
@@ -939,6 +977,8 @@ const getSystemPrompt = (profile: AnalysisPromptProfile, focusMode: AnalysisFocu
       '## 结论',
       '## on_error 触发链路',
       '## 最小修复步骤',
+      '若上下文提供 selectedNodeFocus，结论段先输出当前选中节点/流项的 on_error 判断，再扩展任务级影响。',
+      '识别/动作/任务归属必须以解析顺序为准，不能仅按时间先后推断父子关系。',
       '必须明确写出：触发源类型（action_failed / reco_timeout_or_nohit / error_handling_loop）、触发节点、后续结果（是否恢复/是否任务失败）。',
       '若任务最终成功，必须区分“局部失败被恢复”与“任务级失败”。',
       '证据必须给 E1/E2...，每条写“关键数值 + 结论”，禁止输出内部字段路径文本。',
@@ -958,6 +998,8 @@ const getSystemPrompt = (profile: AnalysisPromptProfile, focusMode: AnalysisFocu
       '## 结论',
       '## Top 识别热点',
       '## 验证与修复步骤',
+      '若上下文提供 selectedNodeFocus，必须先量化当前选中节点/流项，再给任务级 Top3 热点。',
+      '识别/动作/任务归属必须以解析顺序为准，不能仅按时间先后推断父子关系。',
       '必须先量化输出 Top3 识别热点（失败次数、总次数、失败率、所在节点）。',
       '必须区分“前段 miss 后恢复”与“整轮无命中并失败/超时”，不得把前者直接当根因。',
       '证据必须给 E1/E2...，每条写“关键数值 + 结论”，禁止输出内部字段路径文本。',
@@ -977,6 +1019,8 @@ const getSystemPrompt = (profile: AnalysisPromptProfile, focusMode: AnalysisFocu
     '## 根因候选（按概率排序）',
     '## 证据',
     '## 排查步骤（可直接执行）',
+    '若上下文提供 selectedNodeFocus，必须先输出“当前选中节点/流项”的节点级结论，再扩展到任务级结论。',
+    '识别/动作/任务归属必须以解析顺序为准，不能仅按时间先后推断父子关系。',
     '在下结论前，必须先做“量化盘点”：至少引用长停留节点统计与识别失败分布统计。',
     '若存在“确定性结论摘要”，优先基于它构建结论骨架，再补充细节证据。',
     '必须优先区分“流程现象”与“真实失败”：若任务成功且无节点最终失败事件，不得把循环/重试直接当根因。',
@@ -1012,6 +1056,7 @@ const buildCompactContext = (context: Record<string, unknown>): Record<string, u
   const anchorResolutionDiagnosticsRaw = (context.anchorResolutionDiagnostics as Record<string, unknown> | undefined) ?? {}
   const jumpBackFlowDiagnosticsRaw = (context.jumpBackFlowDiagnostics as Record<string, unknown> | undefined) ?? {}
   const nestedActionDiagnosticsRaw = (context.nestedActionDiagnostics as Record<string, unknown> | undefined) ?? {}
+  const selectedNodeFocusRaw = (context.selectedNodeFocus as Record<string, unknown> | null | undefined) ?? null
 
   const selectedNodeTimeline = toObjectArray(context.selectedNodeTimeline)
     .slice(-40)
@@ -1100,8 +1145,31 @@ const buildCompactContext = (context: Record<string, unknown>): Record<string, u
     topParentNodes: toObjectArray(nestedActionDiagnosticsRaw.topParentNodes).slice(0, 6),
   }
 
+  const selectedNodeFocus = (() => {
+    if (!selectedNodeFocusRaw || typeof selectedNodeFocusRaw !== 'object') return selectedNodeFocusRaw ?? null
+    const nodeRaw = (selectedNodeFocusRaw.node as Record<string, unknown> | undefined) ?? {}
+    const selectedFlowItemRaw = (selectedNodeFocusRaw.selectedFlowItem as Record<string, unknown> | null | undefined) ?? null
+    return {
+      ...selectedNodeFocusRaw,
+      node: {
+        ...nodeRaw,
+        nextListPreview: toObjectArray(nodeRaw.nextListPreview).slice(0, 6),
+        topRecognitionNames: toObjectArray(nodeRaw.topRecognitionNames).slice(0, 6),
+        topNestedRecognitionNames: toObjectArray(nodeRaw.topNestedRecognitionNames).slice(0, 6),
+        topNestedActionNames: toObjectArray(nodeRaw.topNestedActionNames).slice(0, 6),
+      },
+      selectedFlowItem: selectedFlowItemRaw
+        ? {
+            ...selectedFlowItemRaw,
+            ancestry: toObjectArray(selectedFlowItemRaw.ancestry).slice(0, 8),
+          }
+        : selectedFlowItemRaw,
+    }
+  })()
+
   return {
     ...context,
+    selectedNodeFocus,
     taskOverview: toObjectArray(context.taskOverview).slice(-10),
     selectedNodeTimeline,
     selectedEventTail: toObjectArray(context.selectedEventTail).slice(-20),
@@ -1143,6 +1211,8 @@ const buildFullContextPrompt = (compact: boolean, minifiedJson = false, focusMod
   const rawContext = buildAiAnalysisContext({
     tasks: props.tasks,
     selectedTask: props.selectedTask,
+    selectedNode: effectiveSelectedNode.value,
+    selectedFlowItemId: effectiveSelectedFlowItemId.value,
     question: question.value,
     loadedTargets: props.loadedTargets,
     loadedDefaultTargetId: props.loadedDefaultTargetId,
@@ -1174,6 +1244,8 @@ const buildFullContextPrompt = (compact: boolean, minifiedJson = false, focusMod
     '- 必须检查 anchor 解析诊断与 jump_back 回跳诊断，区分锚点未解析、回跳命中后未回跳等控制流语义。',
     '- 必须额外检查 jump_back 命中后“回到父节点但命中节点疑似无后继”的复检链路，判断其是否导致长停留。',
     '- 若存在 questionNodeDiagnostics，先输出该节点的定量数据，再给结论。',
+    '- 若存在 selectedNodeFocus，必须先做节点级结论（当前选中节点/流项），再给任务级结论。',
+    '- 识别/动作/任务归属必须采用解析顺序规则，禁止只按时间先后推断。',
     '- 仅把 next 识别链路 / 动作失败链路作为补充证据，不可替代 on_error 触发链路。',
     '- 若存在确定性结论摘要，至少引用其中 1 条并映射到 E 证据编号。',
     '- 输出面向用户可读，禁止出现 timelineDiagnostics.xxx 这类字段路径文本。',
@@ -1589,7 +1661,11 @@ const runRequest = async (mode: 'test' | 'analyze') => {
         : focusMode === 'hotspot'
           ? '识别热点专项'
           : ''
-      return focusLabel ? `${scope} · ${profileLabel} · ${focusLabel}` : `${scope} · ${profileLabel}`
+      const nodeFocusLabel = selectedNodeFocusEnabled.value
+        ? (effectiveSelectedNode.value ? '节点焦点' : '任务级(未选节点)')
+        : '任务级(焦点关闭)'
+      const base = focusLabel ? `${scope} · ${profileLabel} · ${focusLabel}` : `${scope} · ${profileLabel}`
+      return `${base} · ${nodeFocusLabel}`
     })()
     : '连接测试'
   const buildTokenStatsSuffix = () => {
@@ -1818,7 +1894,7 @@ const handleAnalyze = async () => {
           <n-card size="small" :bordered="true">
             <n-flex vertical style="gap: 6px">
               <n-flex align="center" justify="space-between" style="gap: 8px; flex-wrap: wrap">
-                <n-text depth="3" style="font-size: 12px">全局 AI 配置（在“设置”页统一修改）</n-text>
+                <n-text depth="3" style="font-size: 12px">全局 AI 配置（可在“设置”页统一修改）</n-text>
                 <n-button text size="tiny" @click="globalSettingsCollapsed = !globalSettingsCollapsed">
                   {{ globalSettingsCollapsed ? '展开' : '收起' }}
                 </n-button>
@@ -1839,7 +1915,7 @@ const handleAnalyze = async () => {
                   最大输出：{{ settings.maxTokens }} · 自动截断重试（提额）：{{ settings.maxTokensAuto ? '开' : '关' }}
                 </n-text>
                 <n-text depth="3" style="font-size: 12px">
-                  知识包：{{ settings.includeKnowledgePack ? '开' : '关' }} · 信号线：{{ settings.includeSignalLines ? '开' : '关' }} · 流式：{{ settings.streamResponse ? '开' : '关' }}
+                  知识包：{{ settings.includeKnowledgePack ? '开' : '关' }} · 信号线：{{ settings.includeSignalLines ? '开' : '关' }} · 节点焦点：{{ settings.includeSelectedNodeFocus ? '开' : '关' }} · 流式：{{ settings.streamResponse ? '开' : '关' }}
                 </n-text>
                 <n-text depth="3" style="font-size: 12px">
                   截断精简重试：{{ settings.truncateAutoRetryEnabled ? '开' : '关' }} · 精简上限：{{ settings.conciseAnswerMaxChars }} 字
@@ -1849,6 +1925,7 @@ const handleAnalyze = async () => {
           </n-card>
 
           <n-checkbox v-model:checked="memoryModeEnabled">启用上下文记忆模式（追问时不重复发送全量 JSON）</n-checkbox>
+          <n-checkbox v-model:checked="settings.includeSelectedNodeFocus">注入选中节点焦点上下文</n-checkbox>
 
           <n-flex align="center" style="gap: 8px; flex-wrap: wrap">
             <n-tag :type="memoryApplicable ? 'success' : 'default'">{{ memoryStatusText }}</n-tag>
@@ -1865,6 +1942,12 @@ const handleAnalyze = async () => {
             <n-flex vertical style="gap: 6px">
               <n-text depth="3">当前任务：{{ selectedTaskTitle }}</n-text>
               <n-text depth="3">当前日志源：{{ sourceLabel }}</n-text>
+              <n-flex align="center" style="gap: 6px; flex-wrap: wrap">
+                <n-tag size="small" :type="selectedNodeFocusEnabled ? 'success' : 'default'">
+                  {{ selectedNodeFocusEnabled ? '节点焦点：开' : '节点焦点：关' }}
+                </n-tag>
+                <n-text depth="3" style="font-size: 12px">{{ selectedNodeFocusDetail }}</n-text>
+              </n-flex>
             </n-flex>
           </n-card>
 

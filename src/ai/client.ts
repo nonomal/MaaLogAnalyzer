@@ -356,11 +356,14 @@ export async function requestChatCompletion(options: ChatCompletionOptions): Pro
   let maxTokens = typeof options.maxTokens === 'number' && Number.isFinite(options.maxTokens) && options.maxTokens > 0
     ? Math.floor(options.maxTokens)
     : undefined
+  let useStream = stream
   let useResponseFormatJson = options.responseFormatJson ?? false
-  let useStreamUsage = stream
+  let useStreamUsage = useStream
   let retriedLength = false
   let fallbackResponseFormat = false
   let fallbackStreamUsage = false
+  let fallbackNoContentStream = false
+  let fallbackNoContentJson = false
   let networkRetryCount = 0
 
   while (true) {
@@ -368,7 +371,7 @@ export async function requestChatCompletion(options: ChatCompletionOptions): Pro
       model,
       messages: options.messages,
       temperature: options.temperature ?? 0.2,
-      stream,
+      stream: useStream,
     }
     if (typeof maxTokens === 'number' && maxTokens > 0) {
       payload.max_tokens = maxTokens
@@ -376,7 +379,7 @@ export async function requestChatCompletion(options: ChatCompletionOptions): Pro
     if (useResponseFormatJson) {
       payload.response_format = { type: 'json_object' }
     }
-    if (stream && useStreamUsage) {
+    if (useStream && useStreamUsage) {
       payload.stream_options = { include_usage: true }
     }
 
@@ -385,8 +388,8 @@ export async function requestChatCompletion(options: ChatCompletionOptions): Pro
         baseUrl,
         apiKey,
         payload,
-        stream,
-        onDelta: options.onDelta,
+        stream: useStream,
+        onDelta: useStream ? options.onDelta : undefined,
         timeoutMs,
       })
 
@@ -408,7 +411,7 @@ export async function requestChatCompletion(options: ChatCompletionOptions): Pro
           continue
         }
 
-        if (stream && useStreamUsage && !fallbackStreamUsage && isStreamUsageUnsupported(error.status, error.detail)) {
+        if (useStream && useStreamUsage && !fallbackStreamUsage && isStreamUsageUnsupported(error.status, error.detail)) {
           fallbackStreamUsage = true
           useStreamUsage = false
           continue
@@ -418,6 +421,24 @@ export async function requestChatCompletion(options: ChatCompletionOptions): Pro
           const delayMs = computeBackoffMs(networkRetryCount)
           networkRetryCount += 1
           await sleep(delayMs)
+          continue
+        }
+      }
+
+      if (
+        error instanceof Error
+        && /模型未返回可用 answer 内容/.test(error.message)
+      ) {
+        if (useStream && !fallbackNoContentStream) {
+          fallbackNoContentStream = true
+          useStream = false
+          useStreamUsage = false
+          continue
+        }
+        if (useResponseFormatJson && !fallbackNoContentJson && !fallbackResponseFormat) {
+          fallbackNoContentJson = true
+          fallbackResponseFormat = true
+          useResponseFormatJson = false
           continue
         }
       }

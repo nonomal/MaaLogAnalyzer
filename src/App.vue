@@ -1759,6 +1759,8 @@ onBeforeUnmount(() => {
         <ai-analysis-view
           :tasks="tasks"
           :selected-task="selectedTask"
+          :selected-node="selectedNode"
+          :selected-flow-item-id="selectedFlowItemId"
           :loaded-targets="textSearchLoadedTargets"
           :loaded-default-target-id="textSearchLoadedDefaultTargetId"
           style="height: 100%"

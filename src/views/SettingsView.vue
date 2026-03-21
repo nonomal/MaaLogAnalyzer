@@ -209,6 +209,11 @@ const handleReset = () => {
           </tr>
 
           <tr>
+            <td>注入选中节点焦点上下文</td>
+            <td><n-switch v-model:value="aiSettings.includeSelectedNodeFocus" /></td>
+          </tr>
+
+          <tr>
             <td>分析请求启用流式</td>
             <td><n-switch v-model:value="aiSettings.streamResponse" /></td>
           </tr>

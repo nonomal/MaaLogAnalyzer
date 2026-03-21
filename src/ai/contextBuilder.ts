@@ -1,4 +1,4 @@
-import type { EventNotification, NodeInfo, TaskInfo } from '../types'
+import type { EventNotification, NodeInfo, TaskInfo, UnifiedFlowItem } from '../types'
 import { maaKnowledgePack, searchKnowledge } from './knowledge'
 
 export interface AiLoadedTarget {
@@ -11,6 +11,8 @@ export interface AiLoadedTarget {
 export interface BuildAiContextInput {
   tasks: TaskInfo[]
   selectedTask: TaskInfo | null
+  selectedNode?: NodeInfo | null
+  selectedFlowItemId?: string | null
   question: string
   loadedTargets?: AiLoadedTarget[]
   loadedDefaultTargetId?: string
@@ -106,6 +108,91 @@ const summarizeEvent = (event: EventNotification) => ({
   msg: event.message,
   details: pickDetailsSubset(event.details),
 })
+
+const findFlowItemPath = (
+  items: UnifiedFlowItem[] | undefined,
+  targetId: string,
+  path: UnifiedFlowItem[] = []
+): UnifiedFlowItem[] | null => {
+  if (!items || items.length === 0) return null
+  for (const item of items) {
+    const nextPath = [...path, item]
+    if (item.id === targetId) return nextPath
+    const nested = findFlowItemPath(item.children, targetId, nextPath)
+    if (nested) return nested
+  }
+  return null
+}
+
+const buildSelectedNodeFocus = (
+  selectedNode: NodeInfo | null | undefined,
+  selectedFlowItemId: string | null | undefined
+): Record<string, unknown> | null => {
+  if (!selectedNode) return null
+
+  const nestedGroups = selectedNode.nested_action_nodes ?? []
+  const nestedActions = nestedGroups.flatMap(group => group.nested_actions ?? [])
+  const actionLevelReco = selectedNode.nested_recognition_in_action ?? []
+  const directReco = selectedNode.recognition_attempts ?? []
+  const allNestedRecoNames = [
+    ...actionLevelReco.map(item => item.name),
+    ...nestedActions.flatMap(item => (item.recognition_attempts ?? []).map(reco => reco.name)),
+  ].filter(Boolean)
+  const allDirectRecoNames = directReco.map(item => item.name).filter(Boolean)
+  const selectedPath = selectedFlowItemId
+    ? findFlowItemPath(selectedNode.flow_items, selectedFlowItemId)
+    : null
+  const selectedFlowItem = selectedPath?.[selectedPath.length - 1] ?? null
+
+  return {
+    relationRule: '识别/动作/任务归属以解析顺序构建；时间戳主要用于展示排序，不用于推断父子归属。',
+    node: {
+      node_id: selectedNode.node_id,
+      name: selectedNode.name,
+      status: selectedNode.status,
+      timestamp: selectedNode.timestamp,
+      start_timestamp: selectedNode.start_timestamp ?? null,
+      end_timestamp: selectedNode.end_timestamp ?? null,
+      action: selectedNode.action_details?.action ?? '',
+      actionName: selectedNode.action_details?.name ?? '',
+      recognitionCount: directReco.length,
+      actionLevelRecognitionCount: actionLevelReco.length,
+      nestedActionGroupCount: nestedGroups.length,
+      nestedActionNodeCount: nestedActions.length,
+      nestedActionFailedNodeCount: nestedActions.filter(item => item.status === 'failed').length,
+      nextListCount: selectedNode.next_list.length,
+      nextListPreview: selectedNode.next_list.slice(0, 8).map(item => ({
+        name: item.name,
+        anchor: item.anchor,
+        jump_back: item.jump_back,
+      })),
+      topRecognitionNames: toTopNameCounts(allDirectRecoNames, 6),
+      topNestedRecognitionNames: toTopNameCounts(allNestedRecoNames, 6),
+      topNestedActionNames: toTopNameCounts(nestedActions.map(item => item.name).filter(Boolean), 6),
+    },
+    selectedFlowItem: selectedFlowItem
+      ? {
+          id: selectedFlowItem.id,
+          type: selectedFlowItem.type,
+          name: selectedFlowItem.name,
+          status: selectedFlowItem.status,
+          timestamp: selectedFlowItem.timestamp,
+          start_timestamp: selectedFlowItem.start_timestamp ?? null,
+          end_timestamp: selectedFlowItem.end_timestamp ?? null,
+          task_id: selectedFlowItem.task_id ?? null,
+          node_id: selectedFlowItem.node_id ?? null,
+          reco_id: selectedFlowItem.reco_id ?? null,
+          action_id: selectedFlowItem.action_id ?? null,
+          childCount: selectedFlowItem.children?.length ?? 0,
+          ancestry: (selectedPath ?? []).slice(0, -1).map(item => ({
+            id: item.id,
+            type: item.type,
+            name: item.name,
+          })),
+        }
+      : null,
+  }
+}
 
 type EventChainRiskLevel = 'high' | 'medium' | 'low'
 type OnErrorTriggerType = 'action_failed' | 'reco_timeout_or_nohit' | 'error_handling_loop'
@@ -2449,6 +2536,7 @@ export const buildDeterministicFindings = (
 }
 export function buildAiAnalysisContext(input: BuildAiContextInput): Record<string, unknown> {
   const selectedTask = input.selectedTask
+  const selectedNodeFocus = buildSelectedNodeFocus(input.selectedNode, input.selectedFlowItemId)
 
   const taskOverview = input.tasks.slice(-16).map(task => ({
     task_id: task.task_id,
@@ -2459,6 +2547,18 @@ export function buildAiAnalysisContext(input: BuildAiContextInput): Record<strin
     start: task.start_time,
     end: task.end_time,
   }))
+
+  const selectedTaskSummary = selectedTask
+    ? {
+        task_id: selectedTask.task_id,
+        entry: selectedTask.entry,
+        status: selectedTask.status,
+        duration: selectedTask.duration,
+        nodeCount: selectedTask.nodes.length,
+        start: selectedTask.start_time,
+        end: selectedTask.end_time,
+      }
+    : null
 
   const fullTaskTimeline: TimelineNodeItem[] = selectedTask
     ? selectedTask.nodes.map(node => ({
@@ -2592,17 +2692,8 @@ export function buildAiAnalysisContext(input: BuildAiContextInput): Record<strin
     return JSON.stringify({
       generatedAt: 'x',
       question: input.question,
-      selectedTask: selectedTask
-        ? {
-            task_id: selectedTask.task_id,
-            entry: selectedTask.entry,
-            status: selectedTask.status,
-            duration: selectedTask.duration,
-            nodeCount: selectedTask.nodes.length,
-            start: selectedTask.start_time,
-            end: selectedTask.end_time,
-          }
-        : null,
+      selectedTask: selectedTaskSummary,
+      selectedNodeFocus,
       taskOverview,
       selectedNodeTimeline: sliced.selectedNodeTimeline,
       selectedEventTail: sliced.selectedEventTail,
@@ -2668,17 +2759,8 @@ export function buildAiAnalysisContext(input: BuildAiContextInput): Record<strin
   return {
     generatedAt: new Date().toISOString(),
     question: input.question,
-    selectedTask: selectedTask
-      ? {
-          task_id: selectedTask.task_id,
-          entry: selectedTask.entry,
-          status: selectedTask.status,
-          duration: selectedTask.duration,
-          nodeCount: selectedTask.nodes.length,
-          start: selectedTask.start_time,
-          end: selectedTask.end_time,
-        }
-      : null,
+    selectedTask: selectedTaskSummary,
+    selectedNodeFocus,
     taskOverview,
     selectedNodeTimeline: sliced.selectedNodeTimeline,
     selectedEventTail: sliced.selectedEventTail,

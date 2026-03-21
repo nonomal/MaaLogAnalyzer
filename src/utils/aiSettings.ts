@@ -9,6 +9,7 @@ export interface AiSettings {
   streamResponse: boolean
   includeKnowledgePack: boolean
   includeSignalLines: boolean
+  includeSelectedNodeFocus: boolean
   truncateAutoRetryEnabled: boolean
   conciseAnswerMaxChars: number
   conciseMaxEvidence: number
@@ -28,6 +29,7 @@ const defaultAiSettings: AiSettings = {
   streamResponse: true,
   includeKnowledgePack: true,
   includeSignalLines: true,
+  includeSelectedNodeFocus: true,
   truncateAutoRetryEnabled: true,
   conciseAnswerMaxChars: 1800,
   conciseMaxEvidence: 6,
