@@ -63,8 +63,23 @@ export interface NestedActionGroup {
   task_id: number
   name: string
   timestamp: string
+  start_timestamp?: string
+  end_timestamp?: string
   status: 'success' | 'failed'
   nested_actions: NestedActionNode[]
+  task_details?: {
+    task_id: number
+    entry?: string
+    hash?: string
+    uuid?: string
+    status: 'running' | 'succeeded' | 'failed'
+    start_timestamp?: string
+    end_timestamp?: string
+    start_message?: string
+    end_message?: string
+    start_details?: Record<string, any>
+    end_details?: Record<string, any>
+  }
 }
 
 // 嵌套动作节点（子任务中的节点）
@@ -154,6 +169,7 @@ export interface UnifiedFlowItem {
   node_id?: number
   reco_id?: number
   action_id?: number
+  task_details?: NestedActionGroup['task_details']
   reco_details?: RecognitionDetail
   action_details?: ActionDetail
   error_image?: string

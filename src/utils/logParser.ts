@@ -488,6 +488,21 @@ export class LogParser {
 
     const taskEvents = this.events.slice(taskStartIndex, taskEndIndex + 1)
 
+    type SubTaskStatus = 'running' | 'succeeded' | 'failed'
+    type SubTaskSnapshot = {
+      task_id: number
+      entry?: string
+      hash?: string
+      uuid?: string
+      status: SubTaskStatus
+      start_timestamp?: string
+      end_timestamp?: string
+      start_message?: string
+      end_message?: string
+      start_details?: Record<string, any>
+      end_details?: Record<string, any>
+    }
+
     // 当前节点的累积状态
     let currentNextList: any[] = []
     const currentTaskRecognitions: RecognitionAttempt[] = []
@@ -507,6 +522,7 @@ export class LogParser {
     const subTaskActionStartOrders = new Map<string, number>()
     const subTaskActionEndOrders = new Map<string, number>()
     const subTaskActionNodeStartTimes = new Map<string, string>()
+    const subTaskSnapshots = new Map<number, SubTaskSnapshot>()
     const activeRecognitionAttempts = new Map<string, RecognitionAttempt>()
     const activeRecognitionStack: Array<{ taskId: number; recoId: number }> = []
     const finishedRecognitionKeys = new Set<string>()
@@ -527,6 +543,20 @@ export class LogParser {
         ...(resolvedStart ? { start_timestamp: this.stringPool.intern(resolvedStart) } : {}),
         ...(resolvedEnd ? { end_timestamp: this.stringPool.intern(resolvedEnd) } : {})
       })
+    }
+    const markRawTaskDetails = (details: Record<string, any> | undefined): Record<string, any> | undefined => {
+      if (!details) return undefined
+      return markRaw({ ...details })
+    }
+    const getOrCreateSubTaskSnapshot = (taskId: number): SubTaskSnapshot => {
+      const existing = subTaskSnapshots.get(taskId)
+      if (existing) return existing
+      const created: SubTaskSnapshot = {
+        task_id: taskId,
+        status: 'running'
+      }
+      subTaskSnapshots.set(taskId, created)
+      return created
     }
     const removeFromActiveRecognitionStack = (taskId: number, recoId: number) => {
       for (let i = activeRecognitionStack.length - 1; i >= 0; i--) {
@@ -860,6 +890,31 @@ export class LogParser {
       const eventOrder = eventIndex
       const { message, details } = event
       const messageMeta = parseMaaMessageMeta(message)
+
+      if (
+        messageMeta.domain === 'Tasker' &&
+        messageMeta.taskerKind === 'Task' &&
+        details.task_id != null &&
+        details.task_id !== task.task_id
+      ) {
+        const subTaskId = details.task_id as number
+        const snapshot = getOrCreateSubTaskSnapshot(subTaskId)
+        if (messageMeta.phase === 'Starting') {
+          snapshot.entry = this.stringPool.intern(details.entry || '')
+          snapshot.hash = this.stringPool.intern(details.hash || '')
+          snapshot.uuid = this.stringPool.intern(details.uuid || '')
+          snapshot.status = 'running'
+          snapshot.start_timestamp = this.stringPool.intern(event.timestamp)
+          snapshot.start_message = this.stringPool.intern(message)
+          snapshot.start_details = markRawTaskDetails(details)
+        } else if (messageMeta.phase === 'Succeeded' || messageMeta.phase === 'Failed') {
+          snapshot.status = messageMeta.phase === 'Succeeded' ? 'succeeded' : 'failed'
+          snapshot.end_timestamp = this.stringPool.intern(event.timestamp)
+          snapshot.end_message = this.stringPool.intern(message)
+          snapshot.end_details = markRawTaskDetails(details)
+        }
+      }
+
       if (messageMeta.domain !== 'Node') continue
       const isCurrentTask = details.task_id === task.task_id
 
@@ -1023,7 +1078,41 @@ export class LogParser {
                 scopedTopLevelRecognitions.push(attempt)
               }
             }
-            const subTaskActionGroups = subTasks.consumeAsNestedActionGroups(this.stringPool)
+            const subTaskActionGroups = subTasks.consumeAsNestedActionGroups(this.stringPool).map((group: any) => {
+              const snapshot = subTaskSnapshots.get(group.task_id)
+              if (!snapshot) {
+                return group
+              }
+
+              const snapshotStatus: 'success' | 'failed' =
+                snapshot.status === 'failed' ? 'failed' : 'success'
+              const mergedStatus: 'success' | 'failed' =
+                group.status === 'failed' || snapshotStatus === 'failed' ? 'failed' : 'success'
+              const startTimestamp = snapshot.start_timestamp || group.timestamp
+              const endTimestamp = snapshot.end_timestamp
+
+              return {
+                ...group,
+                name: this.stringPool.intern(snapshot.entry || group.name),
+                timestamp: this.stringPool.intern(startTimestamp || group.timestamp),
+                start_timestamp: startTimestamp ? this.stringPool.intern(startTimestamp) : undefined,
+                end_timestamp: endTimestamp ? this.stringPool.intern(endTimestamp) : undefined,
+                status: mergedStatus,
+                task_details: markRaw({
+                  task_id: snapshot.task_id,
+                  entry: snapshot.entry || '',
+                  hash: snapshot.hash || '',
+                  uuid: snapshot.uuid || '',
+                  status: snapshot.status,
+                  start_timestamp: snapshot.start_timestamp,
+                  end_timestamp: snapshot.end_timestamp,
+                  start_message: snapshot.start_message,
+                  end_message: snapshot.end_message,
+                  start_details: snapshot.start_details,
+                  end_details: snapshot.end_details
+                })
+              }
+            })
             const subTaskOrphanRecognitionAttempts = subTasks.consumeOrphanRecognitions()
             const subTaskOrphanRecognitionNodes = subTasks.consumeOrphanRecognitionNodes()
             const pendingActionLevelRecognitions = dedupeRecognitionAttempts([

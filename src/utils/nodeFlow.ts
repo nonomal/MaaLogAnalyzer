@@ -173,7 +173,10 @@ const buildTaskFlowItems = (node: NodeInfo): UnifiedFlowItem[] => {
       name: group.name,
       status: group.status,
       timestamp: group.timestamp,
+      start_timestamp: group.start_timestamp || group.timestamp,
+      end_timestamp: group.end_timestamp,
       task_id: group.task_id,
+      task_details: group.task_details,
       children: actionChildren.length > 0 ? sortFlowItems(actionChildren) : undefined,
     }
   })
