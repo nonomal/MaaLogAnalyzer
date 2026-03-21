@@ -1,4 +1,4 @@
-﻿Option Explicit
+Option Explicit
 
 Dim fso, shellApp, targetPath, route, lower, base64Path, uri
 Set fso = CreateObject("Scripting.FileSystemObject")
