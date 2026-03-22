@@ -1,11 +1,12 @@
 import type { EventNotification, NodeInfo, TaskInfo, UnifiedFlowItem } from '../types'
-import { maaKnowledgePack, searchKnowledge } from './knowledge'
+import { getKnowledgeCard, maaKnowledgePack, searchKnowledge } from './knowledge'
 import {
   buildNodeActionFlowItems,
   buildNodeActionLevelRecognitionItems,
   buildNodeFlowItems,
   buildNodeRecognitionAttempts,
 } from '../utils/nodeFlow'
+import { getFlowItemShortLabel } from '../utils/flowLabels'
 
 export interface AiLoadedTarget {
   id: string
@@ -130,6 +131,23 @@ const findFlowItemPath = (
   return null
 }
 
+const toFlowItemPromptLabel = (item: Pick<UnifiedFlowItem, 'type' | 'name'>): string => {
+  const shortType = getFlowItemShortLabel(item.type)
+  const name = item.name?.trim() ?? ''
+  return name ? `[${shortType}] ${name}` : `[${shortType}]`
+}
+
+const FLOW_LABEL_LEGEND = {
+  R: 'recognition',
+  RN: 'recognition_node',
+  A: 'action',
+  AN: 'action_node',
+  T: 'task',
+  P: 'pipeline_node',
+} as const
+
+const ALWAYS_INCLUDE_KNOWLEDGE_CARD_IDS = ['ui.flow-item-short-labels'] as const
+
 const collectFlowItems = (
   items: UnifiedFlowItem[] | undefined,
   predicate: (item: UnifiedFlowItem) => boolean,
@@ -224,7 +242,9 @@ const buildSelectedNodeFocus = (
       ? {
           id: selectedFlowItem.id,
           type: selectedFlowItem.type,
+          short_type: getFlowItemShortLabel(selectedFlowItem.type),
           name: selectedFlowItem.name,
+          display_name: toFlowItemPromptLabel(selectedFlowItem),
           status: selectedFlowItem.status,
           ts: selectedFlowItem.ts,
           end_ts: selectedFlowItem.end_ts ?? null,
@@ -233,10 +253,13 @@ const buildSelectedNodeFocus = (
           reco_id: selectedFlowItem.reco_id ?? selectedFlowItem.reco_details?.reco_id ?? null,
           action_id: selectedFlowItem.action_id ?? selectedFlowItem.action_details?.action_id ?? null,
           childCount: selectedFlowItem.children?.length ?? 0,
+          ancestry_path: (selectedPath ?? []).map(item => toFlowItemPromptLabel(item)).join(' > '),
           ancestry: (selectedPath ?? []).slice(0, -1).map(item => ({
             id: item.id,
             type: item.type,
+            short_type: getFlowItemShortLabel(item.type),
             name: item.name,
+            display_name: toFlowItemPromptLabel(item),
           })),
         }
       : null,
@@ -2236,7 +2259,7 @@ const selectRelevantSignalLines = (
 const buildKnowledgeDigest = (knowledgeTokens: string[]) => {
   const tokens = knowledgeTokens.slice(0, 48)
   const query = tokens.join(' ')
-  return searchKnowledge(query, 12).map(card => ({
+  const digest = searchKnowledge(query, 12).map(card => ({
     id: card.id,
     topic: card.topic,
     title: card.title,
@@ -2245,6 +2268,23 @@ const buildKnowledgeDigest = (knowledgeTokens: string[]) => {
     details: card.details.slice(0, 2),
     evidence: card.evidence.slice(0, 3),
   }))
+
+  for (const cardId of ALWAYS_INCLUDE_KNOWLEDGE_CARD_IDS) {
+    const card = getKnowledgeCard(cardId)
+    if (!card) continue
+    if (digest.some(item => item.id === card.id)) continue
+    digest.unshift({
+      id: card.id,
+      topic: card.topic,
+      title: card.title,
+      rule: card.rule,
+      keywords: card.keywords.slice(0, 8),
+      details: card.details.slice(0, 2),
+      evidence: card.evidence.slice(0, 3),
+    })
+  }
+
+  return digest
 }
 
 const buildKnowledgeBootstrap = (knowledgeTokens: string[]) => {
@@ -3213,6 +3253,7 @@ export function buildAiAnalysisContext(input: BuildAiContextInput): Record<strin
   return {
     generatedAt: new Date().toISOString(),
     question: input.question,
+    flowLabelLegend: FLOW_LABEL_LEGEND,
     selectedTask: selectedTaskSummary,
     selectedNodeFocus,
     taskOverview,
