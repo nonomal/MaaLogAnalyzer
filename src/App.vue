@@ -1286,7 +1286,7 @@ const mobileMenuOptions = computed(() => [
   { type: 'divider' as const, key: 'd1' },
   { label: '设置', key: 'settings', icon: () => h(SettingOutlined) },
   { label: '关于', key: 'about', icon: () => h(InfoCircleOutlined) },
-  { label: props.isDark ? '浅色模式' : '深色模式', key: 'theme', icon: () => h(props.isDark ? BulbOutlined : BulbFilled) }
+  ...(!isVscodeLaunchEmbed ? [{ label: props.isDark ? '浅色模式' : '深色模式', key: 'theme', icon: () => h(props.isDark ? BulbOutlined : BulbFilled) }] : [])
 ])
 
 // isDark as ref for computed access
@@ -1474,6 +1474,7 @@ onBeforeUnmount(() => {
 
           <!-- 主题切换按钮 -->
           <n-button
+            v-if="!isVscodeLaunchEmbed"
             text
             style="font-size: 20px"
             data-tour="header-theme-button"
