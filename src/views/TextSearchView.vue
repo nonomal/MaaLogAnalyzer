@@ -71,10 +71,14 @@ const props = withDefaults(defineProps<{
   isDark?: boolean
   loadedTargets?: LoadedSearchTarget[]
   loadedDefaultTargetId?: string
+  hasDeferredLoadedTargets?: boolean
+  ensureLoadedTargets?: (() => Promise<void>) | undefined
 }>(), {
   isDark: true,
   loadedTargets: () => [],
-  loadedDefaultTargetId: ''
+  loadedDefaultTargetId: '',
+  hasDeferredLoadedTargets: false,
+  ensureLoadedTargets: undefined
 })
 
 type SourceMode = 'loaded' | 'manual'
@@ -233,6 +237,10 @@ watch(selectedLoadedTargetId, async (id) => {
 
 watch(sourceMode, async (mode) => {
   if (mode !== 'loaded') return
+  if ((props.loadedTargets?.length ?? 0) === 0 && props.hasDeferredLoadedTargets && props.ensureLoadedTargets) {
+    await props.ensureLoadedTargets()
+    await nextTick()
+  }
   const targets = props.loadedTargets ?? []
   if (targets.length === 0) {
     sourceMode.value = 'manual'
@@ -327,6 +335,13 @@ const useHistoryItem = (text: string) => {
   performSearch()
 }
 
+const ensureDeferredLoadedTargetsReady = async () => {
+  if ((props.loadedTargets ?? []).length > 0) return
+  if (!props.hasDeferredLoadedTargets || !props.ensureLoadedTargets) return
+  await props.ensureLoadedTargets()
+  await nextTick()
+}
+
 // 执行搜索（支持流式搜索）
 const performSearch = async () => {
   if (!searchText.value) {
@@ -338,6 +353,11 @@ const performSearch = async () => {
   // 检查是否正在加载文件
   if (isLoadingFile.value) {
     return
+  }
+
+  await ensureDeferredLoadedTargetsReady()
+  if (sourceMode.value !== 'loaded' && !fileName.value && (props.loadedTargets?.length ?? 0) > 0) {
+    sourceMode.value = 'loaded'
   }
 
   // 检查是否有文件；loaded 模式下尝试自动补齐默认目标

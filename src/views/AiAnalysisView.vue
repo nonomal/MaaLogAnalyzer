@@ -22,6 +22,8 @@ interface Props {
   selectedFlowItemId?: string | null
   loadedTargets: AiLoadedTarget[]
   loadedDefaultTargetId: string
+  hasDeferredLoadedTargets?: boolean
+  ensureLoadedTargets?: () => Promise<void>
 }
 
 interface MemoryState {
@@ -1642,9 +1644,9 @@ const runRequest = async (mode: 'test' | 'analyze') => {
     return
   }
 
-  const contextKey = currentContextKey.value
-  const contextMemory = memoryStateStore.value[contextKey]
-  const useMemoryForThisRound = mode === 'analyze' && memoryModeEnabled.value && !!contextMemory
+  let contextKey = currentContextKey.value
+  let contextMemory = memoryStateStore.value[contextKey]
+  let useMemoryForThisRound = mode === 'analyze' && memoryModeEnabled.value && !!contextMemory
   const forcedProfile = mode === 'analyze' ? quickPromptProfileOverride.value : null
   const forcedFocus = mode === 'analyze' ? quickPromptFocusOverride.value : null
   const focusMode: AnalysisFocusMode = forcedFocus ?? 'general'
@@ -1664,7 +1666,23 @@ const runRequest = async (mode: 'test' | 'analyze') => {
     clearStreamFlushTimer()
     usageText.value = 'AI 正在处理请求...'
     analyzingStage.value = 'streaming'
+
+    const shouldLoadSignalLineTargets = !useMemoryForThisRound
+      && settings.includeSignalLines
+      && props.loadedTargets.length === 0
+      && props.hasDeferredLoadedTargets === true
+      && typeof props.ensureLoadedTargets === 'function'
+    if (shouldLoadSignalLineTargets) {
+      usageText.value = '正在按需加载日志源...'
+      await props.ensureLoadedTargets()
+      await nextTick()
+      contextKey = currentContextKey.value
+      contextMemory = memoryStateStore.value[contextKey]
+      useMemoryForThisRound = memoryModeEnabled.value && !!contextMemory
+      usageText.value = 'AI 正在处理请求...'
+    }
   }
+  lastRequestUsedMemory.value = useMemoryForThisRound
 
   let usedCompactContext = false
   let userContent = ''

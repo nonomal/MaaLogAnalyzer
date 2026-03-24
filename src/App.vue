@@ -204,8 +204,20 @@ interface TextSearchLoadedTarget {
   content: string
 }
 
+interface DeferredTextSearchTarget {
+  id: string
+  label: string
+  fileName: string
+  loadContent: () => Promise<string>
+}
+
 const textSearchLoadedTargets = ref<TextSearchLoadedTarget[]>([])
 const textSearchLoadedDefaultTargetId = ref<string>('')
+const deferredTextSearchTargets = ref<DeferredTextSearchTarget[]>([])
+const deferredTextSearchDefaultTargetId = ref<string>('')
+const textSearchTargetsHydrated = ref(false)
+const hasDeferredTextSearchTargets = computed(() => deferredTextSearchTargets.value.length > 0)
+let hydrateTextSearchTargetsToken = 0
 
 const setTextSearchLoadedTargets = (targets: TextSearchLoadedTarget[], defaultId?: string) => {
   textSearchLoadedTargets.value = targets
@@ -223,7 +235,7 @@ interface RealtimeSessionState {
   sessionId: string
   startedAt: number
   lastSeq: number
-  lines: string[]
+  lines?: string[]
   pendingLines: string[]
 }
 
@@ -261,6 +273,7 @@ interface SelectedRecognitionQueryTarget {
 
 const BRIDGE_IMAGE_CACHE_MAX_ITEMS = 50
 const REALTIME_PARSE_INTERVAL_MS = 16
+const shouldMaintainRealtimeTextTargets = showTextSearchView
 
 const realtimeSession = ref<RealtimeSessionState | null>(null)
 let realtimeParseTimer: number | null = null
@@ -343,13 +356,14 @@ const toSyntheticEventLine = (event: RealtimeEventItem): string | null => {
 }
 
 const syncRealtimeLoadedTarget = (session: RealtimeSessionState) => {
+  if (!shouldMaintainRealtimeTextTargets) return
   const targetId = `realtime:${session.sessionId}`
   setTextSearchLoadedTargets(
     [{
       id: targetId,
       label: `realtime/${session.sessionId}.log`,
       fileName: `realtime-${session.sessionId}.log`,
-      content: session.lines.join('\n'),
+      content: (session.lines ?? []).join('\n'),
     }],
     targetId,
   )
@@ -379,6 +393,58 @@ const pendingScrollNodeId = ref<number | null>(null)
 const parseProgress = ref(0)
 const showParsingModal = ref(false)
 const showFileLoadingModal = ref(false)
+
+const clearDeferredTextSearchTargets = () => {
+  deferredTextSearchTargets.value = []
+  deferredTextSearchDefaultTargetId.value = ''
+  textSearchTargetsHydrated.value = false
+}
+
+const hydrateDeferredTextSearchTargets = async () => {
+  if (textSearchTargetsHydrated.value) return
+  const deferredTargets = deferredTextSearchTargets.value
+  if (deferredTargets.length === 0) {
+    textSearchTargetsHydrated.value = true
+    setTextSearchLoadedTargets([])
+    return
+  }
+
+  const token = ++hydrateTextSearchTargetsToken
+  const loadedTargets: TextSearchLoadedTarget[] = []
+  for (const target of deferredTargets) {
+    try {
+      const content = await target.loadContent()
+      if (token !== hydrateTextSearchTargetsToken) return
+      loadedTargets.push({
+        id: target.id,
+        label: target.label,
+        fileName: target.fileName,
+        content,
+      })
+    } catch (error) {
+      console.warn('[text-search] load deferred target failed:', target.id, error)
+    }
+  }
+  if (token !== hydrateTextSearchTargetsToken) return
+
+  const defaultId = deferredTextSearchDefaultTargetId.value && loadedTargets.some((target) => target.id === deferredTextSearchDefaultTargetId.value)
+    ? deferredTextSearchDefaultTargetId.value
+    : pickPreferredLogTargetId(loadedTargets)
+  setTextSearchLoadedTargets(loadedTargets, defaultId)
+  textSearchTargetsHydrated.value = true
+}
+
+const ensureTextSearchTargetsHydrated = async () => {
+  await hydrateDeferredTextSearchTargets()
+}
+
+const setDeferredTextSearchTargets = (targets: DeferredTextSearchTarget[], defaultId?: string) => {
+  hydrateTextSearchTargetsToken++
+  deferredTextSearchTargets.value = targets
+  deferredTextSearchDefaultTargetId.value = defaultId ?? (targets[0]?.id ?? '')
+  textSearchTargetsHydrated.value = false
+  setTextSearchLoadedTargets([])
+}
 
 const flattenFlowItems = (items: UnifiedFlowItem[] | undefined, output: UnifiedFlowItem[] = []): UnifiedFlowItem[] => {
   if (!items || items.length === 0) return output
@@ -613,12 +679,14 @@ const handleRealtimeStart = (params: unknown) => {
   }
   realtimeReparseRequested.value = false
   clearBridgeImageCache()
+  clearDeferredTextSearchTargets()
+  setTextSearchLoadedTargets([])
 
   realtimeSession.value = {
     sessionId,
     startedAt: toFiniteNumber(payload.startedAt, Date.now()),
     lastSeq: 0,
-    lines: [],
+    lines: shouldMaintainRealtimeTextTargets ? [] : undefined,
     pendingLines: [],
   }
   realtimeStreaming.value = true
@@ -674,7 +742,9 @@ const handleRealtimePush = (params: unknown) => {
     if (event.seq <= session.lastSeq) continue
     const line = toSyntheticEventLine(event)
     if (!line) continue
-    session.lines.push(line)
+    if (shouldMaintainRealtimeTextTargets) {
+      session.lines?.push(line)
+    }
     session.pendingLines.push(line)
     session.lastSeq = event.seq
     appended++
@@ -1293,7 +1363,20 @@ const handleFileUpload = async (file: File) => {
       }
     } else {
       const content = await file.text()
-      await processLogContent(content, undefined, undefined, undefined, [{ id: 'loaded:single', label: file.name, fileName: file.name, content }], 'loaded:single')
+      await processLogContent(
+        content,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        'loaded:single',
+        [{
+          id: 'loaded:single',
+          label: file.name,
+          fileName: file.name,
+          loadContent: async () => await file.text(),
+        }],
+      )
     }
   } catch (error) {
     message.error(getErrorMessage(error), { duration: 5000 })
@@ -1338,6 +1421,7 @@ const processLogContent = async (
   waitFreezesImages?: Map<string, string>,
   loadedTargets?: TextSearchLoadedTarget[],
   loadedDefaultTargetId?: string,
+  deferredTargets?: DeferredTextSearchTarget[],
 ) => {
   // 文件模式会接管数据源，先停止实时会话
   stopRealtimeSession()
@@ -1345,18 +1429,27 @@ const processLogContent = async (
   // 清空所有状态，确保重新上传文件时不会显示旧数据
   resetAnalysisState()
 
-  // 先断开旧文本目标引用，避免新旧大字符串在响应式树上同时停留。
-  setTextSearchLoadedTargets([])
-
-  // 更新文本搜索默认数据源（优先使用调用方提供的目标列表）
-  const fallbackTargets: TextSearchLoadedTarget[] = [{
+  const toDeferredTargetsFromLoadedTargets = (targets: TextSearchLoadedTarget[]): DeferredTextSearchTarget[] => {
+    return targets.map((target) => ({
+      id: target.id,
+      label: target.label,
+      fileName: target.fileName,
+      loadContent: async () => target.content,
+    }))
+  }
+  const fallbackDeferredTargets: DeferredTextSearchTarget[] = [{
     id: 'loaded:fallback',
     label: '已加载日志',
     fileName: 'loaded.log',
-    content,
+    loadContent: async () => content,
   }]
-  setTextSearchLoadedTargets(
-    loadedTargets && loadedTargets.length > 0 ? loadedTargets : fallbackTargets,
+  const resolvedDeferredTargets = deferredTargets && deferredTargets.length > 0
+    ? deferredTargets
+    : loadedTargets && loadedTargets.length > 0
+      ? toDeferredTargetsFromLoadedTargets(loadedTargets)
+      : fallbackDeferredTargets
+  setDeferredTextSearchTargets(
+    resolvedDeferredTargets,
     loadedDefaultTargetId,
   )
 
@@ -1913,7 +2006,14 @@ onBeforeUnmount(() => {
       </div>
       <!-- 文本搜索模式（独立显示，占据整个屏幕） -->
       <div v-show="viewMode === 'search'" data-tour="search-main" style="height: 100%">
-        <text-search-view :is-dark="isDark" :loaded-targets="textSearchLoadedTargets" :loaded-default-target-id="textSearchLoadedDefaultTargetId" style="height: 100%" />
+        <text-search-view
+          :is-dark="isDark"
+          :loaded-targets="textSearchLoadedTargets"
+          :loaded-default-target-id="textSearchLoadedDefaultTargetId"
+          :has-deferred-loaded-targets="hasDeferredTextSearchTargets"
+          :ensure-loaded-targets="ensureTextSearchTargetsHydrated"
+          style="height: 100%"
+        />
       </div>
 
       <!-- 节点统计模式（独立显示，占据整个屏幕） -->
@@ -1944,6 +2044,8 @@ onBeforeUnmount(() => {
           :selected-flow-item-id="selectedFlowItemId"
           :loaded-targets="textSearchLoadedTargets"
           :loaded-default-target-id="textSearchLoadedDefaultTargetId"
+          :has-deferred-loaded-targets="hasDeferredTextSearchTargets"
+          :ensure-loaded-targets="ensureTextSearchTargetsHydrated"
           style="height: 100%"
         />
       </div>
@@ -1998,6 +2100,8 @@ onBeforeUnmount(() => {
                   :is-dark="isDark"
                   :loaded-targets="textSearchLoadedTargets"
                   :loaded-default-target-id="textSearchLoadedDefaultTargetId"
+                  :has-deferred-loaded-targets="hasDeferredTextSearchTargets"
+                  :ensure-loaded-targets="ensureTextSearchTargetsHydrated"
                   style="height: 100%"
                 />
               </template>
@@ -2138,7 +2242,15 @@ onBeforeUnmount(() => {
 
           <!-- 下半部分：文本搜索 -->
           <template #2>
-            <text-search-view v-if="viewMode === 'split'" :is-dark="isDark" :loaded-targets="textSearchLoadedTargets" :loaded-default-target-id="textSearchLoadedDefaultTargetId" style="height: 100%" />
+            <text-search-view
+              v-if="viewMode === 'split'"
+              :is-dark="isDark"
+              :loaded-targets="textSearchLoadedTargets"
+              :loaded-default-target-id="textSearchLoadedDefaultTargetId"
+              :has-deferred-loaded-targets="hasDeferredTextSearchTargets"
+              :ensure-loaded-targets="ensureTextSearchTargetsHydrated"
+              style="height: 100%"
+            />
           </template>
         </n-split>
       </div>
