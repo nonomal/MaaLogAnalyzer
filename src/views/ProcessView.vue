@@ -8,7 +8,7 @@ import { CloudUploadOutlined, FolderOpenOutlined, FileOutlined, FolderOutlined, 
 import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import NodeCard from '../components/NodeCard.vue'
-import type { TaskInfo, NodeInfo } from '../types'
+import type { TaskInfo, NodeInfo, UnifiedFlowItem } from '../types'
 import type { LogParser } from '../utils/logParser'
 import { isTauri, isVSCode } from '../utils/platform'
 import { formatDuration, extractTime } from '../utils/formatDuration'
@@ -360,26 +360,65 @@ const followToLatest = async () => {
   }
 }
 
+let followToLatestRafId: number | null = null
+const scheduleFollowToLatest = () => {
+  if (!isRealtimeStreaming.value || !followLast.value) return
+  if (followToLatestRafId != null) return
+  followToLatestRafId = window.requestAnimationFrame(() => {
+    followToLatestRafId = null
+    void followToLatest()
+  })
+}
+
 const toggleFollowLast = () => {
   followLast.value = !followLast.value
   if (followLast.value) {
-    void followToLatest()
+    scheduleFollowToLatest()
   }
 }
 
+const getLastFlowPathSignature = (items: NodeInfo['node_flow']) => {
+  if (!items || items.length === 0) return '0'
+  const parts: string[] = [`L${items.length}`]
+  let currentItems: UnifiedFlowItem[] | undefined = items
+
+  while (currentItems && currentItems.length > 0) {
+    const current: UnifiedFlowItem | undefined = currentItems[currentItems.length - 1]
+    if (!current) break
+    parts.push(`${current.type}:${current.id}:${current.status}:C${current.children?.length ?? 0}`)
+    currentItems = current.children
+  }
+
+  return parts.join('>')
+}
+
 const followTasksFingerprint = computed(() => {
-  return props.tasks.map(task => `${task.task_id}:${task.nodes.length}`).join('|')
+  return props.tasks.map((task) => {
+    const latestNode = task.nodes[task.nodes.length - 1]
+    if (!latestNode) {
+      return `${task.task_id}:${task.status}:${task.end_time ?? ''}:N0`
+    }
+    return [
+      task.task_id,
+      task.status,
+      task.end_time ?? '',
+      `N${task.nodes.length}`,
+      latestNode.node_id,
+      latestNode.status,
+      getLastFlowPathSignature(latestNode.node_flow),
+    ].join(':')
+  }).join('|')
 })
 
 watch([followTasksFingerprint, isRealtimeStreaming, followLast], ([, streaming, following]) => {
   if (!streaming || !following) return
-  void followToLatest()
+  scheduleFollowToLatest()
 }, { immediate: true, flush: 'post' })
 
 watch(isRealtimeStreaming, (streaming) => {
   if (!streaming) return
   if (!followLast.value) return
-  void followToLatest()
+  scheduleFollowToLatest()
 }, { flush: 'post' })
 
 // 从流程图定位过来时，滚动到指定节点
@@ -794,6 +833,10 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
+  if (followToLatestRafId != null) {
+    window.cancelAnimationFrame(followToLatestRafId)
+    followToLatestRafId = null
+  }
   if (isInVSCode.value) {
     window.removeEventListener('message', handleVSCodeMessage)
   }
