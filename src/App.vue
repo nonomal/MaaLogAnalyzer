@@ -531,17 +531,48 @@ const getSelectedRecognitionTarget = (): SelectedRecognitionQueryTarget | null =
 
 const parseCachedImageRefs = (detailData: unknown): BridgeCachedImageRefs => {
   const detailRecord = asRecord(detailData)
-  const cachedImageRecord = asRecord(detailRecord?.cached_image)
+  const infoRecord = asRecord(detailRecord?.info)
+  const cachedImageRecord = asRecord(detailRecord?.cached_image) ?? asRecord(infoRecord?.cached_image)
   return {
     raw: toPositiveInteger(cachedImageRecord?.raw),
     draws: toPositiveIntegerArray(cachedImageRecord?.draws),
   }
 }
 
+const parseInlineRecoImages = (detailData: unknown): BridgeRecognitionImageState => {
+  const detailRecord = asRecord(detailData)
+  const raw = toImageDataUrl(detailRecord?.raw) ?? null
+
+  const drawCandidates: unknown[] = []
+  if (Array.isArray(detailRecord?.draws)) {
+    drawCandidates.push(...detailRecord.draws)
+  }
+  if (detailRecord?.draw != null) {
+    drawCandidates.push(detailRecord.draw)
+  }
+
+  const draws = drawCandidates
+    .map((item) => toImageDataUrl(item))
+    .filter((item): item is string => typeof item === 'string' && item.length > 0)
+
+  return { raw, draws }
+}
+
+const hasImageDataUrlPayload = (value: string): boolean => {
+  const trimmed = value.trim()
+  if (!trimmed.startsWith('data:image/')) return false
+  const commaIndex = trimmed.indexOf(',')
+  if (commaIndex < 0) return false
+  const payload = trimmed.slice(commaIndex + 1).trim()
+  return payload.length > 0
+}
+
 const toImageDataUrl = (imageData: unknown): string | null => {
   if (typeof imageData === 'string') {
     const trimmed = imageData.trim()
-    if (trimmed.startsWith('data:image/')) return trimmed
+    if (trimmed.startsWith('data:image/')) {
+      return hasImageDataUrlPayload(trimmed) ? trimmed : null
+    }
     return null
   }
 
@@ -549,15 +580,33 @@ const toImageDataUrl = (imageData: unknown): string | null => {
   if (!imageRecord) return null
 
   const dataUrl = typeof imageRecord.dataUrl === 'string' ? imageRecord.dataUrl.trim() : ''
-  if (dataUrl.startsWith('data:image/')) return dataUrl
+  if (dataUrl.startsWith('data:image/')) {
+    return hasImageDataUrlPayload(dataUrl) ? dataUrl : null
+  }
 
-  const base64 = typeof imageRecord.base64 === 'string' ? imageRecord.base64.trim() : ''
-  if (!base64) return null
+  const rawBase64 = typeof imageRecord.base64 === 'string' ? imageRecord.base64.trim() : ''
+  if (!rawBase64) return null
+
+  // Some providers may put the full data URL into `base64`.
+  if (rawBase64.startsWith('data:image/')) {
+    return hasImageDataUrlPayload(rawBase64) ? rawBase64 : null
+  }
+
+  // Normalize to standard base64:
+  // 1) drop whitespaces/newlines
+  // 2) convert URL-safe variant (-, _) to (+, /)
+  // 3) fix padding
+  let normalizedBase64 = rawBase64.replace(/\s+/g, '').replace(/-/g, '+').replace(/_/g, '/')
+  const padding = normalizedBase64.length % 4
+  if (padding > 0) {
+    normalizedBase64 += '='.repeat(4 - padding)
+  }
+  if (!normalizedBase64) return null
 
   const mimeType = typeof imageRecord.mimeType === 'string' && imageRecord.mimeType.trim()
     ? imageRecord.mimeType.trim()
     : 'image/png'
-  return `data:${mimeType};base64,${base64}`
+  return `data:${mimeType};base64,${normalizedBase64}`
 }
 
 const resetSelectionState = () => {
@@ -973,21 +1022,42 @@ const loadBridgeRecognitionImages = async () => {
     if (requestToken !== bridgeRecoLoadToken) return
 
     const refs = parseCachedImageRefs(recoResult.data)
-    const rawPromise = refs.raw != null
-      ? loadCachedImageDataUrl(target.sessionId, target.taskId, refs.raw)
-      : Promise.resolve<string | null>(null)
-    const drawPromises = refs.draws.map(refId => loadCachedImageDataUrl(target.sessionId, target.taskId, refId))
+    const inlineImages = parseInlineRecoImages(recoResult.data)
+    const rawPromise = inlineImages.raw
+      ? Promise.resolve<string | null>(inlineImages.raw)
+      : refs.raw != null
+        ? loadCachedImageDataUrl(target.sessionId, target.taskId, refs.raw)
+        : Promise.resolve<string | null>(null)
 
-    const [raw, drawResults] = await Promise.all([
-      rawPromise,
-      Promise.all(drawPromises),
-    ])
+    const drawPromises = inlineImages.draws.length > 0
+      ? inlineImages.draws.map((item) => Promise.resolve<string | null>(item))
+      : refs.draws.map(refId => loadCachedImageDataUrl(target.sessionId, target.taskId, refId))
+
+    const raw = await rawPromise.catch(() => null)
+
+    const drawResults = await Promise.all(drawPromises.map(async (promise) => {
+      try {
+        return await promise
+      } catch {
+        return null
+      }
+    }))
 
     if (requestToken !== bridgeRecoLoadToken) return
 
+    const resolvedDraws = drawResults.filter((item): item is string => typeof item === 'string' && item.length > 0)
     bridgeRecognitionImages.value = {
       raw,
-      draws: drawResults.filter((item): item is string => typeof item === 'string' && item.length > 0),
+      draws: resolvedDraws,
+    }
+    if (!bridgeRecognitionError.value) {
+      const requestedRaw = !!inlineImages.raw || refs.raw != null
+      const requestedDrawCount = inlineImages.draws.length > 0 ? inlineImages.draws.length : refs.draws.length
+      if (requestedRaw && !raw && requestedDrawCount === 0) {
+        bridgeRecognitionError.value = '识别图片为空（dataUrl 没有内容）'
+      } else if (requestedDrawCount > 0 && resolvedDraws.length === 0 && !raw) {
+        bridgeRecognitionError.value = '识别图片为空（raw/draw 都没有有效内容）'
+      }
     }
   } catch (error) {
     if (requestToken !== bridgeRecoLoadToken) return
