@@ -294,6 +294,31 @@ const scrollToNode = async (index: number) => {
   }, 80)
 }
 
+const scrollNodeTimelineToBottom = () => {
+  const scrollerEl = (virtualScroller.value?.$el ?? null) as HTMLElement | null
+  if (!scrollerEl) return
+  if (typeof scrollerEl.scrollTo === 'function') {
+    scrollerEl.scrollTo({ top: scrollerEl.scrollHeight, behavior: 'auto' })
+  } else {
+    scrollerEl.scrollTop = scrollerEl.scrollHeight
+  }
+}
+
+const scrollToLatestNodeBottom = async () => {
+  const latestNodeIndex = currentNodes.value.length - 1
+  if (latestNodeIndex < 0) return
+
+  await safeScrollToItem(latestNodeIndex)
+  await nextTick()
+  scrollNodeTimelineToBottom()
+
+  // 动态高度在下一帧更新时再补一次，保证展开子节点时仍贴底
+  setTimeout(() => {
+    if (!isRealtimeStreaming.value || !followLast.value) return
+    scrollNodeTimelineToBottom()
+  }, 80)
+}
+
 // 当前任务的节点列表（添加唯一key用于虚拟滚动）
 const currentNodes = computed(() => {
   if (!props.selectedTask) return []
@@ -354,10 +379,7 @@ const followToLatest = async () => {
   taskListScrollbar.value?.scrollTo({ top: Number.MAX_SAFE_INTEGER, behavior: 'smooth' })
   nodeNavScrollbar.value?.scrollTo({ top: Number.MAX_SAFE_INTEGER, behavior: 'smooth' })
 
-  const latestNodeIndex = currentNodes.value.length - 1
-  if (latestNodeIndex >= 0) {
-    void scrollToNode(latestNodeIndex)
-  }
+  void scrollToLatestNodeBottom()
 }
 
 let followToLatestRafId: number | null = null
