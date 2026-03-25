@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, h, onBeforeUnmount } from 'vue'
 import { VueFlow, useVueFlow } from '@vue-flow/core'
 import '@vue-flow/core/dist/style.css'
 import '@vue-flow/core/dist/theme-default.css'
-import { NSelect, NCard, NFlex, NText, NScrollbar, NTag, NDrawer, NDrawerContent, NButton, NDropdown } from 'naive-ui'
+import { NSelect, NCard, NFlex, NText, NScrollbar, NTag, NDrawer, NDrawerContent, NButton, NDropdown, NImage } from 'naive-ui'
 import FlowchartNode from '../components/FlowchartNode.vue'
 import FlowchartOrthogonalEdge from '../components/FlowchartOrthogonalEdge.vue'
 import { buildFlowchartData } from '../utils/flowchartBuilder'
@@ -928,11 +928,10 @@ const onPaneClick = () => {
                   {{ info.status === 'running' ? getRuntimeStatusText(info.status) : info.action_details.success ? '成功' : '失败' }}
                 </n-tag>
               </div>
-              <img
+              <n-image
                 v-if="nodeImageMap.get(info.node_id)"
                 :src="convertFileSrc(nodeImageMap.get(info.node_id)!)"
                 class="popover-img"
-                alt="节点截图"
               />
               <div
                 v-if="idx < popoverNodeData.nodeInfos.length - 1"
@@ -1177,8 +1176,11 @@ const onPaneClick = () => {
 
 .popover-img {
   max-width: 100%;
-  border-radius: 4px;
   margin-top: 4px;
+}
+
+.popover-img :deep(img) {
+  border-radius: 4px;
 }
 
 /* Vue Flow pane background */

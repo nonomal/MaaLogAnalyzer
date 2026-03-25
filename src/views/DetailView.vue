@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import {
   NCard, NFlex, NScrollbar, NDescriptions, NDescriptionsItem,
-  NTag, NEmpty, NCode, NButton, NIcon, NText, NCollapse, NCollapseItem
+  NTag, NEmpty, NCode, NButton, NIcon, NText, NCollapse, NCollapseItem, NImage
 } from 'naive-ui'
 import { CheckCircleOutlined, CloseCircleOutlined, CopyOutlined } from '@vicons/antd'
 import type { NodeInfo, UnifiedFlowItem } from '../types'
@@ -422,19 +422,18 @@ const copyToClipboard = (text: string) => {
           <div v-if="bridgeRecognitionDrawImages.length > 0" style="margin-top: 12px">
             <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">Draw ({{ bridgeRecognitionDrawImages.length }})</n-text>
             <n-flex vertical style="gap: 8px">
-              <img
+              <n-image
                 v-for="(img, idx) in bridgeRecognitionDrawImages"
                 :key="`${idx}-${img.slice(0, 24)}`"
                 :src="resolveImageSrc(img)"
-                style="max-width: 100%; border-radius: 4px"
-                :alt="`Draw ${idx + 1}`"
+                class="detail-preview-image"
               />
             </n-flex>
           </div>
 
           <div v-if="bridgeRecognitionRawImage" style="margin-top: 12px">
             <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">Raw</n-text>
-            <img :src="resolveImageSrc(bridgeRecognitionRawImage)" style="max-width: 100%; border-radius: 4px" alt="Raw" />
+            <n-image :src="resolveImageSrc(bridgeRecognitionRawImage)" class="detail-preview-image" />
           </div>
 
           <!-- 原始识别数据 (折叠) -->
@@ -721,6 +720,14 @@ const copyToClipboard = (text: string) => {
 
 .n-descriptions :deep(.n-descriptions-table-wrapper) {
   background: transparent;
+}
+
+.detail-preview-image {
+  max-width: 100%;
+}
+
+.detail-preview-image :deep(img) {
+  border-radius: 4px;
 }
 
 @media (max-width: 768px) {
