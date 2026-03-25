@@ -239,6 +239,14 @@ interface RealtimeSessionState {
   pendingLines: string[]
 }
 
+interface SnapshotRequestResult {
+  accepted: boolean
+  sessionId: string
+  fromSeq: number
+  toSeq: number
+  totalEvents: number
+}
+
 type QueryDetailTarget = 'reco' | 'action' | 'cached_image'
 
 interface QueryDetailParams {
@@ -291,6 +299,8 @@ interface BridgeOpenCropRequest {
 const BRIDGE_IMAGE_CACHE_MAX_ITEMS = 50
 const BRIDGE_TASK_DOC_CACHE_MAX_ITEMS = 80
 const REALTIME_PARSE_INTERVAL_MS = 16
+const REALTIME_SNAPSHOT_REQUEST_TIMEOUT_MS = 12000
+const REALTIME_SNAPSHOT_MAX_BATCH_SIZE = 300
 const shouldMaintainRealtimeTextTargets = showTextSearchView
 
 const realtimeSession = ref<RealtimeSessionState | null>(null)
@@ -298,6 +308,10 @@ let realtimeParseTimer: number | null = null
 const realtimeParsing = ref(false)
 const realtimeReparseRequested = ref(false)
 const realtimeStreaming = ref(false)
+const realtimeSnapshotRequestedFromSeq = ref<number | null>(null)
+const realtimeSnapshotRequesting = ref(false)
+const realtimeSnapshotReplaying = ref(false)
+const realtimeUnknownMessages = new Set<string>()
 const isRealtimeContext = computed(() => {
   return realtimeSession.value !== null || textSearchLoadedDefaultTargetId.value.startsWith('realtime:')
 })
@@ -324,6 +338,10 @@ const normalizeRealtimeMessage = (value: unknown): string | null => {
   if (msg.startsWith('NextList.')) return `Node.${msg}`
   if (msg.startsWith('Recognition.')) return `Node.${msg}`
   if (msg.startsWith('Action.')) return `Node.${msg}`
+  if (!realtimeUnknownMessages.has(msg)) {
+    realtimeUnknownMessages.add(msg)
+    console.warn('[realtime] unsupported event message ignored:', msg)
+  }
   return null
 }
 
@@ -694,6 +712,10 @@ const stopRealtimeSession = () => {
   realtimeReparseRequested.value = false
   realtimeParsing.value = false
   realtimeStreaming.value = false
+  realtimeSnapshotRequestedFromSeq.value = null
+  realtimeSnapshotRequesting.value = false
+  realtimeSnapshotReplaying.value = false
+  realtimeUnknownMessages.clear()
   clearBridgeNodeDefinitionState()
   clearBridgeImageCache()
   clearBridgeTaskDocCache()
@@ -745,6 +767,51 @@ const scheduleRealtimeParse = () => {
   }, REALTIME_PARSE_INTERVAL_MS)
 }
 
+const queryRealtimeSnapshot = async (sessionId: string, lastSeq: number): Promise<SnapshotRequestResult> => {
+  if (!bridge?.enabled) {
+    throw new Error('Bridge is disabled')
+  }
+  const result = await bridge.sendRequest('realtime.snapshot.request', {
+    sessionId,
+    lastSeq,
+    maxBatchSize: REALTIME_SNAPSHOT_MAX_BATCH_SIZE,
+  }, { timeoutMs: REALTIME_SNAPSHOT_REQUEST_TIMEOUT_MS })
+  const record = asRecord(result)
+  if (!record) {
+    throw new Error('Invalid realtime.snapshot.request response')
+  }
+  return {
+    accepted: record.accepted === true,
+    sessionId: typeof record.sessionId === 'string' ? record.sessionId : sessionId,
+    fromSeq: toFiniteNumber(record.fromSeq, lastSeq + 1),
+    toSeq: toFiniteNumber(record.toSeq, lastSeq),
+    totalEvents: toFiniteNumber(record.totalEvents, 0),
+  }
+}
+
+const requestRealtimeSnapshot = async (sessionId: string, lastSeq: number) => {
+  if (!bridge?.enabled) return
+  if (realtimeSnapshotRequesting.value) return
+  if (realtimeSnapshotRequestedFromSeq.value === lastSeq && realtimeSnapshotReplaying.value) return
+
+  realtimeSnapshotRequesting.value = true
+  realtimeSnapshotRequestedFromSeq.value = lastSeq
+  try {
+    const result = await queryRealtimeSnapshot(sessionId, lastSeq)
+    if (result.accepted) {
+      realtimeSnapshotReplaying.value = true
+      return
+    }
+    realtimeSnapshotReplaying.value = false
+    console.warn('[realtime] snapshot request rejected:', result)
+  } catch (error) {
+    realtimeSnapshotReplaying.value = false
+    console.warn('[realtime] snapshot request failed:', error)
+  } finally {
+    realtimeSnapshotRequesting.value = false
+  }
+}
+
 const handleRealtimeStart = (params: unknown) => {
   const payload = asRecord(params)
   if (!payload) return
@@ -757,6 +824,10 @@ const handleRealtimeStart = (params: unknown) => {
     realtimeParseTimer = null
   }
   realtimeReparseRequested.value = false
+  realtimeSnapshotRequestedFromSeq.value = null
+  realtimeSnapshotRequesting.value = false
+  realtimeSnapshotReplaying.value = false
+  realtimeUnknownMessages.clear()
   clearBridgeImageCache()
   clearBridgeTaskDocCache()
   clearBridgeNodeDefinitionState()
@@ -786,6 +857,7 @@ const handleRealtimePush = (params: unknown) => {
 
   const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId.trim() : ''
   if (!sessionId) return
+  const mode = payload.mode === 'snapshot' ? 'snapshot' : 'live'
 
   if (!realtimeSession.value || realtimeSession.value.sessionId !== sessionId) {
     handleRealtimeStart({
@@ -796,6 +868,9 @@ const handleRealtimePush = (params: unknown) => {
 
   const session = realtimeSession.value
   if (!session) return
+  if (mode === 'snapshot') {
+    realtimeSnapshotReplaying.value = true
+  }
 
   const rawEvents = Array.isArray(payload.events) ? payload.events : []
   if (rawEvents.length === 0) return
@@ -805,12 +880,11 @@ const handleRealtimePush = (params: unknown) => {
     const eventRecord = asRecord(rawEvent)
     if (!eventRecord) continue
     if (typeof eventRecord.seq !== 'number' || !Number.isFinite(eventRecord.seq)) continue
-    if (typeof eventRecord.msg !== 'string' || !eventRecord.msg.trim()) continue
     const details = asRecord(eventRecord.details) ?? {}
     events.push({
       seq: eventRecord.seq,
       at: toFiniteNumber(eventRecord.at, Date.now()),
-      msg: eventRecord.msg,
+      msg: typeof eventRecord.msg === 'string' ? eventRecord.msg : '',
       details,
     })
   }
@@ -819,18 +893,31 @@ const handleRealtimePush = (params: unknown) => {
   events.sort((a, b) => a.seq - b.seq)
 
   let appended = 0
+  let hasGap = false
   for (const event of events) {
     if (event.seq <= session.lastSeq) continue
+    if (event.seq > session.lastSeq + 1) {
+      hasGap = true
+      console.warn('[realtime] seq gap detected, requesting snapshot replay:', {
+        sessionId: session.sessionId,
+        expectedSeq: session.lastSeq + 1,
+        actualSeq: event.seq,
+        mode,
+      })
+      void requestRealtimeSnapshot(session.sessionId, session.lastSeq)
+      break
+    }
     const line = toSyntheticEventLine(event)
+    session.lastSeq = event.seq
     if (!line) continue
     if (shouldMaintainRealtimeTextTargets) {
       session.lines?.push(line)
     }
     session.pendingLines.push(line)
-    session.lastSeq = event.seq
     appended++
   }
 
+  if (hasGap && appended === 0) return
   if (appended === 0) return
   syncRealtimeLoadedTarget(session)
   scheduleRealtimeParse()
@@ -844,6 +931,18 @@ const handleRealtimeEnd = (params: unknown) => {
   if (!sessionId || !realtimeSession.value || realtimeSession.value.sessionId !== sessionId) return
 
   realtimeStreaming.value = false
+  scheduleRealtimeParse()
+}
+
+const handleRealtimeSnapshotEnd = (params: unknown) => {
+  const payload = asRecord(params)
+  if (!payload) return
+
+  const sessionId = typeof payload.sessionId === 'string' ? payload.sessionId.trim() : ''
+  if (!sessionId || !realtimeSession.value || realtimeSession.value.sessionId !== sessionId) return
+
+  realtimeSnapshotReplaying.value = false
+  realtimeSnapshotRequestedFromSeq.value = null
   scheduleRealtimeParse()
 }
 
@@ -913,6 +1012,7 @@ const handleJsonRpcMethod = async (method: string, params: unknown, id?: JsonRpc
       if (id !== undefined) bridge?.sendResult(id, { ok: true })
       return
     case 'realtime.snapshot.end':
+      handleRealtimeSnapshotEnd(params)
       if (id !== undefined) bridge?.sendResult(id, { ok: true })
       return
     default:
