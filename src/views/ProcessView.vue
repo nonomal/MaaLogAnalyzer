@@ -277,6 +277,11 @@ const showRealtimeStatus = computed(() => props.showRealtimeStatus === true)
 const showReloadControls = computed(() => props.showReloadControls === true)
 const nodeNavSearchText = ref('')
 const normalizedNodeNavSearchText = computed(() => normalizeSearchText(nodeNavSearchText.value))
+const nodeNavFailedOnly = ref(false)
+
+const toggleNodeNavFailedOnly = () => {
+  nodeNavFailedOnly.value = !nodeNavFailedOnly.value
+}
 
 // 文件读取加载状态
 const fileLoading = ref(false)
@@ -480,7 +485,15 @@ const nodeNavItems = computed(() => {
       ...item,
       matchKinds: getNodeNavMatchKinds(item.matchDetails),
     }))
+    .filter((item) => !nodeNavFailedOnly.value || item.node.status === 'failed')
     .filter((item) => !query || item.matchDetails.length > 0)
+})
+
+const nodeNavEmptyDescription = computed(() => {
+  if (currentNodes.value.length === 0) return '暂无节点数据'
+  if (normalizedNodeNavSearchText.value) return '未找到匹配节点'
+  if (nodeNavFailedOnly.value) return '暂无失败节点'
+  return '暂无节点数据'
 })
 
 // 虚拟滚动引用
@@ -1377,7 +1390,17 @@ const handleFlowItemClick = (node: NodeInfo, flowItemId: string) => {
                 <n-card size="small" data-tour="analysis-node-nav" style="height: 100%; display: flex; flex-direction: column; position: relative; overflow: visible" content-style="padding: 0; flex: 1; min-height: 0; overflow: visible">
                   <template #header>
                     <n-flex align="center" justify="space-between" style="padding-right: 16px">
-                      <n-text style="font-size: 14px; font-weight: 500">节点导航</n-text>
+                      <n-flex align="center" style="gap: 8px">
+                        <n-text style="font-size: 14px; font-weight: 500">节点导航</n-text>
+                        <n-button
+                          text
+                          size="tiny"
+                          @click="toggleNodeNavFailedOnly"
+                          :title="nodeNavFailedOnly ? '仅显示失败节点（点击显示全部）' : '显示全部节点（点击仅失败）'"
+                        >
+                          <span class="node-nav-filter-dot" :class="{ 'node-nav-filter-dot--active': nodeNavFailedOnly }" />
+                        </n-button>
+                      </n-flex>
                       <n-flex align="center" style="gap: 2px">
                         <n-button text size="tiny" @click="scrollNavToTop" title="跳转顶部">
                           <n-icon size="16"><vertical-align-top-outlined /></n-icon>
@@ -1389,13 +1412,17 @@ const handleFlowItemClick = (node: NodeInfo, flowItemId: string) => {
                     </n-flex>
                   </template>
                   <div style="display: flex; flex-direction: column; height: 100%; min-height: 0">
-                    <div style="padding: 0 12px 8px 12px">
+                    <div class="node-nav-search-wrap">
+                      <div class="node-nav-search-shell">
                       <n-input
                         v-model:value="nodeNavSearchText"
+                        class="node-nav-search-input"
+                        :bordered="false"
                         clearable
                         size="small"
                         placeholder="搜索节点 / 识别 / Next"
                       />
+                      </div>
                     </div>
                     <n-scrollbar ref="nodeNavScrollbar" style="flex: 1; min-height: 0" @wheel.passive="handleFollowWheel">
                     <n-list hoverable clickable v-if="nodeNavItems.length > 0">
@@ -1489,7 +1516,7 @@ const handleFlowItemClick = (node: NodeInfo, flowItemId: string) => {
                     </n-list>
                     <n-empty
                       v-else
-                      :description="currentNodes.length > 0 ? '未找到匹配节点' : '暂无节点数据'"
+                      :description="nodeNavEmptyDescription"
                       style="padding: 24px 0"
                     />
                   </n-scrollbar>
@@ -1596,6 +1623,42 @@ const handleFlowItemClick = (node: NodeInfo, flowItemId: string) => {
   line-height: 1.35;
   white-space: normal;
   word-break: break-word;
+}
+
+.node-nav-search-wrap {
+  padding: 0 12px 8px 12px;
+}
+
+.node-nav-search-shell {
+  border: 1px solid rgba(127, 127, 127, 0.65);
+  border-radius: 6px;
+  background: var(--n-color, transparent);
+}
+
+.node-nav-search-input :deep(.n-input-wrapper) {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+body.force-dark .node-nav-search-shell {
+  border-color: rgba(255, 255, 255, 0.28);
+}
+
+body.force-light .node-nav-search-shell {
+  border-color: rgba(0, 0, 0, 0.24);
+}
+
+.node-nav-filter-dot {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: #8f8f8f;
+}
+
+.node-nav-filter-dot--active {
+  background: #d03050;
 }
 
 .analysis-layout-shell {
