@@ -80,7 +80,8 @@ const edgeLength = computed(() => {
 const chevronText = computed(() => {
   // Keep visual density unchanged; only increase total length coverage.
   const approxGlyphAdvancePx = 7
-  const count = Math.max(14, Math.min(5000, Math.ceil((edgeLength.value + 96) / approxGlyphAdvancePx)))
+  // Guard against huge SVG text nodes on very long paths (web browsers may render poorly).
+  const count = Math.max(14, Math.min(420, Math.ceil((edgeLength.value + 96) / approxGlyphAdvancePx)))
   return '>'.repeat(count)
 })
 
@@ -103,6 +104,17 @@ const chevronStroke = computed(() => {
   if (typeof raw === 'string' && raw.trim()) return raw
   return '#18a058'
 })
+
+const normalizedMarkerEnd = computed(() => {
+  const raw = props.markerEnd
+  if (typeof raw !== 'string') return undefined
+  const value = raw.trim()
+  if (!value) return undefined
+  if (value === '#' || value === 'url(#)' || value === "url('#')" || value === 'url("#")') {
+    return undefined
+  }
+  return value
+})
 </script>
 
 <template>
@@ -112,7 +124,7 @@ const chevronStroke = computed(() => {
       :id="id"
       :path="path"
       :style="style"
-      :marker-end="markerEnd"
+      :marker-end="normalizedMarkerEnd"
     />
     <text
       v-if="flowMode === 'chevron'"
