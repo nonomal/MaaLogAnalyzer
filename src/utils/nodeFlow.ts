@@ -208,7 +208,24 @@ export const buildNodeRecognitionFlowItems = (node: NodeInfo): UnifiedFlowItem[]
 }
 
 export const buildNodeRecognitionAttempts = (node: NodeInfo): RecognitionAttempt[] => {
-  return buildNodeRecognitionFlowItems(node).map(mapFlowRecognitionToAttempt)
+  const flowAttempts = buildNodeRecognitionFlowItems(node).map(mapFlowRecognitionToAttempt)
+  if (flowAttempts.length > 0) return flowAttempts
+  if (!node.reco_details) return []
+
+  const fallbackTimestamp =
+    node.action_details?.ts ||
+    node.end_ts ||
+    node.ts
+
+  return [{
+    reco_id: node.reco_details.reco_id,
+    name: node.reco_details.name || node.name,
+    ts: fallbackTimestamp,
+    end_ts: fallbackTimestamp,
+    status: node.status === 'running' ? 'running' : 'success',
+    reco_details: node.reco_details,
+    error_image: node.error_image,
+  }]
 }
 
 export const buildNodeActionRootItem = (node: NodeInfo): UnifiedFlowItem | null => {

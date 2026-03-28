@@ -60,7 +60,7 @@ export const buildNodeColumns = (isMobile: boolean): DataTableColumns<NodeStatis
     {
       title: '平均耗时',
       key: 'avgDuration',
-      width: 120,
+      width: 100,
       align: 'right',
       defaultSortOrder: 'descend',
       sorter: (a, b) => a.avgDuration - b.avgDuration,
@@ -69,7 +69,7 @@ export const buildNodeColumns = (isMobile: boolean): DataTableColumns<NodeStatis
     {
       title: '最小耗时',
       key: 'minDuration',
-      width: 120,
+      width: 100,
       align: 'right',
       sorter: (a, b) => a.minDuration - b.minDuration,
       render: (row) => formatDuration(row.minDuration),
@@ -77,7 +77,7 @@ export const buildNodeColumns = (isMobile: boolean): DataTableColumns<NodeStatis
     {
       title: '最大耗时',
       key: 'maxDuration',
-      width: 120,
+      width: 100,
       align: 'right',
       sorter: (a, b) => a.maxDuration - b.maxDuration,
       render: (row) => formatDuration(row.maxDuration),
@@ -85,7 +85,7 @@ export const buildNodeColumns = (isMobile: boolean): DataTableColumns<NodeStatis
     {
       title: '总耗时',
       key: 'totalDuration',
-      width: 120,
+      width: 100,
       align: 'right',
       sorter: (a, b) => a.totalDuration - b.totalDuration,
       render: (row) => formatDuration(row.totalDuration),
@@ -93,7 +93,7 @@ export const buildNodeColumns = (isMobile: boolean): DataTableColumns<NodeStatis
     {
       title: '成功率',
       key: 'successRate',
-      width: 150,
+      width: 120,
       align: 'center',
       sorter: (a, b) => a.successRate - b.successRate,
       render: (row) => renderSuccessRateProgress(row.successRate),

@@ -39,7 +39,7 @@ const {
     class="app-root"
     :class="{ 'app-root--embed-vscode-launch': isVscodeLaunchEmbed }"
     :data-embed-mode="appEmbedMode"
-    style="height: 100vh; display: flex; flex-direction: column; overflow: hidden"
+    style="height: 100vh; min-height: 0; display: flex; flex-direction: column; overflow: hidden"
   >
     <app-header-bar
       v-bind="headerBarProps"

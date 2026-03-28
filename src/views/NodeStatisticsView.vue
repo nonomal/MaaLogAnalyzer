@@ -1,7 +1,12 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
 import {
-  NCard, useMessage,
+  ref,
+  computed,
+  onMounted,
+  onBeforeUnmount,
+} from 'vue'
+import {
+  NCard, NTag, useMessage,
 } from 'naive-ui'
 import type { TaskInfo } from '../types'
 import { useIsMobile } from '../composables/useIsMobile'
@@ -28,6 +33,7 @@ const { isMobile } = useIsMobile()
 
 const props = defineProps<{
   tasks: TaskInfo[]
+  isVscodeLaunchEmbed?: boolean
 }>()
 
 // 消息提示
@@ -81,6 +87,69 @@ const {
   nodeChartDimension,
   recognitionActionChartDimension,
 })
+
+const statisticsPanelTitle = computed(() => (
+  statMode.value === 'node' ? '节点明细' : '识别 / 动作明细'
+))
+
+const activeChartOption = computed(() => (
+  statMode.value === 'node'
+    ? mobileNodeChartOption.value
+    : mobileRecognitionActionChartOption.value
+))
+
+const hasSummaryContent = computed(() => (
+  statMode.value === 'node'
+    ? nodeSummary.value !== null
+    : recognitionActionSummary.value !== null
+))
+
+const hasChartContent = computed(() => activeChartOption.value !== null)
+
+const layoutHostRef = ref<HTMLElement | null>(null)
+const statisticsBodyScrollRef = ref<HTMLElement | null>(null)
+const layoutHostWidth = ref(0)
+let layoutResizeObserver: ResizeObserver | null = null
+
+const useSingleColumnLayout = computed(() => (
+  props.isVscodeLaunchEmbed === true
+  || isMobile.value
+  || !hasChartContent.value
+  || layoutHostWidth.value < 980
+))
+
+const updateLayoutHostWidth = () => {
+  const host = layoutHostRef.value
+  if (!host) {
+    layoutHostWidth.value = 0
+    return
+  }
+  layoutHostWidth.value = host.getBoundingClientRect().width
+}
+
+onMounted(() => {
+  const host = layoutHostRef.value
+  if (!host) {
+    return
+  }
+  updateLayoutHostWidth()
+  if (typeof ResizeObserver === 'undefined') {
+    window.addEventListener('resize', updateLayoutHostWidth)
+    return
+  }
+  layoutResizeObserver = new ResizeObserver(() => {
+    updateLayoutHostWidth()
+  })
+  layoutResizeObserver.observe(host)
+})
+
+onBeforeUnmount(() => {
+  if (layoutResizeObserver) {
+    layoutResizeObserver.disconnect()
+    layoutResizeObserver = null
+  }
+  window.removeEventListener('resize', updateLayoutHostWidth)
+})
 </script>
 
 <template>
@@ -88,62 +157,101 @@ const {
     class="statistics-root-card"
     size="small"
     data-tour="statistics-root"
-    title="节点性能统计"
     :bordered="false"
     style="height: 100%; display: flex; flex-direction: column"
-    content-style="padding: 16px; flex: 1; min-height: 0; display: flex; flex-direction: column"
+    content-style="padding: 16px; flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden"
   >
-    <template #header-extra>
-      <node-statistics-header-controls
-        :is-mobile="isMobile"
-        :stat-mode="statMode"
-        :node-chart-dimension="nodeChartDimension"
-        :recognition-action-chart-dimension="recognitionActionChartDimension"
-        :node-chart-dimension-options="nodeChartDimensionOptions"
-        :recognition-action-chart-dimension-options="recognitionActionChartDimensionOptions"
-        :search-keyword="searchKeyword"
-        :is-in-tauri="isInTauri"
-        :loading="loading"
-        :upload-key="uploadKey"
-        :handle-naive-upload="handleNaiveUpload"
-        @update:stat-mode="statMode = $event"
-        @update:node-chart-dimension="nodeChartDimension = $event"
-        @update:recognition-action-chart-dimension="recognitionActionChartDimension = $event"
-        @update:search-keyword="searchKeyword = $event"
-        @tauri-upload-click="handleTauriFileSelect"
-      />
+    <template #header>
+      <div class="statistics-header">
+        <div class="statistics-title-block">
+          <div class="statistics-title-row">
+            <div class="statistics-title">节点性能统计</div>
+            <n-tag size="small" round :type="statMode === 'node' ? 'info' : 'warning'">
+              {{ statMode === 'node' ? '节点统计' : '识别 / 动作' }}
+            </n-tag>
+          </div>
+          <div class="statistics-subtitle">
+            {{ statMode === 'node'
+              ? '聚合查看频次、耗时和稳定性，适合先找最慢热点。'
+              : '拆分识别与动作阶段，适合判断瓶颈更偏向哪一段。' }}
+          </div>
+        </div>
+
+        <div class="statistics-controls-wrap">
+          <node-statistics-header-controls
+            :is-mobile="isMobile"
+            :stat-mode="statMode"
+            :node-chart-dimension="nodeChartDimension"
+            :recognition-action-chart-dimension="recognitionActionChartDimension"
+            :node-chart-dimension-options="nodeChartDimensionOptions"
+            :recognition-action-chart-dimension-options="recognitionActionChartDimensionOptions"
+            :search-keyword="searchKeyword"
+            :is-in-tauri="isInTauri"
+            :is-vscode-launch-embed="props.isVscodeLaunchEmbed === true"
+            :loading="loading"
+            :upload-key="uploadKey"
+            :handle-naive-upload="handleNaiveUpload"
+            @update:stat-mode="statMode = $event"
+            @update:node-chart-dimension="nodeChartDimension = $event"
+            @update:recognition-action-chart-dimension="recognitionActionChartDimension = $event"
+            @update:search-keyword="searchKeyword = $event"
+            @tauri-upload-click="handleTauriFileSelect"
+          />
+        </div>
+      </div>
     </template>
 
-    <node-statistics-summary-section
-      :stat-mode="statMode"
-      :is-mobile="isMobile"
-      :search-keyword="searchKeyword"
-      :node-summary="nodeSummary"
-      :recognition-action-summary="recognitionActionSummary"
-      @update:search-keyword="searchKeyword = $event"
-    />
+    <div ref="layoutHostRef" class="statistics-layout-host">
+      <div ref="statisticsBodyScrollRef" class="statistics-body-scroll">
+      <div class="statistics-body-content">
+        <node-statistics-summary-section
+          v-if="hasSummaryContent"
+          :stat-mode="statMode"
+          :is-mobile="isMobile"
+          :search-keyword="searchKeyword"
+          :node-summary="nodeSummary"
+          :recognition-action-summary="recognitionActionSummary"
+          @update:search-keyword="searchKeyword = $event"
+        />
 
-    <node-statistics-chart-card
-      :visible="statMode === 'node'"
-      :option="mobileNodeChartOption"
-      :is-mobile="isMobile"
-    />
-    <node-statistics-chart-card
-      :visible="statMode === 'recognition-action'"
-      :option="mobileRecognitionActionChartOption"
-      :is-mobile="isMobile"
-    />
+        <div
+          class="statistics-main-layout"
+          :class="{
+            mobile: isMobile,
+            'statistics-main-layout--single': useSingleColumnLayout,
+          }"
+        >
+          <div v-if="hasChartContent" class="statistics-chart-panel">
+            <node-statistics-chart-card
+              :visible="statMode === 'node'"
+              :option="mobileNodeChartOption"
+              :is-mobile="isMobile"
+            />
+            <node-statistics-chart-card
+              :visible="statMode === 'recognition-action'"
+              :option="mobileRecognitionActionChartOption"
+              :is-mobile="isMobile"
+            />
+          </div>
 
-    <node-statistics-data-panel
-      :columns="columns"
-      :statistics="statistics"
-      :effective-tasks-length="effectiveTasks.length"
-      :is-in-tauri="isInTauri"
-      :loading="loading"
-      :upload-key="uploadKey"
-      :handle-naive-upload="handleNaiveUpload"
-      @tauri-upload-click="handleTauriFileSelect"
-    />
+          <div class="statistics-table-panel">
+            <node-statistics-data-panel
+              :columns="columns"
+              :statistics="statistics"
+              :panel-title="statisticsPanelTitle"
+              :effective-tasks-length="effectiveTasks.length"
+              :is-in-tauri="isInTauri"
+              :is-vscode-launch-embed="props.isVscodeLaunchEmbed === true"
+              :loading="loading"
+              :upload-key="uploadKey"
+              :handle-naive-upload="handleNaiveUpload"
+              @tauri-upload-click="handleTauriFileSelect"
+            />
+          </div>
+        </div>
+      </div>
+      </div>
+    </div>
 
     <node-statistics-loading-modals
       :show-file-loading-modal="showFileLoadingModal"
@@ -159,6 +267,115 @@ const {
   background-color: transparent !important;
   border-color: transparent !important;
   box-shadow: none !important;
+}
+
+.statistics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  width: 100%;
+}
+
+.statistics-title-block {
+  min-width: 0;
+}
+
+.statistics-title-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.statistics-title {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+
+.statistics-subtitle {
+  margin-top: 8px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--n-text-color-3);
+  max-width: 640px;
+}
+
+.statistics-controls-wrap {
+  flex-shrink: 0;
+}
+
+.statistics-layout-host {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  height: 0;
+  min-height: 0;
+  min-width: 0;
+}
+
+.statistics-body-scroll {
+  flex: 1 1 auto;
+  max-height: 100%;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+
+.statistics-body-content {
+  min-height: 100%;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  padding-right: 2px;
+}
+
+.statistics-main-layout {
+  display: grid;
+  grid-template-columns: minmax(320px, 360px) minmax(0, 1fr);
+  width: 100%;
+  gap: 16px;
+  align-items: start;
+  padding-bottom: 2px;
+}
+
+.statistics-main-layout.mobile {
+  grid-template-columns: 1fr;
+}
+
+.statistics-main-layout--single {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.statistics-chart-panel,
+.statistics-table-panel {
+  display: flex;
+  min-width: 0;
+}
+
+.statistics-chart-panel > *,
+.statistics-table-panel > * {
+  width: 100%;
+  min-width: 0;
+}
+
+@media (max-width: 960px) {
+  .statistics-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .statistics-controls-wrap {
+    width: 100%;
+  }
+
+  .statistics-main-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
 

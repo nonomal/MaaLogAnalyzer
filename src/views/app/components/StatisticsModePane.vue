@@ -7,11 +7,20 @@ const NodeStatisticsView = defineAsyncComponent(() => import('../../NodeStatisti
 defineProps<{
   active: boolean
   tasks: TaskInfo[]
+  isVscodeLaunchEmbed: boolean
 }>()
 </script>
 
 <template>
-  <div v-if="active" data-tour="statistics-main" style="height: 100%">
-    <node-statistics-view :tasks="tasks" style="height: 100%" />
+  <div v-if="active" data-tour="statistics-main" class="statistics-mode-pane">
+    <node-statistics-view :tasks="tasks" :is-vscode-launch-embed="isVscodeLaunchEmbed" style="height: 100%" />
   </div>
 </template>
+
+<style scoped>
+.statistics-mode-pane {
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+</style>

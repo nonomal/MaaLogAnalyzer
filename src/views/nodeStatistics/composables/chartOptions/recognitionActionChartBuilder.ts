@@ -1,7 +1,7 @@
 import type { RecognitionActionStatistics } from '../../../../utils/nodeStatistics'
 import { formatDuration } from '../../../../utils/formatDuration'
 import type { RecognitionActionChartDimension } from './dimensions'
-import { buildPieBaseOption } from './basePie'
+import { buildBarBaseOption } from './baseBar'
 
 export const buildRecognitionActionChartOption = (
   source: RecognitionActionStatistics[],
@@ -10,43 +10,49 @@ export const buildRecognitionActionChartOption = (
   if (source.length === 0) return null
 
   let title = ''
-  let formatter: string | ((params: any) => string) = ''
+  let tooltipFormatter: (params: any) => string
+  let valueFormatter: (value: number) => string
   let sortFn: (a: RecognitionActionStatistics, b: RecognitionActionStatistics) => number
   let valueFn: (item: RecognitionActionStatistics) => number
   let filterFn: (item: RecognitionActionStatistics) => boolean = () => true
 
   switch (dimension) {
     case 'avgRecognitionDuration':
-      title = '平均识别耗时分布 (Top 10)'
-      formatter = (params: any) => `${params.name}: ${formatDuration(params.value)} (${params.percent}%)`
+      title = '平均识别耗时排行（Top 10）'
+      tooltipFormatter = (params: any) => `${params.name}<br />平均识别耗时：${formatDuration(params.value)}`
+      valueFormatter = (value: number) => formatDuration(value)
       sortFn = (a, b) => b.avgRecognitionDuration - a.avgRecognitionDuration
       valueFn = (item) => item.avgRecognitionDuration
       filterFn = (item) => item.recognitionCount > 0
       break
     case 'maxRecognitionDuration':
-      title = '最大识别耗时分布 (Top 10)'
-      formatter = (params: any) => `${params.name}: ${formatDuration(params.value)} (${params.percent}%)`
+      title = '最大识别耗时排行（Top 10）'
+      tooltipFormatter = (params: any) => `${params.name}<br />最大识别耗时：${formatDuration(params.value)}`
+      valueFormatter = (value: number) => formatDuration(value)
       sortFn = (a, b) => b.maxRecognitionDuration - a.maxRecognitionDuration
       valueFn = (item) => item.maxRecognitionDuration
       filterFn = (item) => item.recognitionCount > 0
       break
     case 'avgActionDuration':
-      title = '平均动作耗时分布 (Top 10)'
-      formatter = (params: any) => `${params.name}: ${formatDuration(params.value)} (${params.percent}%)`
+      title = '平均动作耗时排行（Top 10）'
+      tooltipFormatter = (params: any) => `${params.name}<br />平均动作耗时：${formatDuration(params.value)}`
+      valueFormatter = (value: number) => formatDuration(value)
       sortFn = (a, b) => b.avgActionDuration - a.avgActionDuration
       valueFn = (item) => item.avgActionDuration
       filterFn = (item) => item.actionCount > 0
       break
     case 'maxActionDuration':
-      title = '最大动作耗时分布 (Top 10)'
-      formatter = (params: any) => `${params.name}: ${formatDuration(params.value)} (${params.percent}%)`
+      title = '最大动作耗时排行（Top 10）'
+      tooltipFormatter = (params: any) => `${params.name}<br />最大动作耗时：${formatDuration(params.value)}`
+      valueFormatter = (value: number) => formatDuration(value)
       sortFn = (a, b) => b.maxActionDuration - a.maxActionDuration
       valueFn = (item) => item.maxActionDuration
       filterFn = (item) => item.actionCount > 0
       break
     case 'avgRecognitionAttempts':
-      title = '平均识别尝试次数分布 (Top 10)'
-      formatter = '{b}: {c} 次 ({d}%)'
+      title = '平均识别尝试次数排行（Top 10）'
+      tooltipFormatter = (params: any) => `${params.name}<br />平均识别尝试：${Number(params.value).toFixed(1)} 次`
+      valueFormatter = (value: number) => `${value.toFixed(1)} 次`
       sortFn = (a, b) => b.avgRecognitionAttempts - a.avgRecognitionAttempts
       valueFn = (item) => item.avgRecognitionAttempts
       break
@@ -60,15 +66,10 @@ export const buildRecognitionActionChartOption = (
 
   if (top10.length === 0) return null
 
-  return buildPieBaseOption(
+  return buildBarBaseOption(
     title,
-    formatter,
     top10.map((item) => ({ name: item.name, value: valueFn(item) })),
-    (params: any) => {
-      if (dimension === 'avgRecognitionAttempts') {
-        return `${params.name}\n${params.value.toFixed(1)} 次`
-      }
-      return `${params.name}\n${formatDuration(params.value)}`
-    },
+    tooltipFormatter,
+    valueFormatter,
   )
 }

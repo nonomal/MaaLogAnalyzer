@@ -19,6 +19,7 @@ import type {
 defineProps<{
   viewMode: string
   isMobile: boolean
+  isVscodeLaunchEmbed: boolean
   splitSize: number
   splitVerticalSize: number
   showTaskDrawer: boolean
@@ -79,6 +80,7 @@ const emit = defineEmits<{
     <statistics-mode-pane
       :active="viewMode === 'statistics'"
       :tasks="tasks"
+      :is-vscode-launch-embed="isVscodeLaunchEmbed"
     />
 
     <flowchart-mode-pane

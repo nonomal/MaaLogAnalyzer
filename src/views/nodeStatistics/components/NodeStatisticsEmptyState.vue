@@ -2,6 +2,7 @@
 import type { UploadFileInfo } from 'naive-ui'
 import {
   NButton,
+  NEmpty,
   NIcon,
   NText,
   NUpload,
@@ -11,6 +12,7 @@ import { CloudUploadOutlined, FolderOpenOutlined } from '@vicons/antd'
 
 const props = defineProps<{
   isInTauri: boolean
+  isVscodeLaunchEmbed: boolean
   loading: boolean
   uploadKey: number
   handleNaiveUpload: (options: { file: UploadFileInfo }) => boolean | Promise<boolean>
@@ -23,7 +25,18 @@ const emit = defineEmits<{
 
 <template>
   <div style="padding: 40px">
-    <div v-if="props.isInTauri" style="text-align: center">
+    <n-empty
+      v-if="props.isVscodeLaunchEmbed"
+      description="请先在分析视图中加载日志"
+    >
+      <template #extra>
+        <n-text depth="3">
+          VS Code iframe 中的节点统计会复用当前已加载的日志数据，不单独提供导入入口。
+        </n-text>
+      </template>
+    </n-empty>
+
+    <div v-else-if="props.isInTauri" style="text-align: center">
       <n-button
         size="large"
         type="primary"

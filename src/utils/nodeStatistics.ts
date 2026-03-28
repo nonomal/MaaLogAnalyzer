@@ -219,7 +219,8 @@ export class NodeStatisticsAnalyzer {
         // 计算识别阶段时间（从第一次识别到最后一次识别）
         if (attempts.length > 0) {
           const firstAttemptTs = new Date(attempts[0].ts).getTime()
-          const lastAttemptTime = new Date(attempts[attempts.length - 1].ts).getTime()
+          const lastAttempt = attempts[attempts.length - 1]
+          const lastAttemptTime = new Date(lastAttempt.end_ts || lastAttempt.ts).getTime()
           const recognitionDuration = lastAttemptTime - firstAttemptTs
 
           // 只有当有多次识别尝试时，识别时间才有意义
@@ -228,7 +229,7 @@ export class NodeStatisticsAnalyzer {
           }
 
           // 计算动作阶段时间（从最后一次识别到节点完成）
-          const nodeCompleteTime = new Date(node.ts).getTime()
+          const nodeCompleteTime = new Date(node.end_ts || node.ts).getTime()
           const actionDuration = nodeCompleteTime - lastAttemptTime
 
           if (actionDuration >= 0 && actionDuration < 3600000) {

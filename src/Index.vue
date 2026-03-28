@@ -264,6 +264,11 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
     ['--vscode-panel-border', '--vscode-editorGroup-border', '--vscode-widget-border'],
     inputBorderColor,
   )
+  const dataTableStripedColor = pickCssVarColor(
+    styleDecl,
+    ['--vscode-list-inactiveSelectionBackground', '--vscode-list-hoverBackground', '--vscode-editor-inactiveSelectionBackground'],
+    widgetColor,
+  )
   const borderColor = pickCssVarColor(styleDecl, ['--vscode-panel-border', '--vscode-widget-border'], fallbackBorder)
   const textColor = pickCssVarColor(styleDecl, ['--vscode-editor-foreground'], fallbackText)
   const subTextColor = pickCssVarColor(styleDecl, ['--vscode-descriptionForeground', '--vscode-editor-foreground'], textColor)
@@ -375,6 +380,7 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             thIconColor: subTextColor,
             thIconColorActive: primaryColor,
             tdColor: widgetColor,
+            tdColorStriped: dataTableStripedColor,
             tdColorHover: dataTableHeaderHoverColor,
             tdColorSorting: dataTableHeaderSortingColor,
             tdTextColor: textColor,
@@ -383,6 +389,7 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             thColorHoverModal: dataTableHeaderHoverColor,
             thColorSortingModal: dataTableHeaderSortingColor,
             tdColorModal: widgetColor,
+            tdColorStripedModal: dataTableStripedColor,
             tdColorHoverModal: dataTableHeaderHoverColor,
             tdColorSortingModal: dataTableHeaderSortingColor,
             borderColorPopover: dataTableBorderColor,
@@ -390,6 +397,7 @@ const themeOverrides = computed<GlobalThemeOverrides>(() => {
             thColorHoverPopover: dataTableHeaderHoverColor,
             thColorSortingPopover: dataTableHeaderSortingColor,
             tdColorPopover: widgetColor,
+            tdColorStripedPopover: dataTableStripedColor,
             tdColorHoverPopover: dataTableHeaderHoverColor,
             tdColorSortingPopover: dataTableHeaderSortingColor,
           },

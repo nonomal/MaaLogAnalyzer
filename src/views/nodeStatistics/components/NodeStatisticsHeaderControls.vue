@@ -27,6 +27,7 @@ const props = defineProps<{
   recognitionActionChartDimensionOptions: SelectMixedOption[]
   searchKeyword: string
   isInTauri: boolean
+  isVscodeLaunchEmbed: boolean
   loading: boolean
   uploadKey: number
   handleNaiveUpload: (options: { file: UploadFileInfo }) => boolean | Promise<boolean>
@@ -42,7 +43,7 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <n-flex align="center" :style="props.isMobile ? 'gap: 8px; flex-wrap: wrap' : 'gap: 12px'">
+  <n-flex class="statistics-controls" align="center" :wrap="true">
     <n-radio-group :value="props.statMode" size="small" @update:value="emit('update:statMode', $event)">
       <n-radio-button value="node">节点统计</n-radio-button>
       <n-radio-button value="recognition-action">识别/动作</n-radio-button>
@@ -71,15 +72,16 @@ const emit = defineEmits<{
       :value="props.searchKeyword"
       placeholder="搜索节点名称"
       clearable
-      style="width: 200px"
+      class="statistics-search"
       size="small"
       @update:value="emit('update:searchKeyword', $event)"
     />
 
     <n-button
-      v-if="props.isInTauri"
+      v-if="props.isInTauri && !props.isVscodeLaunchEmbed"
       size="small"
-      circle
+      tertiary
+      :circle="props.isMobile"
       :loading="props.loading"
       @click="emit('tauriUploadClick')"
     >
@@ -88,22 +90,43 @@ const emit = defineEmits<{
           <folder-open-outlined />
         </n-icon>
       </template>
+      <span v-if="!props.isMobile">打开日志</span>
     </n-button>
 
     <n-upload
-      v-else
+      v-else-if="!props.isVscodeLaunchEmbed"
       :key="props.uploadKey"
       :custom-request="props.handleNaiveUpload"
       :show-file-list="false"
       accept=".log,.txt"
     >
-      <n-button size="small" circle :loading="props.loading">
+      <n-button size="small" tertiary :circle="props.isMobile" :loading="props.loading">
         <template #icon>
           <n-icon>
             <cloud-upload-outlined />
           </n-icon>
         </template>
+        <span v-if="!props.isMobile">导入日志</span>
       </n-button>
     </n-upload>
   </n-flex>
 </template>
+
+<style scoped>
+.statistics-controls {
+  gap: 10px;
+  justify-content: flex-end;
+}
+
+.statistics-search {
+  width: 220px;
+}
+
+@media (max-width: 768px) {
+  .statistics-controls {
+    width: 100%;
+    gap: 8px;
+    justify-content: flex-start;
+  }
+}
+</style>

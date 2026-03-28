@@ -3,7 +3,7 @@ import type {
   NodeStatistics,
   RecognitionActionStatistics,
 } from '../../../utils/nodeStatistics'
-import { adaptChartForMobile } from './chartOptions/basePie'
+import { adaptChartForMobile } from './chartOptions/baseBar'
 import {
   buildNodeChartOption,
 } from './chartOptions/nodeChartBuilder'

@@ -297,6 +297,7 @@ export const useAppRootViewModel = ({
   } = usePresentationMainContentBindings({
     viewMode,
     isMobile,
+    isVscodeLaunchEmbed,
     splitSize,
     splitVerticalSize,
     showTaskDrawer,

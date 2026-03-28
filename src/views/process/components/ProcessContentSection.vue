@@ -76,6 +76,7 @@ const props = defineProps<{
     v-if="props.tasks.length === 0"
     :is-in-tauri="props.isInTauri"
     :is-in-vscode="props.isInVSCode"
+    :is-vscode-launch-embed="props.isVscodeLaunchEmbed === true"
     :show-reload-controls="props.showReloadControls"
     :reload-options="props.reloadOptions"
     @tauri-open="props.onTauriOpen"

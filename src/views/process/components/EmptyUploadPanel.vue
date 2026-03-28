@@ -6,6 +6,7 @@ import type { DropdownOption } from 'naive-ui'
 const props = defineProps<{
   isInTauri: boolean
   isInVscode: boolean
+  isVscodeLaunchEmbed: boolean
   showReloadControls: boolean
   reloadOptions: DropdownOption[]
 }>()
@@ -83,6 +84,21 @@ const handleReloadSelect = (key: string | number) => {
           选择文件夹
         </n-button>
       </n-flex>
+    </div>
+
+    <div v-else-if="props.isVscodeLaunchEmbed" style="text-align: center; padding: 40px 20px">
+      <n-icon size="48" :depth="3" style="margin-bottom: 16px">
+        <folder-open-outlined />
+      </n-icon>
+      <div style="margin-bottom: 12px">
+        <n-text style="font-size: 16px; display: block; margin-bottom: 8px">
+          请先在分析视图中加载日志
+        </n-text>
+        <n-text depth="3" style="font-size: 14px; display: block; margin-bottom: 8px">
+          当前 VS Code iframe 会复用分析视图中已打开的日志数据，这里不单独提供拖拽或导入入口。
+        </n-text>
+        <n-badge value="VS Code iframe" type="info" style="margin-top: 4px" />
+      </div>
     </div>
 
     <div
