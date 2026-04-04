@@ -55,7 +55,7 @@ const handleSelectMobileTask = (task: TaskInfo) => {
 </script>
 
 <template>
-  <div v-show="active" data-tour="split-main" style="height: 100%">
+  <div v-if="active" data-tour="split-main" style="height: 100%">
     <split-mode-pane
       :is-mobile="isMobile"
       :split-vertical-size="splitVerticalSize"

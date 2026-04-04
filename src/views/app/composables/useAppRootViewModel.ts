@@ -1,4 +1,4 @@
-import { computed, onBeforeUnmount, onMounted, ref, watch, type Ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref } from 'vue'
 import { version } from '../../../../package.json'
 import { getErrorMessage } from '../../../utils/errorHandler'
 import { useIsMobile } from '../../../composables/useIsMobile'
@@ -56,9 +56,9 @@ export const useAppRootViewModel = ({
   } = useAppViewState()
   const parser = new LogParser()
 
-  const tasks = ref<TaskInfo[]>([])
-  const selectedTask = ref<TaskInfo | null>(null)
-  const selectedNode = ref<NodeInfo | null>(null)
+  const tasks = shallowRef<TaskInfo[]>([])
+  const selectedTask = shallowRef<TaskInfo | null>(null)
+  const selectedNode = shallowRef<NodeInfo | null>(null)
   const selectedFlowItemId = ref<string | null>(null)
   const loading = ref(false)
   const pendingScrollNodeId = ref<number | null>(null)

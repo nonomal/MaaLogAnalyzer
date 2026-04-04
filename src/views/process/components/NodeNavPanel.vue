@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, nextTick, ref } from 'vue'
 import {
-  NCard, NScrollbar, NList, NListItem, NEmpty,
+  NCard, NEmpty,
 } from 'naive-ui'
+import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import type { NodeNavViewItem } from '../composables/useNodeNavSearch'
 import NodeNavItem from './NodeNavItem.vue'
 import NodeNavHeader from './NodeNavHeader.vue'
@@ -25,14 +26,75 @@ const emit = defineEmits<{
   'manual-scroll-up': []
 }>()
 
-const nodeNavScrollbar = ref<InstanceType<typeof NScrollbar> | null>(null)
+const nodeNavScroller = ref<InstanceType<typeof DynamicScroller> | null>(null)
+
+const navMinItemSize = computed(() => {
+  if (props.displayMode === 'detailed') {
+    return props.normalizedSearchText ? 76 : 58
+  }
+  return props.normalizedSearchText ? 52 : 34
+})
+
+const getScrollerElement = (): HTMLElement | null => {
+  const root = (nodeNavScroller.value as unknown as { $el?: HTMLElement } | null)?.$el
+  if (!root) return null
+  const nested = root.querySelector('.vue-recycle-scroller') as HTMLElement | null
+  return nested || root
+}
+
+const delay = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
+
+const safeScrollToItem = async (index: number, retry = 0): Promise<boolean> => {
+  const scroller = nodeNavScroller.value
+  const total = props.items.length
+  if (!scroller || total === 0) return false
+
+  const targetIndex = Math.max(0, Math.min(index, total - 1))
+  await nextTick()
+
+  try {
+    scroller.scrollToItem(targetIndex)
+    return true
+  } catch (error) {
+    if (retry >= 2) {
+      console.debug('[node-nav] scrollToItem skipped:', error)
+      return false
+    }
+    await delay(60 * (retry + 1))
+    return safeScrollToItem(targetIndex, retry + 1)
+  }
+}
+
+const alignScrollerBottom = () => {
+  const scroller = getScrollerElement()
+  if (!scroller) return
+  const maxScrollTop = scroller.scrollHeight - scroller.clientHeight
+  if (maxScrollTop <= 0) return
+  scroller.scrollTo({ top: maxScrollTop, behavior: 'auto' })
+}
 
 const scrollToTop = () => {
-  nodeNavScrollbar.value?.scrollTo({ top: 0, behavior: 'smooth' })
+  void safeScrollToItem(0)
+  getScrollerElement()?.scrollTo({ top: 0, behavior: 'auto' })
 }
 
 const scrollToBottom = () => {
-  nodeNavScrollbar.value?.scrollTo({ top: Number.MAX_SAFE_INTEGER, behavior: 'smooth' })
+  const targetIndex = props.items.length - 1
+  if (targetIndex < 0) return
+
+  void (async () => {
+    await safeScrollToItem(targetIndex)
+    await nextTick()
+    alignScrollerBottom()
+
+    // 动态高度项在渲染后会更新总高度，补一次避免“看起来没到底”
+    requestAnimationFrame(() => {
+      alignScrollerBottom()
+    })
+    setTimeout(() => {
+      alignScrollerBottom()
+    }, 80)
+  })()
 }
 
 const handleWheel = (event: WheelEvent) => {
@@ -67,33 +129,61 @@ defineExpose({
         :search-text="props.searchText"
         @update:search-text="emit('update:search-text', $event)"
       />
-      <n-scrollbar ref="nodeNavScrollbar" style="flex: 1; min-height: 0" @wheel.passive="handleWheel">
-        <n-list hoverable clickable v-if="props.items.length > 0">
-        <n-list-item
-          v-for="item in props.items"
-          :key="`nav-${item.node.task_id}-${item.node.node_id}-${item.originalIndex}`"
-          @click="emit('select-node', item.originalIndex)"
-            :style="{
-              cursor: 'pointer',
-              padding: props.displayMode === 'detailed' ? '8px 12px' : '4px 8px',
-            }"
+      <dynamic-scroller
+        v-if="props.items.length > 0"
+        ref="nodeNavScroller"
+        :items="props.items"
+        key-field="originalIndex"
+        :min-item-size="navMinItemSize"
+        class="node-nav-scroller"
+        @wheel.passive="handleWheel"
+      >
+        <template #default="{ item, active }">
+          <dynamic-scroller-item
+            :item="item"
+            :active="active"
+            :size-dependencies="[
+              props.displayMode,
+              props.normalizedSearchText ? item.matchHint : '',
+              props.normalizedSearchText ? item.matchPreview : '',
+            ]"
           >
-            <node-nav-item
-              :item="item"
-              :display-mode="props.displayMode"
-              :normalized-search-text="props.normalizedSearchText"
-            />
-          </n-list-item>
-        </n-list>
-        <n-empty
-          v-else
-          :description="props.currentNodesLength > 0 ? props.emptyDescription : '暂无节点数据'"
-          style="padding: 24px 0"
-        />
-      </n-scrollbar>
+            <div
+              class="node-nav-row"
+              :class="{ 'node-nav-row-detailed': props.displayMode === 'detailed' }"
+              @click="emit('select-node', item.originalIndex)"
+            >
+              <node-nav-item
+                :item="item"
+                :display-mode="props.displayMode"
+                :normalized-search-text="props.normalizedSearchText"
+              />
+            </div>
+          </dynamic-scroller-item>
+        </template>
+      </dynamic-scroller>
+      <n-empty
+        v-else
+        :description="props.currentNodesLength > 0 ? props.emptyDescription : '暂无节点数据'"
+        style="padding: 24px 0"
+      />
     </div>
   </n-card>
 </template>
 
 <style scoped>
+.node-nav-scroller {
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+.node-nav-row {
+  cursor: pointer;
+  padding: 4px 8px;
+}
+
+.node-nav-row-detailed {
+  padding: 8px 12px;
+}
 </style>

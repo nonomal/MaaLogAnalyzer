@@ -244,6 +244,7 @@ class SubTaskCollector {
 export class LogParser {
   private events: EventNotification[] = []
   private stringPool = new StringPool()
+  private eventTokenPool = new Map<string, string>()
   private taskProcessMap = new Map<number, string>()
   private taskThreadMap = new Map<number, string>()
   private lastEventBySignature = new Map<string, {
@@ -251,6 +252,8 @@ export class LogParser {
     processId: string
     threadId: string
   }>()
+  private dedupSignatureTimeline: Array<{ signature: string; timestampMs: number }> = []
+  private dedupSignatureTimelineHead = 0
   private syntheticLineNumber = 1
   private errorImages = new Map<string, string>()
   private visionImages = new Map<string, string>()
@@ -284,11 +287,47 @@ export class LogParser {
     this.taskProcessMap.clear()
     this.taskThreadMap.clear()
     this.lastEventBySignature.clear()
+    this.dedupSignatureTimeline = []
+    this.dedupSignatureTimelineHead = 0
+    this.eventTokenPool.clear()
     this.syntheticLineNumber = 1
     this.stringPool.clear()
   }
 
+  private pruneDedupSignatures(currentTimestampMs: number): void {
+    if (!Number.isFinite(currentTimestampMs)) return
+    const pruneBefore = currentTimestampMs - 100
+    while (this.dedupSignatureTimelineHead < this.dedupSignatureTimeline.length) {
+      const item = this.dedupSignatureTimeline[this.dedupSignatureTimelineHead]
+      if (!item || !Number.isFinite(item.timestampMs) || item.timestampMs >= pruneBefore) {
+        break
+      }
+      const mapped = this.lastEventBySignature.get(item.signature)
+      if (mapped && mapped.timestampMs === item.timestampMs) {
+        this.lastEventBySignature.delete(item.signature)
+      }
+      this.dedupSignatureTimelineHead += 1
+    }
+
+    if (
+      this.dedupSignatureTimelineHead > 4096 &&
+      this.dedupSignatureTimelineHead * 2 >= this.dedupSignatureTimeline.length
+    ) {
+      this.dedupSignatureTimeline = this.dedupSignatureTimeline.slice(this.dedupSignatureTimelineHead)
+      this.dedupSignatureTimelineHead = 0
+    }
+  }
+
+  private internEventToken(raw: string): string {
+    const copied = forceCopyString(raw)
+    const pooled = this.eventTokenPool.get(copied)
+    if (pooled) return pooled
+    this.eventTokenPool.set(copied, copied)
+    return copied
+  }
+
   private appendEvent(event: EventNotification & { processId: string; threadId: string; _dedupSignature: string; _timestampMs: number }): void {
+    this.pruneDedupSignatures(event._timestampMs)
     const previous = this.lastEventBySignature.get(event._dedupSignature)
     const eventMs = event._timestampMs
     const nearInTime = previous && Number.isFinite(previous.timestampMs) && Number.isFinite(eventMs)
@@ -301,12 +340,25 @@ export class LogParser {
       return
     }
 
-    this.events.push(event)
+    const storedEvent: EventNotification = {
+      timestamp: event.timestamp,
+      level: event.level,
+      message: event.message,
+      details: event.details,
+      _lineNumber: event._lineNumber,
+    }
+    this.events.push(storedEvent)
     this.lastEventBySignature.set(event._dedupSignature, {
       timestampMs: eventMs,
       processId: event.processId,
       threadId: event.threadId,
     })
+    if (Number.isFinite(eventMs)) {
+      this.dedupSignatureTimeline.push({
+        signature: event._dedupSignature,
+        timestampMs: eventMs,
+      })
+    }
 
     const eventMeta = parseMaaMessageMeta(event.message)
     if (
@@ -347,17 +399,35 @@ export class LogParser {
     onProgress?: (progress: ParseProgress) => void
   ): Promise<void> {
     this.resetParsedEvents()
-    const rawLines = content.split('\n')
-    const totalLines = rawLines.length
-    const chunkSize = 1000
+    const totalChars = content.length
+    const chunkLineCount = 1000
+    let cursor = 0
+    let lineNum = 0
 
-    for (let startIdx = 0; startIdx < totalLines; startIdx += chunkSize) {
+    if (totalChars === 0) {
+      if (onProgress) {
+        onProgress({
+          current: 0,
+          total: 0,
+          percentage: 100
+        })
+      }
+      return
+    }
+
+    while (cursor <= totalChars) {
       await new Promise(resolve => setTimeout(resolve, 0))
+      let parsedLines = 0
 
-      const endIdx = Math.min(startIdx + chunkSize, totalLines)
+      while (parsedLines < chunkLineCount && cursor <= totalChars) {
+        const lineStart = cursor
+        let lineEnd = content.indexOf('\n', lineStart)
+        if (lineEnd < 0) lineEnd = totalChars
+        const rawLine = content.slice(lineStart, lineEnd)
+        cursor = lineEnd < totalChars ? lineEnd + 1 : totalChars + 1
+        parsedLines += 1
+        lineNum += 1
 
-      for (let lineNum = startIdx + 1; lineNum <= endIdx; lineNum++) {
-        const rawLine = rawLines[lineNum - 1]
         if (!rawLine || !rawLine.includes('!!!OnEventNotify!!!')) continue
 
         try {
@@ -370,10 +440,11 @@ export class LogParser {
       }
 
       if (onProgress) {
+        const current = Math.min(cursor, totalChars)
         onProgress({
-          current: endIdx,
-          total: totalLines,
-          percentage: Math.round((endIdx / totalLines) * 100)
+          current,
+          total: totalChars,
+          percentage: Math.round((current / totalChars) * 100)
         })
       }
     }
@@ -395,10 +466,10 @@ export class LogParser {
     const timestamp = Number.isFinite(timestampMs)
       ? formatEventTimestampMs(timestampMs)
       : forceCopyString(rawTimestamp)
-    const level = forceCopyString(rawLevel)
-    const processId = forceCopyString(rawProcessId)
-    const threadId = forceCopyString(rawThreadId)
-    const msg = forceCopyString(rawMsg)
+    const level = this.internEventToken(rawLevel)
+    const processId = this.internEventToken(rawProcessId)
+    const threadId = this.internEventToken(rawThreadId)
+    const msg = this.internEventToken(rawMsg)
 
     let details: Record<string, any> = {}
     try {
@@ -453,6 +524,70 @@ export class LogParser {
       }
       this.settleRunningFlowItems(node.node_flow, fallbackStatus)
     }
+  }
+
+  private normalizeTaskEventListItem(raw: unknown): { name: string; anchor: boolean; jump_back: boolean } | null {
+    if (!raw || typeof raw !== 'object') return null
+    const item = raw as Record<string, unknown>
+    const name = typeof item.name === 'string' ? this.stringPool.intern(item.name) : ''
+    if (!name) return null
+    return {
+      name,
+      anchor: item.anchor === true,
+      jump_back: item.jump_back === true,
+    }
+  }
+
+  private compactTaskEventDetails(details: Record<string, any>): Record<string, any> {
+    const compact: Record<string, any> = {}
+
+    if (typeof details.task_id === 'number') compact.task_id = details.task_id
+    if (typeof details.node_id === 'number') compact.node_id = details.node_id
+    if (typeof details.reco_id === 'number') compact.reco_id = details.reco_id
+    if (typeof details.action_id === 'number') compact.action_id = details.action_id
+
+    if (typeof details.name === 'string') compact.name = this.stringPool.intern(details.name)
+    if (typeof details.entry === 'string') compact.entry = this.stringPool.intern(details.entry)
+    if (typeof details.status === 'string') compact.status = this.stringPool.intern(details.status)
+    if (typeof details.error === 'string') compact.error = this.stringPool.intern(details.error)
+    if (typeof details.reason === 'string') compact.reason = this.stringPool.intern(details.reason)
+    if (typeof details.uuid === 'string') compact.uuid = this.stringPool.intern(details.uuid)
+    if (typeof details.hash === 'string') compact.hash = this.stringPool.intern(details.hash)
+    if (typeof details.action === 'string') compact.action = this.stringPool.intern(details.action)
+    if (typeof details.anchor === 'string') compact.anchor = this.stringPool.intern(details.anchor)
+
+    if (Array.isArray(details.list)) {
+      const list = details.list
+        .map((item: unknown) => this.normalizeTaskEventListItem(item))
+        .filter((item): item is { name: string; anchor: boolean; jump_back: boolean } => item != null)
+      if (list.length > 0) {
+        compact.list = markRaw(list)
+      }
+    }
+
+    if (details.action_details && typeof details.action_details === 'object') {
+      const raw = details.action_details as Record<string, unknown>
+      const actionDetails: Record<string, unknown> = {}
+      if (typeof raw.action_id === 'number') actionDetails.action_id = raw.action_id
+      if (typeof raw.action === 'string') actionDetails.action = this.stringPool.intern(raw.action)
+      if (typeof raw.name === 'string') actionDetails.name = this.stringPool.intern(raw.name)
+      if (typeof raw.success === 'boolean') actionDetails.success = raw.success
+      if (Object.keys(actionDetails).length > 0) {
+        compact.action_details = markRaw(actionDetails)
+      }
+    }
+
+    if (details.node_details && typeof details.node_details === 'object') {
+      const raw = details.node_details as Record<string, unknown>
+      const nodeDetails: Record<string, unknown> = {}
+      if (typeof raw.action_id === 'number') nodeDetails.action_id = raw.action_id
+      if (typeof raw.node_id === 'number') nodeDetails.node_id = raw.node_id
+      if (Object.keys(nodeDetails).length > 0) {
+        compact.node_details = markRaw(nodeDetails)
+      }
+    }
+
+    return markRaw(compact)
   }
 
   /**
@@ -526,6 +661,13 @@ export class LogParser {
         task.events = this.events
           .slice(taskStartIndex, taskEndIndex + 1)
           .filter(event => event.details?.task_id === task.task_id)
+          .map((event) => ({
+            timestamp: event.timestamp,
+            level: event.level,
+            message: event.message,
+            details: this.compactTaskEventDetails(event.details ?? {}),
+            _lineNumber: event._lineNumber,
+          }))
       }
 
       if (task.status === 'running' && task.nodes.length > 0) {
@@ -539,6 +681,8 @@ export class LogParser {
     if (consume) {
       this.events = []
       this.lastEventBySignature.clear()
+      this.dedupSignatureTimeline = []
+      this.dedupSignatureTimelineHead = 0
       this.syntheticLineNumber = 1
       console.log(`字符串池统计: ${this.stringPool.size()} 个唯一字符串`)
       this.stringPool.clear()

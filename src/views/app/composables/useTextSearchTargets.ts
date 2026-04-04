@@ -1,4 +1,4 @@
-import { computed, ref } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 
 export interface TextSearchLoadedTarget {
   id: string
@@ -15,9 +15,9 @@ export interface DeferredTextSearchTarget {
 }
 
 export const useTextSearchTargets = () => {
-  const textSearchLoadedTargets = ref<TextSearchLoadedTarget[]>([])
+  const textSearchLoadedTargets = shallowRef<TextSearchLoadedTarget[]>([])
   const textSearchLoadedDefaultTargetId = ref<string>('')
-  const deferredTextSearchTargets = ref<DeferredTextSearchTarget[]>([])
+  const deferredTextSearchTargets = shallowRef<DeferredTextSearchTarget[]>([])
   const deferredTextSearchDefaultTargetId = ref<string>('')
   const textSearchTargetsHydrated = ref(false)
   const hasDeferredTextSearchTargets = computed(() => deferredTextSearchTargets.value.length > 0)
