@@ -13,6 +13,13 @@ const t = (en: string, zh: string) => (isZh ? zh : en)
 const MAIN_LOG_CANDIDATES = ['maa.log', 'maafw.log'] as const
 const BAK_LOG_CANDIDATES = ['maa.bak.log', 'maafw.bak.log'] as const
 
+const postThemeChangedToWebview = (panel: vscode.WebviewPanel | undefined) => {
+  panel?.webview.postMessage({
+    type: 'vscodeThemeChanged',
+    kind: vscode.window.activeColorTheme.kind,
+  })
+}
+
 class SidebarActionItem extends vscode.TreeItem {
   constructor(label: string, commandId: string, contextValue: string) {
     super(label, vscode.TreeItemCollapsibleState.None)
@@ -163,6 +170,7 @@ function createOrShowPanel(context: vscode.ExtensionContext): vscode.WebviewPane
   // 如果已有面板，直接显示
   if (currentPanel) {
     currentPanel.reveal(column)
+    postThemeChangedToWebview(currentPanel)
     return currentPanel
   }
 
@@ -182,6 +190,13 @@ function createOrShowPanel(context: vscode.ExtensionContext): vscode.WebviewPane
 
   // 设置 HTML 内容
   currentPanel.webview.html = getWebviewContent(currentPanel.webview, context.extensionUri)
+
+  const themeChangeDisposable = vscode.window.onDidChangeActiveColorTheme(() => {
+    postThemeChangedToWebview(currentPanel)
+  })
+
+  // 初始同步一次，确保 webview 内部主题状态与宿主一致
+  postThemeChangedToWebview(currentPanel)
 
   // 处理来自 Webview 的消息
   currentPanel.webview.onDidReceiveMessage(
@@ -233,6 +248,7 @@ function createOrShowPanel(context: vscode.ExtensionContext): vscode.WebviewPane
   // 面板关闭时清理
   currentPanel.onDidDispose(
     () => {
+      themeChangeDisposable.dispose()
       currentPanel = undefined
     },
     undefined,
@@ -747,6 +763,7 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): s
     
     // 标记为 VS Code 环境
     window.isVSCode = true;
+    window.vscodeThemeKind = ${vscode.window.activeColorTheme.kind};
   </script>
   <script nonce="${nonce}" type="module" src="${webviewUri}/assets/index.js"></script>
 </body>

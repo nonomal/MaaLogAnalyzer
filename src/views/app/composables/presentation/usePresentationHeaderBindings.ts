@@ -2,6 +2,7 @@ import { computed, h, type Ref } from 'vue'
 import { BulbOutlined, BulbFilled, InfoCircleOutlined, SettingOutlined } from '@vicons/antd'
 import type { DropdownMixedOption } from 'naive-ui/es/dropdown/src/interface'
 import { useHeaderBarBindings } from '../useHeaderBarBindings'
+import { isVSCode } from '../../../../utils/platform'
 import type {
   UseAppPresentationBindingsOptions,
 } from './types'
@@ -28,6 +29,8 @@ interface UsePresentationHeaderBindingsOptions {
 
 export const usePresentationHeaderBindings = (options: UsePresentationHeaderBindingsOptions) => {
   const isDark = computed(() => options.propsIsDark.value)
+  const isNativeVSCodeHost = isVSCode()
+  const allowThemeToggle = computed(() => !options.isVscodeLaunchEmbed && !isNativeVSCodeHost)
 
   const mobileMenuOptions = computed<DropdownMixedOption[]>(() => [
     ...options.viewModeOptions.value.map(opt => ({
@@ -39,7 +42,7 @@ export const usePresentationHeaderBindings = (options: UsePresentationHeaderBind
     { type: 'divider' as const, key: 'd1' },
     { type: 'option' as const, label: '设置', key: 'settings', icon: () => h(SettingOutlined) },
     { type: 'option' as const, label: '关于', key: 'about', icon: () => h(InfoCircleOutlined) },
-    ...(!options.isVscodeLaunchEmbed
+    ...(allowThemeToggle.value
       ? [{
           type: 'option' as const,
           label: isDark.value ? '浅色模式' : '深色模式',
@@ -56,7 +59,7 @@ export const usePresentationHeaderBindings = (options: UsePresentationHeaderBind
       options.showSettingsModal.value = true
     } else if (key === 'about') {
       options.showAboutModal.value = true
-    } else if (key === 'theme') {
+    } else if (key === 'theme' && allowThemeToggle.value) {
       options.onToggleTheme()
     }
   }

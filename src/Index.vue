@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
+import { ref, computed, onMounted, onBeforeUnmount, watch } from 'vue'
 import { darkTheme, NConfigProvider, NMessageProvider } from 'naive-ui'
 import type { GlobalThemeOverrides } from 'naive-ui'
 import App from './App.vue'
@@ -7,6 +7,7 @@ import hljs from 'highlight.js/lib/core'
 import json from 'highlight.js/lib/languages/json'
 import { BRIDGE_THEME_UPDATED_EVENT } from './utils/bridgeEvents'
 import { parseEmbedMode, EMBED_MODE_VSCODE_LAUNCH } from './utils/embedMode'
+import { isVSCode } from './utils/platform'
 
 // 注册 JSON 语言支持
 hljs.registerLanguage('json', json)
@@ -18,6 +19,11 @@ const getSystemTheme = () => {
 
 const isDark = ref(getSystemTheme())
 const vscodeThemeVersion = ref(0)
+const vscodeThemeKind = ref<number | null>(
+  typeof window !== 'undefined' && typeof window.vscodeThemeKind === 'number'
+    ? window.vscodeThemeKind
+    : null,
+)
 
 const refreshVscodeTheme = () => {
   vscodeThemeVersion.value++
@@ -33,11 +39,19 @@ const getBridgeThemeDarkFlag = (): boolean | null => {
   return null
 }
 
+const isDarkFromVSCodeThemeKind = (kind: number | null): boolean | null => {
+  if (kind == null) return null
+  // vscode.ColorThemeKind: 1=Light, 2=Dark, 3=HighContrast, 4=HighContrastLight
+  if (kind === 2 || kind === 3) return true
+  if (kind === 1 || kind === 4) return false
+  return null
+}
+
 const isVscodeThemeContext = computed(() => {
   void vscodeThemeVersion.value
   if (typeof window === 'undefined') return false
 
-  if (window.isVSCode === true || typeof window.vscodeApi !== 'undefined') return true
+  if (isVSCode()) return true
   if (parseEmbedMode(window.location.search) === EMBED_MODE_VSCODE_LAUNCH) return true
 
   const classList = document.body?.classList
@@ -91,7 +105,17 @@ const handleSystemThemeChange = (e: MediaQueryListEvent) => {
   // 只有在用户没有手动设置过主题时才跟随系统
   if (!localStorage.getItem('theme')) {
     isDark.value = e.matches
-    updateThemeColor(isDark.value)
+  }
+  refreshVscodeTheme()
+}
+
+const handleVSCodeThemeMessage = (event: MessageEvent) => {
+  const payload = event.data as { type?: unknown, kind?: unknown } | null
+  if (!payload || typeof payload !== 'object') return
+  if (payload.type !== 'vscodeThemeChanged') return
+  if (typeof payload.kind === 'number') {
+    window.vscodeThemeKind = payload.kind
+    vscodeThemeKind.value = payload.kind
   }
   refreshVscodeTheme()
 }
@@ -118,6 +142,7 @@ onMounted(() => {
   mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
   mediaQuery.addEventListener('change', handleSystemThemeChange)
   window.addEventListener(BRIDGE_THEME_UPDATED_EVENT, refreshVscodeTheme)
+  window.addEventListener('message', handleVSCodeThemeMessage)
 })
 
 onBeforeUnmount(() => {
@@ -126,6 +151,7 @@ onBeforeUnmount(() => {
     mediaQuery = null
   }
   window.removeEventListener(BRIDGE_THEME_UPDATED_EVENT, refreshVscodeTheme)
+  window.removeEventListener('message', handleVSCodeThemeMessage)
 })
 
 // 更新浏览器主题颜色和 body 类
@@ -166,11 +192,17 @@ const effectiveIsDark = computed(() => {
   void vscodeThemeVersion.value
 
   if (isVscodeThemeContext.value) {
+    const kindDark = isDarkFromVSCodeThemeKind(vscodeThemeKind.value)
+    if (kindDark !== null) return kindDark
     const bridgeThemeDark = getBridgeThemeDarkFlag()
     if (bridgeThemeDark !== null) return bridgeThemeDark
     return getSystemTheme()
   }
   return isDark.value
+})
+
+watch(effectiveIsDark, (dark) => {
+  updateThemeColor(dark)
 })
 
 // 主题配置

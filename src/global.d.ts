@@ -18,6 +18,7 @@ declare global {
     // VS Code 环境
     vscodeApi?: VSCodeApi
     isVSCode?: boolean
+    vscodeThemeKind?: number
     // Umami 统计
     umami?: UmamiApi
   }

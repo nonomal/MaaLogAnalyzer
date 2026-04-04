@@ -17,7 +17,11 @@
     "Other"
   ],
   "activationEvents": [
-    "onUri"
+    "onUri",
+    "onView:maaLogAnalyzer.sidebar",
+    "onCommand:maaLogAnalyzer.openAnalyzer",
+    "onCommand:maaLogAnalyzer.analyzeFolder",
+    "onCommand:maaLogAnalyzer.analyzeFile"
   ],
   "main": "./dist/extension.js",
   "contributes": {

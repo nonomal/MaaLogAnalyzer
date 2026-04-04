@@ -13,6 +13,7 @@ import {
   BulbFilled,
   BulbOutlined,
 } from '@vicons/antd'
+import { isVSCode } from '../../../../utils/platform'
 
 const props = defineProps<{
   currentViewLabel: string
@@ -54,8 +55,7 @@ const handleThreadUpdate = (value: string | number | null) => {
   emit('update:selected-thread-id', normalizeSelectValue(value))
 }
 
-const isNativeVSCodeHost = typeof window !== 'undefined'
-  && (window.isVSCode === true || typeof window.vscodeApi !== 'undefined')
+const isNativeVSCodeHost = isVSCode()
 
 const useNonVscodeDarkSelectStyle = computed(() => (
   props.isDark
@@ -165,7 +165,7 @@ const processThreadSelectStyle = computed(() => {
       </n-button>
 
       <n-button
-        v-if="!isVscodeLaunchEmbed"
+        v-if="!isVscodeLaunchEmbed && !isNativeVSCodeHost"
         text
         style="font-size: 20px"
         data-tour="header-theme-button"
