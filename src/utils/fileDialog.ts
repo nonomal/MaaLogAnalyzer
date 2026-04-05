@@ -151,13 +151,11 @@ export function consumeTauriZipErrorImages(): Map<string, string> | null {
 async function openZipFileWithTauri(path: string): Promise<string | null> {
   const { invoke } = await import('@tauri-apps/api/core')
 
-  const result = await invoke<{ content: string; error_images: Record<string, number[]> }>('extract_zip_log', { path })
+  const result = await invoke<{ content: string; error_images: Record<string, string> }>('extract_zip_log', { path })
 
-  // 将 error_images 字节数组转为 blob URL
   const errorImages = new Map<string, string>()
-  for (const [key, bytes] of Object.entries(result.error_images)) {
-    const blob = new Blob([new Uint8Array(bytes)], { type: 'image/png' })
-    errorImages.set(key, URL.createObjectURL(blob))
+  for (const [key, value] of Object.entries(result.error_images ?? {})) {
+    errorImages.set(key, value)
   }
   _lastTauriZipErrorImages = errorImages
 

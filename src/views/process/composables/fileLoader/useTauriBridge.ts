@@ -1,10 +1,9 @@
 import type { UseProcessFileLoaderOptions } from './types'
 
-const createObjectUrlMap = (entries: Record<string, number[]>, mimeType: string) => {
+const createTauriImageMap = (entries: Record<string, string>) => {
   const result = new Map<string, string>()
-  for (const [key, bytes] of Object.entries(entries)) {
-    const blob = new Blob([new Uint8Array(bytes)], { type: mimeType })
-    result.set(key, URL.createObjectURL(blob))
+  for (const [key, value] of Object.entries(entries ?? {})) {
+    result.set(key, value)
   }
   return result
 }
@@ -35,14 +34,14 @@ export const useTauriBridge = (
             const { invoke } = await import('@tauri-apps/api/core')
             const result = await invoke<{
               content: string
-              error_images: Record<string, number[]>
-              vision_images: Record<string, number[]>
-              wait_freezes_images: Record<string, number[]>
+              error_images: Record<string, string>
+              vision_images: Record<string, string>
+              wait_freezes_images: Record<string, string>
             }>('extract_zip_log', { path: selected })
 
-            const errorImages = createObjectUrlMap(result.error_images, 'image/png')
-            const visionImages = createObjectUrlMap(result.vision_images, 'image/jpeg')
-            const waitFreezesImages = createObjectUrlMap(result.wait_freezes_images, 'image/jpeg')
+            const errorImages = createTauriImageMap(result.error_images)
+            const visionImages = createTauriImageMap(result.vision_images)
+            const waitFreezesImages = createTauriImageMap(result.wait_freezes_images)
 
             options.onUploadContent(result.content, errorImages, visionImages, waitFreezesImages)
           } else {

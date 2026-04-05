@@ -2,7 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::collections::HashMap;
-use std::io::Read;
+use std::io::{Read, copy};
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 #[cfg(debug_assertions)]
 use tauri::Manager;
@@ -15,15 +17,17 @@ const BAK_LOG_CANDIDATES: [&str; 2] = ["maa.bak.log", "maafw.bak.log"];
 #[derive(Serialize)]
 struct ZipExtractResult {
     content: String,
-    error_images: HashMap<String, Vec<u8>>,
-    vision_images: HashMap<String, Vec<u8>>,
-    wait_freezes_images: HashMap<String, Vec<u8>>,
+    error_images: HashMap<String, String>,
+    vision_images: HashMap<String, String>,
+    wait_freezes_images: HashMap<String, String>,
 }
 
 #[tauri::command]
 fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
     let file = std::fs::File::open(&path).map_err(|e| format!("无法打开文件: {e}"))?;
     let mut archive = zip::ZipArchive::new(file).map_err(|e| format!("无法读取 ZIP: {e}"))?;
+    let temp_dir = create_zip_temp_dir(&path)?;
+    let mut temp_seq: u64 = 0;
 
     // Collect all file names
     let names: Vec<String> = (0..archive.len())
@@ -45,9 +49,9 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
     let vision_prefix = join_path(&base, "vision/");
 
     let mut content = String::new();
-    let mut error_images: HashMap<String, Vec<u8>> = HashMap::new();
-    let mut vision_images: HashMap<String, Vec<u8>> = HashMap::new();
-    let mut wait_freezes_images: HashMap<String, Vec<u8>> = HashMap::new();
+    let mut error_images: HashMap<String, String> = HashMap::new();
+    let mut vision_images: HashMap<String, String> = HashMap::new();
+    let mut wait_freezes_images: HashMap<String, String> = HashMap::new();
 
     for i in 0..archive.len() {
         let mut entry = archive.by_index(i).map_err(|e| format!("读取条目失败: {e}"))?;
@@ -69,21 +73,18 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
             // Extract filename
             let file_name = name.rsplit('/').next().unwrap_or("");
             if let Some(key) = parse_error_image_key(file_name) {
-                let mut buf = Vec::new();
-                entry.read_to_end(&mut buf).map_err(|e| format!("读取截图失败: {e}"))?;
-                error_images.insert(key, buf);
+                let saved_path = save_zip_entry_to_temp_file(&mut entry, &temp_dir, &mut temp_seq, "png")?;
+                error_images.insert(key, saved_path);
             }
         } else if lower.starts_with(&vision_prefix.to_lowercase()) && lower.ends_with(".jpg") {
             let file_name = name.rsplit('/').next().unwrap_or("");
             if let Some(key) = parse_wait_freezes_key(file_name) {
-                let mut buf = Vec::new();
-                entry.read_to_end(&mut buf).map_err(|e| format!("读取截图失败: {e}"))?;
-                wait_freezes_images.insert(key, buf);
+                let saved_path = save_zip_entry_to_temp_file(&mut entry, &temp_dir, &mut temp_seq, "jpg")?;
+                wait_freezes_images.insert(key, saved_path);
             } else if let Some(key) = parse_vision_image_key(file_name) {
-                let mut buf = Vec::new();
-                entry.read_to_end(&mut buf).map_err(|e| format!("读取截图失败: {e}"))?;
+                let saved_path = save_zip_entry_to_temp_file(&mut entry, &temp_dir, &mut temp_seq, "jpg")?;
                 // 同一 key 覆盖（取最后出现的文件）
-                vision_images.insert(key, buf);
+                vision_images.insert(key, saved_path);
             }
         }
     }
@@ -98,6 +99,39 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
         vision_images,
         wait_freezes_images,
     })
+}
+
+fn create_zip_temp_dir(zip_path: &str) -> Result<PathBuf, String> {
+    let stem = Path::new(zip_path)
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("zip")
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+        .collect::<String>();
+
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|e| format!("获取系统时间失败: {e}"))?
+        .as_millis();
+
+    let mut dir = std::env::temp_dir();
+    dir.push(format!("maa-log-analyzer-zip-{stem}-{ts}"));
+    std::fs::create_dir_all(&dir).map_err(|e| format!("创建临时目录失败: {e}"))?;
+    Ok(dir)
+}
+
+fn save_zip_entry_to_temp_file(
+    entry: &mut zip::read::ZipFile<'_>,
+    temp_dir: &Path,
+    seq: &mut u64,
+    ext: &str,
+) -> Result<String, String> {
+    *seq += 1;
+    let path = temp_dir.join(format!("{:08}.{ext}", *seq));
+    let mut output = std::fs::File::create(&path).map_err(|e| format!("创建临时文件失败: {e}"))?;
+    copy(entry, &mut output).map_err(|e| format!("写入临时文件失败: {e}"))?;
+    Ok(path.to_string_lossy().into_owned())
 }
 
 /// Find the base directory containing main log (maa.log / maafw.log)
