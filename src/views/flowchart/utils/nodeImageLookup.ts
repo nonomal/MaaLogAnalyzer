@@ -1,11 +1,10 @@
-import { isTauri } from '../../../utils/platform'
+import { resolveImageSrcPath } from '../../../utils/imageSrc'
 import { buildNodeFlowItems, buildNodeRecognitionAttempts } from '../../../utils/nodeFlow'
 import type { NodeInfo, RecognitionAttempt, UnifiedFlowItem } from '../../../types'
 import type { LogParser } from '../../../utils/logParser'
 
 export const convertFileSrc = (filePath: string) => {
-  if (!isTauri()) return filePath
-  return `https://asset.localhost/${filePath.replace(/\\/g, '/')}`
+  return resolveImageSrcPath(filePath)
 }
 
 function findImageInAttempts(attempts: RecognitionAttempt[]): string | undefined {
