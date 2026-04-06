@@ -10,6 +10,7 @@ import StatusIcon from './StatusIcon.vue'
 import { useNodeCardFlowRows } from './nodeCard/useNodeCardFlowRows'
 import { useFlowItemExpandState } from './nodeCard/useFlowItemExpandState'
 import { buildRecognitionItemKey } from './nodeCard/recognitionListKeys'
+import { resolveStatusButtonType } from './nodeCard/statusButtonType'
 
 const emit = defineEmits<{
   'select-action': [node: NodeInfo]
@@ -29,8 +30,6 @@ const props = defineProps<{
   defaultCollapseNestedActionNodes?: boolean
   isExpanded: (attemptIndex: number) => boolean
   forceExpandRelatedWhileRunning?: boolean
-  getButtonType: (status: string) => 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error'
-  actionButtonType: 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error'
   isVscodeLaunchEmbed?: boolean
   bridgeRequestTaskDoc?: ((task: string) => Promise<string | null>) | null
 }>()
@@ -131,7 +130,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
               >
                 <n-button
                   size="small"
-                  :type="getButtonType(item.status)"
+                  :type="resolveStatusButtonType(item.status)"
                   ghost
                   @click="emit('select-recognition', node, item.attemptIndex!)"
                 >

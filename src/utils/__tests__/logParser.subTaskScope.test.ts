@@ -188,4 +188,51 @@ describe('LogParser sub task scoped node aggregation', () => {
     expect(subTaskActionItems.length).toBeGreaterThan(0)
     expect(subTaskActionItems[0].item.status).toBe('failed')
   })
+
+  it('builds multi-level nested sub tasks by parent task relation', async () => {
+    const lines = [
+      makeEventLine(201, 'Tasker.Task.Starting', { task_id: 21, entry: 'MainTask', hash: 'h-main-3', uuid: 'u-main-3' }),
+      makeEventLine(202, 'Node.PipelineNode.Starting', { task_id: 21, node_id: 2101, name: 'MainNode' }),
+
+      makeEventLine(203, 'Tasker.Task.Starting', { task_id: 22, entry: 'SubTaskL1', hash: 'h-sub-l1', uuid: 'u-sub-l1' }),
+      makeEventLine(204, 'Node.PipelineNode.Starting', { task_id: 22, node_id: 2201, name: 'SubNodeL1' }),
+
+      makeEventLine(205, 'Tasker.Task.Starting', { task_id: 23, entry: 'SubTaskL2', hash: 'h-sub-l2', uuid: 'u-sub-l2' }),
+      makeEventLine(206, 'Node.PipelineNode.Starting', { task_id: 23, node_id: 2301, name: 'SubNodeL2' }),
+      makeEventLine(207, 'Node.PipelineNode.Succeeded', { task_id: 23, node_id: 2301, name: 'SubNodeL2' }),
+      makeEventLine(208, 'Tasker.Task.Succeeded', { task_id: 23, entry: 'SubTaskL2', hash: 'h-sub-l2', uuid: 'u-sub-l2' }),
+
+      makeEventLine(209, 'Node.PipelineNode.Succeeded', { task_id: 22, node_id: 2201, name: 'SubNodeL1' }),
+      makeEventLine(210, 'Tasker.Task.Succeeded', { task_id: 22, entry: 'SubTaskL1', hash: 'h-sub-l1', uuid: 'u-sub-l1' }),
+
+      makeEventLine(211, 'Node.PipelineNode.Succeeded', { task_id: 21, node_id: 2101, name: 'MainNode' }),
+      makeEventLine(212, 'Tasker.Task.Succeeded', { task_id: 21, entry: 'MainTask', hash: 'h-main-3', uuid: 'u-main-3' }),
+    ]
+
+    const parser = new LogParser()
+    await parser.parseFile(lines.join('\n'))
+    const tasks = parser.getTasksSnapshot()
+    const mainTask = tasks.find(item => item.task_id === 21)
+
+    expect(mainTask).toBeTruthy()
+    expect(mainTask?.nodes.length).toBe(1)
+
+    const mainNode = mainTask!.nodes[0]
+    const taskFlowItems = collectFlowItems(
+      mainNode.node_flow,
+      (item) => item.type === 'task'
+    )
+
+    const task22 = taskFlowItems.find(({ item }) => item.task_id === 22)
+    const task23 = taskFlowItems.find(({ item }) => item.task_id === 23)
+    expect(task22).toBeTruthy()
+    expect(task23).toBeTruthy()
+    expect(task23?.path.some(pathNode => pathNode.type === 'task' && pathNode.task_id === 22)).toBe(true)
+
+    const rootTaskIds = taskFlowItems
+      .filter(({ path }) => path.filter(pathNode => pathNode.type === 'task').length === 1)
+      .map(({ item }) => item.task_id)
+    expect(rootTaskIds).toContain(22)
+    expect(rootTaskIds).not.toContain(23)
+  })
 })

@@ -6,7 +6,6 @@ import { getSettings } from '../utils/settings'
 import { extractTime } from '../utils/formatDuration'
 import { useNodeCardTaskDoc } from './nodeCard/useNodeCardTaskDoc'
 import { useMergedRecognitionList } from './nodeCard/useMergedRecognitionList'
-import { resolveResultStatusButtonType, resolveStatusButtonType } from './nodeCard/statusButtonType'
 import NodeCardDetailed from './NodeCardDetailed.vue'
 import NodeCardCompact from './NodeCardCompact.vue'
 import NodeCardTree from './NodeCardTree.vue'
@@ -123,22 +122,6 @@ const toggleActionSection = () => {
   actionExpanded.value = !actionExpanded.value
 }
 
-type ButtonType = 'default' | 'primary' | 'info' | 'success' | 'warning' | 'error'
-
-// 获取按钮类型
-const getButtonType = (status: string): ButtonType => {
-  return resolveStatusButtonType(status)
-}
-
-// 动作按钮类型
-const actionButtonType = computed<ButtonType>(() => {
-  if (!props.node.action_details) return 'default'
-  const actionStatus = props.node.status === 'running'
-    ? 'running'
-    : (props.node.action_details.success ? 'success' : 'failed')
-  return resolveResultStatusButtonType(actionStatus)
-})
-
 </script>
 
 <template>
@@ -199,8 +182,6 @@ const actionButtonType = computed<ButtonType>(() => {
           :default-collapse-nested-action-nodes="settings.defaultCollapseNestedActionNodes"
           :is-expanded="isExpanded"
           :force-expand-related-while-running="forceExpandRelatedWhileRunning"
-          :get-button-type="getButtonType"
-          :action-button-type="actionButtonType"
           @select-action="handleSelectAction"
           @select-recognition="handleSelectRecognition"
           @select-flow-item="handleSelectFlowItem"

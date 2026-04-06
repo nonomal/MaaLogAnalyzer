@@ -93,7 +93,15 @@ const formatActionDisplayName = (name: string): string => {
   return name
 }
 
-const actionSummary = computed(() => {
+type CompactActionSummary = {
+  name: string
+  rawName: string
+  status: NodeInfo['status']
+  flowItemId: string | null
+  useFlowItem: boolean
+}
+
+const actionSummary = computed<CompactActionSummary | null>(() => {
   if (actionRootItem.value) {
     return {
       name: formatActionDisplayName(actionRootItem.value.name),

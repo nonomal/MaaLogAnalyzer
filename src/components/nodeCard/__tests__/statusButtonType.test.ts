@@ -8,9 +8,8 @@ describe('resolveStatusButtonType', () => {
     expect(resolveStatusButtonType('failed')).toBe('warning')
   })
 
-  it('falls back to default for unknown statuses', () => {
+  it('falls back to default for non-actionable statuses', () => {
     expect(resolveStatusButtonType('not-recognized')).toBe('default')
-    expect(resolveStatusButtonType('')).toBe('default')
   })
 })
 

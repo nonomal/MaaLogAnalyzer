@@ -3,6 +3,7 @@ import type {
   EventNotification,
   TaskInfo,
   NodeInfo,
+  NextListItem,
   RecognitionAttempt,
   NestedActionGroup,
   NestedActionNode,
@@ -140,15 +141,34 @@ const forceCopyString = (value: string): string => {
   return copied
 }
 
+const summarizeRuntimeStatus = <T extends { status: UnifiedFlowItem['status'] }>(
+  items: readonly T[]
+): UnifiedFlowItem['status'] => {
+  if (items.some((item) => item.status === 'failed')) return 'failed'
+  if (items.some((item) => item.status === 'running')) return 'running'
+  return 'success'
+}
+
 /**
  * 子任务事件收集器
  * 统一管理非当前 task_id 的 Recognition/Action/PipelineNode 事件
  */
+type SubTaskActionSnapshot = {
+  action_id: number | undefined
+  name: string
+  ts: string
+  end_ts?: string
+  status: 'success' | 'failed' | 'running'
+  action_details?: NodeInfo['action_details']
+}
+
+type SubTaskPipelineNodeSnapshot = NestedActionNode
+
 class SubTaskCollector {
   private recognitions = new Map<number, RecognitionAttempt[]>()
   private recognitionNodes = new Map<number, RecognitionAttempt[]>()
-  private actions = new Map<number, any[]>()
-  private pipelineNodes = new Map<number, any[]>()
+  private actions = new Map<number, SubTaskActionSnapshot[]>()
+  private pipelineNodes = new Map<number, SubTaskPipelineNodeSnapshot[]>()
 
   addRecognition(taskId: number, attempt: RecognitionAttempt): void {
     if (!this.recognitions.has(taskId)) {
@@ -157,14 +177,14 @@ class SubTaskCollector {
     this.recognitions.get(taskId)!.push(attempt)
   }
 
-  addAction(taskId: number, action: any): void {
+  addAction(taskId: number, action: SubTaskActionSnapshot): void {
     if (!this.actions.has(taskId)) {
       this.actions.set(taskId, [])
     }
     this.actions.get(taskId)!.push(action)
   }
 
-  addPipelineNode(taskId: number, node: any): void {
+  addPipelineNode(taskId: number, node: SubTaskPipelineNodeSnapshot): void {
     if (!this.pipelineNodes.has(taskId)) {
       this.pipelineNodes.set(taskId, [])
     }
@@ -208,29 +228,27 @@ class SubTaskCollector {
     return result
   }
 
-  consumeActions(taskId: number): any[] {
+  consumeActions(taskId: number): SubTaskActionSnapshot[] {
     const result = this.actions.get(taskId) || []
     this.actions.delete(taskId)
     return result
   }
 
-  peekActions(taskId: number): any[] {
+  peekActions(taskId: number): SubTaskActionSnapshot[] {
     return this.actions.get(taskId) || []
   }
 
   /** 将收集的子任务 PipelineNode 转换为 NestedActionGroup[] 格式 */
-  consumeAsNestedActionGroups(stringPool: StringPool): any[] {
-    const groups = Array.from(this.pipelineNodes.entries()).map(([taskId, nodes]) => ({
-      task_id: taskId,
-      name: stringPool.intern(nodes[0]?.name || 'SubTask'),
-      ts: stringPool.intern(nodes[0]?.ts || ''),
-      status: nodes.some((n: any) => n.status === 'failed')
-        ? 'failed'
-        : nodes.some((n: any) => n.status === 'running')
-          ? 'running'
-          : 'success',
-      nested_actions: nodes
-    }))
+  consumeAsNestedActionGroups(stringPool: StringPool): NestedActionGroup[] {
+    const groups = Array.from(this.pipelineNodes.entries()).map(([taskId, nodes]) => {
+      return {
+        task_id: taskId,
+        name: stringPool.intern(nodes[0]?.name || 'SubTask'),
+        ts: stringPool.intern(nodes[0]?.ts || ''),
+        status: summarizeRuntimeStatus(nodes),
+        nested_actions: nodes
+      }
+    })
     this.pipelineNodes.clear()
     return groups
   }
@@ -788,7 +806,7 @@ export class LogParser {
       order: number
     }
     type TaskScopedNodeAggregation = {
-      nextList: any[]
+      nextList: NextListItem[]
       waitFreezesRuntimeStates: Map<number, WaitFreezesRuntimeState>
     }
     type ScopedSimpleNodeEventHandler = (
@@ -880,7 +898,7 @@ export class LogParser {
       taskScopedNodeAggregationByTaskId.set(taskId, created)
       return created
     }
-    const getTaskNextList = (taskId: number): any[] => {
+    const getTaskNextList = (taskId: number): NextListItem[] => {
       return taskScopedNodeAggregationByTaskId.get(taskId)?.nextList ?? []
     }
     const resetTaskNodeAggregation = (taskId: number) => {
@@ -935,12 +953,17 @@ export class LogParser {
         ...(resolvedEnd ? { end_ts: this.stringPool.intern(resolvedEnd) } : {})
       })
     }
-    const toNextListItems = (list: any[]) => {
-      return list.map((item: any) => ({
-        name: this.stringPool.intern(item.name || ''),
-        anchor: item.anchor || false,
-        jump_back: item.jump_back || false
-      }))
+    const toNextListItems = (list: unknown[]): NextListItem[] => {
+      return list.map((rawItem: unknown) => {
+        const item = rawItem && typeof rawItem === 'object'
+          ? rawItem as Partial<NextListItem>
+          : {}
+        return {
+          name: this.stringPool.intern(item.name || ''),
+          anchor: item.anchor || false,
+          jump_back: item.jump_back || false
+        }
+      })
     }
     const parseRecognitionAnchorName = (details: Record<string, any>): string | undefined => {
       if (typeof details.anchor !== 'string') return undefined
@@ -1381,13 +1404,13 @@ export class LogParser {
         onAttempt(taskId, attempt)
       }
     }
-    const applyTaskNextList = (taskId: number, list: any[]) => {
+    const applyTaskNextList = (taskId: number, list: unknown[]) => {
       const aggregation = getOrCreateTaskNodeAggregation(taskId)
-      aggregation.nextList = list
+      aggregation.nextList = toNextListItems(list)
       if (taskId === task.task_id) {
         const activeNode = getActivePipelineNode()
         if (activeNode) {
-          activeNode.next_list = toNextListItems(aggregation.nextList)
+          activeNode.next_list = aggregation.nextList
         }
       }
     }
@@ -2105,23 +2128,13 @@ export class LogParser {
       if (nestedSubTaskGroups.length > 0) {
         return nestedSubTaskGroups
       }
-      if (nestedActionNodes.length === 0) {
-        return []
-      }
-      return [
-        {
-          task_id: taskId,
-          name: this.stringPool.intern('ActionNode'),
-          ts: startTimestamp,
-          end_ts: endTimestamp,
-          status: nestedActionNodes.some(item => item.status === 'failed')
-            ? 'failed'
-            : nestedActionNodes.some(item => item.status === 'running')
-              ? 'running'
-              : 'success',
-          nested_actions: nestedActionNodes.slice(),
-        },
-      ]
+      const fallbackActionGroup = createActionNodeGroup({
+        taskId,
+        ts: startTimestamp,
+        endTs: endTimestamp,
+        nestedActions: nestedActionNodes.slice(),
+      })
+      return fallbackActionGroup ? [fallbackActionGroup] : []
     }
     const getLatestActionRuntimeState = () => {
       let latest: {
@@ -2150,13 +2163,27 @@ export class LogParser {
       }
       return result
     }
+    const createActionNodeGroup = (params: {
+      taskId: number
+      ts: string
+      endTs?: string
+      nestedActions: NestedActionNode[]
+    }): NestedActionGroup | null => {
+      if (params.nestedActions.length === 0) return null
+      return {
+        task_id: params.taskId,
+        name: this.stringPool.intern('ActionNode'),
+        ts: params.ts,
+        end_ts: params.endTs,
+        status: summarizeRuntimeStatus(params.nestedActions),
+        nested_actions: params.nestedActions,
+      }
+    }
     const summarizeActionFlowStatus = (
       items: UnifiedFlowItem[]
     ): 'success' | 'failed' | 'running' | null => {
       if (items.length === 0) return null
-      if (items.some(item => item.status === 'failed')) return 'failed'
-      if (items.some(item => item.status === 'running')) return 'running'
-      return 'success'
+      return summarizeRuntimeStatus(items)
     }
     const createActionRootFlowItem = (params: {
       actionId: number
@@ -2383,7 +2410,7 @@ export class LogParser {
 
       const nowTimestamp = this.stringPool.intern(timestamp)
       activeNode.end_ts = nowTimestamp
-      activeNode.next_list = toNextListItems(getTaskNextList(task.task_id))
+      activeNode.next_list = getTaskNextList(task.task_id)
 
       const topLevelRecognitions = dedupeRecognitionAttempts(currentTaskRecognitions)
       const actionRecognitions = dedupeRecognitionAttempts(actionLevelRecognitionNodes)
@@ -2392,20 +2419,13 @@ export class LogParser {
         ...activeSubTaskActionNodes.values(),
       ])
 
-      const runtimeNestedActionGroups: NestedActionGroup[] = runtimeNestedActionNodes.length > 0
-        ? [{
-            task_id: task.task_id,
-            name: this.stringPool.intern('ActionNode'),
-            ts: activeNode.ts,
-            end_ts: nowTimestamp,
-            status: runtimeNestedActionNodes.some(item => item.status === 'failed')
-              ? 'failed'
-              : runtimeNestedActionNodes.some(item => item.status === 'running')
-                ? 'running'
-                : 'success',
-            nested_actions: runtimeNestedActionNodes,
-          }]
-        : []
+      const runtimeActionGroup = createActionNodeGroup({
+        taskId: task.task_id,
+        ts: activeNode.ts,
+        endTs: nowTimestamp,
+        nestedActions: runtimeNestedActionNodes,
+      })
+      const runtimeNestedActionGroups: NestedActionGroup[] = runtimeActionGroup ? [runtimeActionGroup] : []
 
       const runtimeActionState = getLatestActionRuntimeState()
       const resolvedActionId =
@@ -2465,7 +2485,7 @@ export class LogParser {
       const taskActions = subTasks.consumeActions(subTaskId)
       if (taskActions.length === 0) return undefined
 
-      let matchedTaskAction: any | undefined
+      let matchedTaskAction: SubTaskActionSnapshot | undefined
       let matchedTaskActionIndex = -1
       if (actionId != null) {
         for (let i = taskActions.length - 1; i >= 0; i--) {
@@ -2540,7 +2560,7 @@ export class LogParser {
       const resolvedNodeName = this.stringPool.intern(
         details.reco_details?.name || details.action_details?.name || details.name || ''
       )
-      const resolvedNextList = toNextListItems(getTaskNextList(subTaskId))
+      const resolvedNextList = getTaskNextList(subTaskId)
       const resolvedActionDetails = withActionTimestamps(
         mergedActionDetails,
         mergedActionStartTimestamp,
@@ -2756,7 +2776,7 @@ export class LogParser {
       const nodeFlow = composedFlow.nodeFlow
       const actionFlow = composedFlow.actionFlow
 
-      const resolvedNextList = toNextListItems(getTaskNextList(taskId))
+      const resolvedNextList = getTaskNextList(taskId)
       let nodeStatus: NodeInfo['status'] = pipelineStatus
       if (nodeStatus === 'success' && actionFlow.some(item => item.type === 'task' && item.status === 'failed')) {
         nodeStatus = 'failed'
@@ -2804,7 +2824,7 @@ export class LogParser {
         if (message === 'Node.NextList.Failed') {
           applyTaskNextList(taskId, [])
         } else {
-          applyTaskNextList(taskId, details.list || [])
+          applyTaskNextList(taskId, Array.isArray(details.list) ? details.list : [])
         }
       }
       refreshActivePipelineNodePreview(timestamp)
@@ -3368,36 +3388,14 @@ export class LogParser {
    * 查找识别尝试的截图（匹配到秒级别）
    */
   findRecognitionImage(timestamp: string, nodeName: string): string | undefined {
-    if (this.errorImages.size === 0) return undefined
-
-    // 2026-03-09 19:46:35.xxx -> 2026.03.09-19.46.35
-    const secondsOnly = timestamp.replace(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\..*/, '$1.$2.$3-$4.$5.$6')
-    const suffix = `_${nodeName}`
-
-    for (const [key, path] of this.errorImages.entries()) {
-      if (key.includes(`${secondsOnly}.`) && key.endsWith(suffix)) {
-        return path
-      }
-    }
-    return undefined
+    return this.findImageByTimestampSuffix(this.errorImages, timestamp, `_${nodeName}`)
   }
 
   /**
    * 查找错误截图（匹配到秒级别 + 节点名）
    */
   findErrorImage(timestamp: string, nodeName: string): string | undefined {
-    if (this.errorImages.size === 0) return undefined
-
-    // 2026-03-08 13:12:30.216 -> 2026.03.08-13.12.30
-    const secondsOnly = timestamp.replace(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\..*/, '$1.$2.$3-$4.$5.$6')
-    const suffix = `_${nodeName}`
-
-    for (const [key, path] of this.errorImages.entries()) {
-      if (key.includes(`${secondsOnly}.`) && key.endsWith(suffix)) {
-        return path
-      }
-    }
-    return undefined
+    return this.findImageByTimestampSuffix(this.errorImages, timestamp, `_${nodeName}`)
   }
 
   findErrorImageByNames(timestamp: string, candidateNames: Array<string | null | undefined>): string | undefined {
@@ -3416,14 +3414,25 @@ export class LogParser {
    * key 格式: YYYY.MM.DD-HH.MM.SS.ms_NodeName_RecoId
    */
   findVisionImage(timestamp: string, nodeName: string, recoId: number): string | undefined {
-    if (this.visionImages.size === 0) return undefined
+    return this.findImageByTimestampSuffix(this.visionImages, timestamp, `_${nodeName}_${recoId}`)
+  }
 
-    // 2026-03-08 13:12:30.216 -> 2026.03.08-13.12.30
-    const secondsOnly = timestamp.replace(/^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\..*/, '$1.$2.$3-$4.$5.$6')
-    const suffix = `_${nodeName}_${recoId}`
+  private toImageSecondsKey(timestamp: string): string {
+    return timestamp.replace(
+      /^(\d{4})-(\d{2})-(\d{2}) (\d{2}):(\d{2}):(\d{2})\..*/,
+      '$1.$2.$3-$4.$5.$6'
+    )
+  }
 
-    for (const [key, path] of this.visionImages.entries()) {
-      if (key.includes(`${secondsOnly}.`) && key.endsWith(suffix)) {
+  private findImageByTimestampSuffix(
+    source: Map<string, string>,
+    timestamp: string,
+    suffix: string
+  ): string | undefined {
+    if (source.size === 0) return undefined
+    const secondsKey = this.toImageSecondsKey(timestamp)
+    for (const [key, path] of source.entries()) {
+      if (key.includes(`${secondsKey}.`) && key.endsWith(suffix)) {
         return path
       }
     }
