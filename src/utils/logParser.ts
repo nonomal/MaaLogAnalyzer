@@ -23,12 +23,8 @@ import {
   readStringField,
 } from './logEventDecoders'
 import {
-  buildEventDedupSignature,
-  formatEventTimestampMs,
   isTaskTerminalPhase,
-  parseEventTimestampMs,
   parseMaaMessageMeta,
-  resolveCompletionStatus,
   resolveTaskLifecyclePhase,
   resolveTaskTerminalStatus,
   resolveTerminalCompletionStatus,
@@ -43,15 +39,25 @@ import {
   resolveTaskLifecycleEventDetails,
   type TaskLifecycleMetaEventContext,
 } from './logParserTaskLifecycle'
+import {
+  SubTaskCollector,
+  summarizeRuntimeStatus,
+  type SubTaskActionSnapshot,
+} from './logParserSubTaskCollector'
+import { parseEventLine as parseMaaEventLine, type ParsedEventLine } from './logParserEventLine'
+import {
+  resolveActionDetailsActionId,
+  resolveActionEventName,
+  resolveActionNodeEventId,
+  resolveRuntimeStatusFromPhase,
+  resolveSubTaskActionKey,
+} from './logParserActionHelpers'
 
 export interface ParseProgress {
   current: number
   total: number
   percentage: number
 }
-
-// 事件行正则：提取 timestamp, level, processId, threadId, msg, detailsJson
-const EVENT_LINE_REGEX = /^\[([^\]]+)\]\[([^\]]+)\]\[(Px[^\]]+)\]\[(Tx[^\]]+)\].*!!!OnEventNotify!!!\s*\[handle=[^\]]*\]\s*\[msg=([^\]]+)\]\s*\[details=(.*)\]\s*$/
 
 /**
  * 强制复制字符串，避免 V8 sliced string 长时间持有整段日志 backing store。
@@ -64,126 +70,6 @@ const forceCopyString = (value: string): string => {
     copied += String.fromCharCode(value.charCodeAt(i))
   }
   return copied
-}
-
-const summarizeRuntimeStatus = <T extends { status: UnifiedFlowItem['status'] }>(
-  items: readonly T[]
-): UnifiedFlowItem['status'] => {
-  if (items.some((item) => item.status === 'failed')) return 'failed'
-  if (items.some((item) => item.status === 'running')) return 'running'
-  return 'success'
-}
-
-/**
- * 子任务事件收集器
- * 统一管理非当前 task_id 的 Recognition/Action/PipelineNode 事件
- */
-type SubTaskActionSnapshot = {
-  action_id: number | undefined
-  name: string
-  ts: string
-  end_ts?: string
-  status: 'success' | 'failed' | 'running'
-  action_details?: NodeInfo['action_details']
-}
-
-type SubTaskPipelineNodeSnapshot = NestedActionNode
-
-class SubTaskCollector {
-  private recognitions = new Map<number, RecognitionAttempt[]>()
-  private recognitionNodes = new Map<number, RecognitionAttempt[]>()
-  private actions = new Map<number, SubTaskActionSnapshot[]>()
-  private pipelineNodes = new Map<number, SubTaskPipelineNodeSnapshot[]>()
-
-  addRecognition(taskId: number, attempt: RecognitionAttempt): void {
-    if (!this.recognitions.has(taskId)) {
-      this.recognitions.set(taskId, [])
-    }
-    this.recognitions.get(taskId)!.push(attempt)
-  }
-
-  addAction(taskId: number, action: SubTaskActionSnapshot): void {
-    if (!this.actions.has(taskId)) {
-      this.actions.set(taskId, [])
-    }
-    this.actions.get(taskId)!.push(action)
-  }
-
-  addPipelineNode(taskId: number, node: SubTaskPipelineNodeSnapshot): void {
-    if (!this.pipelineNodes.has(taskId)) {
-      this.pipelineNodes.set(taskId, [])
-    }
-    this.pipelineNodes.get(taskId)!.push(node)
-  }
-
-  consumeRecognitions(taskId: number): RecognitionAttempt[] {
-    const result = this.recognitions.get(taskId) || []
-    this.recognitions.delete(taskId)
-    return result
-  }
-
-  addRecognitionNode(taskId: number, attempt: RecognitionAttempt): void {
-    if (!this.recognitionNodes.has(taskId)) {
-      this.recognitionNodes.set(taskId, [])
-    }
-    this.recognitionNodes.get(taskId)!.push(attempt)
-  }
-
-  consumeRecognitionNodes(taskId: number): RecognitionAttempt[] {
-    const result = this.recognitionNodes.get(taskId) || []
-    this.recognitionNodes.delete(taskId)
-    return result
-  }
-
-  consumeOrphanRecognitionNodes(): RecognitionAttempt[] {
-    const result: RecognitionAttempt[] = []
-    for (const recognitions of this.recognitionNodes.values()) {
-      result.push(...recognitions)
-    }
-    this.recognitionNodes.clear()
-    return result
-  }
-
-  consumeOrphanRecognitions(): RecognitionAttempt[] {
-    const result: RecognitionAttempt[] = []
-    for (const recognitions of this.recognitions.values()) {
-      result.push(...recognitions)
-    }
-    this.recognitions.clear()
-    return result
-  }
-
-  consumeActions(taskId: number): SubTaskActionSnapshot[] {
-    const result = this.actions.get(taskId) || []
-    this.actions.delete(taskId)
-    return result
-  }
-
-  peekActions(taskId: number): SubTaskActionSnapshot[] {
-    return this.actions.get(taskId) || []
-  }
-
-  /** 将收集的子任务 PipelineNode 转换为 NestedActionGroup[] 格式 */
-  consumeAsNestedActionGroups(stringPool: StringPool): NestedActionGroup[] {
-    const groups = Array.from(this.pipelineNodes.entries()).map(([taskId, nodes]) => {
-      return {
-        task_id: taskId,
-        name: stringPool.intern(nodes[0]?.name || 'SubTask'),
-        ts: stringPool.intern(nodes[0]?.ts || ''),
-        status: summarizeRuntimeStatus(nodes),
-        nested_actions: nodes
-      }
-    })
-    this.pipelineNodes.clear()
-    return groups
-  }
-
-  clear(): void {
-    this.recognitions.clear()
-    this.recognitionNodes.clear()
-    this.actions.clear()
-    this.pipelineNodes.clear()
-  }
 }
 
 export class LogParser {
@@ -409,38 +295,11 @@ export class LogParser {
   private parseEventLine(
     line: string,
     lineNum: number
-  ): (EventNotification & { processId: string; threadId: string; _dedupSignature: string; _timestampMs: number }) | null {
-    const match = line.match(EVENT_LINE_REGEX)
-    if (!match) return null
-
-    const [, rawTimestamp, rawLevel, rawProcessId, rawThreadId, rawMsg, detailsJson] = match
-    const timestampMs = parseEventTimestampMs(rawTimestamp)
-    const timestamp = Number.isFinite(timestampMs)
-      ? formatEventTimestampMs(timestampMs)
-      : forceCopyString(rawTimestamp)
-    const level = this.internEventToken(rawLevel)
-    const processId = this.internEventToken(rawProcessId)
-    const threadId = this.internEventToken(rawThreadId)
-    const msg = this.internEventToken(rawMsg)
-
-    let details: Record<string, any> = {}
-    try {
-      details = JSON.parse(detailsJson)
-    } catch {
-      return null
-    }
-
-    return {
-      timestamp,
-      level,
-      message: msg,
-      details,
-      processId,
-      threadId,
-      _lineNumber: lineNum,
-      _dedupSignature: buildEventDedupSignature(msg, detailsJson),
-      _timestampMs: timestampMs
-    }
+  ): ParsedEventLine | null {
+    return parseMaaEventLine(line, lineNum, {
+      internEventToken: (raw) => this.internEventToken(raw),
+      forceCopyString,
+    })
   }
 
   private settleRunningFlowItems(
@@ -811,12 +670,6 @@ export class LogParser {
     const recognitionOrderMeta = new WeakMap<RecognitionAttempt, { startSeq: number; endSeq: number }>()
 
     const scopedKey = (taskId: number, id: number): string => `${taskId}:${id}`
-    const resolveSubTaskActionKey = (
-      subTaskId: number,
-      actionId: number | null | undefined
-    ): string | null => {
-      return actionId != null ? scopedKey(subTaskId, actionId) : null
-    }
     const getOrCreateTaskNodeAggregation = (taskId: number): TaskScopedNodeAggregation => {
       const existing = taskScopedNodeAggregationByTaskId.get(taskId)
       if (existing) return existing
@@ -2206,28 +2059,6 @@ export class LogParser {
         }),
       })
     }
-    const resolveRuntimeStatusFromPhase = (phase: KnownMaaPhase): 'running' | 'success' | 'failed' => {
-      if (phase === 'Starting') return 'running'
-      return resolveCompletionStatus(phase)
-    }
-    const readNestedNumberField = (
-      details: Record<string, any>,
-      nestedField: string,
-      field: string
-    ): number | undefined => {
-      const nested = details[nestedField]
-      if (!nested || typeof nested !== 'object') return undefined
-      return readNumberField(nested as Record<string, any>, field)
-    }
-    const resolveActionDetailsActionId = (details: Record<string, any>): number | undefined => {
-      return readNestedNumberField(details, 'action_details', 'action_id')
-        ?? readNestedNumberField(details, 'node_details', 'action_id')
-    }
-    const resolveActionNodeEventId = (details: Record<string, any>): number | undefined => {
-      return readNestedNumberField(details, 'action_details', 'action_id')
-        ?? readNumberField(details, 'action_id')
-        ?? readNumberField(details, 'node_id')
-    }
     const handleSubTaskActionNodeStartingEvent = (
       subTaskId: number,
       details: Record<string, any>,
@@ -2825,12 +2656,6 @@ export class LogParser {
       refreshActivePipelineNodePreview(timestamp)
       return true
     }
-    const resolveActionEventName = (
-      details: Record<string, any>,
-      fallbackName?: string
-    ): string => {
-      return this.stringPool.intern(details.name || details.action_details?.name || fallbackName || '')
-    }
     const createCurrentTaskActionRuntimeState = (
       actionId: number,
       details: Record<string, any>,
@@ -2840,7 +2665,9 @@ export class LogParser {
     ) => {
       return {
         action_id: actionId,
-        name: resolveActionEventName(details),
+        name: resolveActionEventName(details, {
+          intern: (name) => this.stringPool.intern(name),
+        }),
         ts: timestamp,
         end_ts: timestamp,
         status,
@@ -2877,7 +2704,10 @@ export class LogParser {
         if (existing) {
           existing.status = terminalStatus
           existing.end_ts = endTimestamp
-          existing.name = resolveActionEventName(details, existing.name)
+          existing.name = resolveActionEventName(details, {
+            fallbackName: existing.name,
+            intern: (name) => this.stringPool.intern(name),
+          })
         } else {
           actionRuntimeStates.set(
             actionId,
@@ -2923,7 +2753,9 @@ export class LogParser {
         }
         subTasks.addAction(subTaskId, {
           action_id: actionId,
-          name: resolveActionEventName(details),
+          name: resolveActionEventName(details, {
+            intern: (name) => this.stringPool.intern(name),
+          }),
           ts: startTimestamp,
           end_ts: endTimestamp,
           status: resolveRuntimeStatusFromPhase(phase),
