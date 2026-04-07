@@ -3,7 +3,7 @@ import ProcessDesktopLayoutShell from './ProcessDesktopLayoutShell.vue'
 import TaskListPanel from './TaskListPanel.vue'
 import ProcessTimelineToolbar from './ProcessTimelineToolbar.vue'
 import NodeNavPanel from './NodeNavPanel.vue'
-import NodeTimelineList from './NodeTimelineList.vue'
+import ProcessTimelineListPane from './ProcessTimelineListPane.vue'
 import type { NodeInfo, TaskInfo } from '../../../types'
 import type { NodeNavViewItem } from '../composables/useNodeNavSearch'
 import type { VNodeChild } from 'vue'
@@ -124,17 +124,13 @@ const emit = defineEmits<{
     </template>
 
     <template #timeline-list>
-      <node-timeline-list
-        :nodes="currentNodes"
+      <process-timeline-list-pane
+        :current-nodes="currentNodes"
         :selected-task-key="selectedTaskKey"
         :display-mode="displayMode"
         :is-vscode-launch-embed="isVscodeLaunchEmbed"
         :bridge-request-task-doc="bridgeRequestTaskDoc"
         :bridge-reveal-task="bridgeRevealTask"
-        item-padding="12px"
-        scroller-style="height: 100%"
-        wrapper-style="height: 100%; display: flex; flex-direction: column; position: relative"
-        :capture-wheel-up="true"
         @manual-scroll-up="emit('manual-scroll-up')"
         @scroller-mounted="emit('scroller-mounted', $event)"
         @select-node="emit('select-node', $event)"
