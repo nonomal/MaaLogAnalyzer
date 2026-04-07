@@ -52,7 +52,7 @@ const handleWheel = (event: WheelEvent) => {
 </script>
 
 <template>
-  <div :style="wrapperStyle" @wheel.passive="handleWheel">
+  <div :style="wrapperStyle" @wheel.capture.passive="handleWheel">
     <div v-if="nodes.length === 0" style="padding: 40px 0">
       <n-empty description="暂无节点数据" />
     </div>

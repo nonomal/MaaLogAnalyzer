@@ -98,6 +98,7 @@ const props = defineProps<{
         :bridge-request-task-doc="props.bridgeRequestTaskDoc"
         :bridge-reveal-task="props.bridgeRevealTask"
         @scroller-mounted="props.onScrollerMounted"
+        @manual-scroll-up="props.onManualScrollUp"
         @select-node="props.onSelectNode"
         @select-action="props.onSelectAction"
         @select-recognition="props.onSelectRecognition"

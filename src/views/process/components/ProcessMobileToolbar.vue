@@ -28,7 +28,7 @@ const handleReloadSelect = (key: string | number) => {
     <n-button text style="font-size: 20px" @click="emit('open-task-drawer')">
       <n-icon><menu-outlined /></n-icon>
     </n-button>
-    <n-text strong style="font-size: 14px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
+    <n-text strong style="font-size: 14px; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
       {{ selectedTaskEntry || '选择任务' }}
     </n-text>
     <n-button

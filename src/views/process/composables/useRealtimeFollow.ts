@@ -1,4 +1,4 @@
-import { computed, onUnmounted, ref } from 'vue'
+import { computed, onUnmounted, ref, watch } from 'vue'
 import type { DynamicScroller } from 'vue-virtual-scroller'
 import { createRealtimeFollowScrolling } from './realtimeFollow/scrolling'
 import { createFollowScheduler } from './realtimeFollow/scheduler'
@@ -86,6 +86,13 @@ export const useRealtimeFollow = (options: UseRealtimeFollowOptions) => {
     onScrollDone: options.onScrollDone,
     scheduleFollowToLatest,
   })
+
+  // 切换 desktop/mobile 布局会重建 scroller，跟随开启时需要重新对齐到底部。
+  watch(virtualScroller, (scroller) => {
+    if (!scroller) return
+    if (!options.isRealtimeStreaming.value || !followLast.value) return
+    scheduleFollowToLatest()
+  }, { flush: 'post' })
 
   return {
     activeTaskIndex,

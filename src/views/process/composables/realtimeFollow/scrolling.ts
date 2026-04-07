@@ -16,8 +16,23 @@ export const createRealtimeFollowScrolling = (
   let lastAlignedLatestIndex = -1
   let lastScrollerElement: HTMLElement | null = null
 
+  const isHtmlElement = (value: unknown): value is HTMLElement => {
+    return typeof HTMLElement !== 'undefined' && value instanceof HTMLElement
+  }
+
+  const canScrollToItem = (value: unknown): value is { scrollToItem: (index: number) => void } => {
+    return typeof (value as { scrollToItem?: unknown } | null)?.scrollToItem === 'function'
+  }
+
   const getScrollerElement = () => {
-    return (options.virtualScroller.value?.$el ?? null) as HTMLElement | null
+    const scrollerRef = options.virtualScroller.value as unknown
+    if (!scrollerRef) return null
+
+    const rootCandidate = (scrollerRef as { $el?: unknown }).$el ?? scrollerRef
+    if (!isHtmlElement(rootCandidate)) return null
+
+    const nested = rootCandidate.querySelector('.vue-recycle-scroller') as HTMLElement | null
+    return nested ?? rootCandidate
   }
 
   const findRenderedItemElement = (index: number): HTMLElement | null => {
@@ -44,7 +59,7 @@ export const createRealtimeFollowScrolling = (
 
   // 动态高度 + 高频更新下，scrollToItem 可能在尺寸缓存未就绪时抛错（accumulator undefined）
   const safeScrollToItem = async (index: number, retry = 0): Promise<boolean> => {
-    const scroller = options.virtualScroller.value
+    const scroller = options.virtualScroller.value as unknown
     const total = options.currentNodeCount.value
     if (!scroller || total === 0) return false
 
@@ -52,7 +67,15 @@ export const createRealtimeFollowScrolling = (
     await nextTick()
 
     try {
-      scroller.scrollToItem(targetIndex)
+      if (canScrollToItem(scroller)) {
+        scroller.scrollToItem(targetIndex)
+      } else {
+        // 某些运行环境 ref 可能是 DOM 节点而非组件实例；保底至少支持“滚到底”。
+        const scrollerEl = getScrollerElement()
+        if (!scrollerEl) return false
+        if (targetIndex < total - 1) return false
+        scrollerEl.scrollTo({ top: scrollerEl.scrollHeight, behavior: 'auto' })
+      }
       return true
     } catch (error) {
       if (retry >= 2) {

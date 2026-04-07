@@ -124,7 +124,7 @@ void fileInputRef
     <process-mobile-toolbar
       v-if="isMobile && tasks.length > 0"
       :selected-task-entry="selectedTask?.entry || ''"
-      :show-realtime-status="showRealtimeStatus"
+      :show-realtime-status="showRealtimeStatus || props.isVscodeLaunchEmbed === true"
       :is-realtime-streaming="isRealtimeStreaming"
       :follow-last="followLast"
       :show-reload-controls="showReloadControls"

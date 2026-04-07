@@ -15,6 +15,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'scroller-mounted': [scroller: object | null]
+  'manual-scroll-up': []
   'select-node': [node: NodeInfo]
   'select-action': [node: NodeInfo]
   'select-recognition': [node: NodeInfo, attemptIndex: number]
@@ -31,9 +32,11 @@ const emit = defineEmits<{
     :bridge-request-task-doc="props.bridgeRequestTaskDoc"
     :bridge-reveal-task="props.bridgeRevealTask"
     item-padding="8px 4px"
-    scroller-style="flex: 1; min-height: 0"
-    wrapper-style="flex: 1; min-height: 0"
+    scroller-style="height: 100%"
+    wrapper-style="flex: 1; min-height: 0; display: flex; flex-direction: column; position: relative"
+    :capture-wheel-up="true"
     @scroller-mounted="emit('scroller-mounted', $event)"
+    @manual-scroll-up="emit('manual-scroll-up')"
     @select-node="emit('select-node', $event)"
     @select-action="emit('select-action', $event)"
     @select-recognition="(node, attemptIndex) => emit('select-recognition', node, attemptIndex)"
