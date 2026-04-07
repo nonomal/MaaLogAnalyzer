@@ -260,6 +260,25 @@ describe('LogParser sub task scoped node aggregation', () => {
     expect(mainTask?.nodes[0].next_list).toEqual([])
   })
 
+  it('ignores Tasker.Task events with unknown phase', async () => {
+    const lines = [
+      makeEventLine(181, 'Tasker.Task.Starting', { task_id: 61, entry: 'MainTask', hash: 'h-main-7', uuid: 'u-main-7' }),
+      makeEventLine(182, 'Node.PipelineNode.Starting', { task_id: 61, node_id: 6101, name: 'MainNode' }),
+      makeEventLine(183, 'Tasker.Task.Custom', { task_id: 61, entry: 'MainTask', hash: 'h-main-7', uuid: 'u-main-7' }),
+      makeEventLine(184, 'Node.PipelineNode.Succeeded', { task_id: 61, node_id: 6101, name: 'MainNode' }),
+      makeEventLine(185, 'Tasker.Task.Succeeded', { task_id: 61, entry: 'MainTask', hash: 'h-main-7', uuid: 'u-main-7' }),
+    ]
+
+    const parser = new LogParser()
+    await parser.parseFile(lines.join('\n'))
+    const tasks = parser.getTasksSnapshot()
+    const mainTask = tasks.find(item => item.task_id === 61)
+    expect(mainTask).toBeTruthy()
+    expect(tasks.filter(item => item.task_id === 61)).toHaveLength(1)
+    expect(mainTask?.status).toBe('succeeded')
+    expect(mainTask?.nodes.length).toBe(1)
+  })
+
   it('builds multi-level nested sub tasks by parent task relation', async () => {
     const lines = [
       makeEventLine(201, 'Tasker.Task.Starting', { task_id: 21, entry: 'MainTask', hash: 'h-main-3', uuid: 'u-main-3' }),

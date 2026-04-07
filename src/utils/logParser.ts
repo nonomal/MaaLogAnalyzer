@@ -52,6 +52,7 @@ type MaaPhase = 'Starting' | 'Succeeded' | 'Failed' | 'Unknown'
 type MaaTaskerKind = 'Task' | 'Unknown'
 type MaaNodeKind = 'PipelineNode' | 'RecognitionNode' | 'ActionNode' | 'NextList' | 'Recognition' | 'Action' | 'WaitFreezes' | 'Unknown'
 type KnownMaaPhase = Exclude<MaaPhase, 'Unknown'>
+type TaskTerminalPhase = Exclude<KnownMaaPhase, 'Starting'>
 
 interface MaaMessageMeta {
   domain: MaaDomain
@@ -141,6 +142,19 @@ const getCachedMaaMessageMeta = (message: string): MaaMessageMeta => {
 const toKnownMaaPhase = (phase: MaaPhase): KnownMaaPhase | null => {
   if (phase === 'Unknown') return null
   return phase
+}
+
+const resolveTaskLifecyclePhase = (meta: MaaMessageMeta): KnownMaaPhase | null => {
+  if (meta.domain !== 'Tasker' || meta.taskerKind !== 'Task') return null
+  return toKnownMaaPhase(meta.phase)
+}
+
+const isTaskTerminalPhase = (phase: KnownMaaPhase): phase is TaskTerminalPhase => {
+  return phase !== 'Starting'
+}
+
+const resolveTaskTerminalStatus = (phase: TaskTerminalPhase): 'succeeded' | 'failed' => {
+  return phase === 'Succeeded' ? 'succeeded' : 'failed'
 }
 
 const resolveCompletionStatus = (phase: KnownMaaPhase): 'success' | 'failed' => {
@@ -400,12 +414,8 @@ export class LogParser {
     }
 
     const eventMeta = getCachedMaaMessageMeta(event.message)
-    if (
-      eventMeta.domain === 'Tasker' &&
-      eventMeta.taskerKind === 'Task' &&
-      eventMeta.phase === 'Starting' &&
-      event.details.task_id
-    ) {
+    const taskLifecyclePhase = resolveTaskLifecyclePhase(eventMeta)
+    if (taskLifecyclePhase === 'Starting' && event.details.task_id) {
       if (!this.taskProcessMap.has(event.details.task_id)) {
         this.taskProcessMap.set(event.details.task_id, event.processId)
         this.taskThreadMap.set(event.details.task_id, event.threadId)
@@ -682,8 +692,9 @@ export class LogParser {
       const event = this.events[i]
       const { message, details } = event
       const meta = getCachedMaaMessageMeta(message)
+      const taskLifecyclePhase = resolveTaskLifecyclePhase(meta)
 
-      if (meta.domain === 'Tasker' && meta.taskerKind === 'Task' && meta.phase === 'Starting') {
+      if (taskLifecyclePhase === 'Starting') {
         const taskId = details.task_id
         const uuid = details.uuid || ''
 
@@ -705,11 +716,7 @@ export class LogParser {
             _startEventIndex: i
           })
         }
-      } else if (
-        meta.domain === 'Tasker' &&
-        meta.taskerKind === 'Task' &&
-        (meta.phase === 'Succeeded' || meta.phase === 'Failed')
-      ) {
+      } else if (taskLifecyclePhase && isTaskTerminalPhase(taskLifecyclePhase)) {
         const taskId = details.task_id
         const uuid = details.uuid
 
@@ -721,7 +728,7 @@ export class LogParser {
         }
 
         if (matchedTask) {
-          matchedTask.status = meta.phase === 'Succeeded' ? 'succeeded' : 'failed'
+          matchedTask.status = resolveTaskTerminalStatus(taskLifecyclePhase)
           matchedTask.end_time = this.stringPool.intern(event.timestamp)
           matchedTask._endEventIndex = i
 
@@ -2293,7 +2300,7 @@ export class LogParser {
         }),
       })
     }
-    const resolveWaitFreezesStatus = (phase: KnownMaaPhase): 'running' | 'success' | 'failed' => {
+    const resolveRuntimeStatusFromPhase = (phase: KnownMaaPhase): 'running' | 'success' | 'failed' => {
       if (phase === 'Starting') return 'running'
       return resolveCompletionStatus(phase)
     }
@@ -2850,7 +2857,7 @@ export class LogParser {
       onUpdated?: (details: Record<string, any>) => void
     ): boolean => {
       if (taskId != null) {
-        const waitFreezesStatus = resolveWaitFreezesStatus(phase)
+        const waitFreezesStatus = resolveRuntimeStatusFromPhase(phase)
         upsertWaitFreezesState(taskId, details, timestamp, waitFreezesStatus, eventOrder)
         onUpdated?.(details)
       }
@@ -2896,6 +2903,28 @@ export class LogParser {
       refreshActivePipelineNodePreview(timestamp)
       return true
     }
+    const resolveActionEventName = (
+      details: Record<string, any>,
+      fallbackName?: string
+    ): string => {
+      return this.stringPool.intern(details.name || details.action_details?.name || fallbackName || '')
+    }
+    const createCurrentTaskActionRuntimeState = (
+      actionId: number,
+      details: Record<string, any>,
+      timestamp: string,
+      eventOrder: number,
+      status: 'running' | 'success' | 'failed'
+    ) => {
+      return {
+        action_id: actionId,
+        name: resolveActionEventName(details),
+        ts: timestamp,
+        end_ts: timestamp,
+        status,
+        order: eventOrder,
+      }
+    }
     const handleCurrentTaskActionEvent: ScopedActionEventHandler = (
       _taskId: number | null,
       phase: KnownMaaPhase,
@@ -2903,41 +2932,41 @@ export class LogParser {
       timestamp: string,
       eventOrder: number
     ): void => {
+      const actionId = details.action_id as number | undefined
+      if (actionId == null) {
+        refreshActivePipelineNodePreview(timestamp)
+        return
+      }
       const isStarting = phase === 'Starting'
       if (isStarting) {
-        if (details.action_id != null) {
-          const actionId = details.action_id as number
-          const startTimestamp = this.stringPool.intern(timestamp)
-          actionStartTimes.set(actionId, startTimestamp)
-          actionStartOrders.set(actionId, eventOrder)
-          actionRuntimeStates.set(actionId, {
-            action_id: actionId,
-            name: this.stringPool.intern(details.name || details.action_details?.name || ''),
-            ts: startTimestamp,
-            end_ts: startTimestamp,
-            status: 'running',
-            order: eventOrder,
-          })
-        }
-      } else if (details.action_id != null) {
-        const actionId = details.action_id as number
+        const startTimestamp = this.stringPool.intern(timestamp)
+        actionStartTimes.set(actionId, startTimestamp)
+        actionStartOrders.set(actionId, eventOrder)
+        actionRuntimeStates.set(
+          actionId,
+          createCurrentTaskActionRuntimeState(actionId, details, startTimestamp, eventOrder, 'running')
+        )
+      } else {
         const endTimestamp = this.stringPool.intern(timestamp)
         actionEndTimes.set(actionId, endTimestamp)
         actionEndOrders.set(actionId, eventOrder)
         const existing = actionRuntimeStates.get(actionId)
+        const terminalStatus = resolveRuntimeStatusFromPhase(phase)
         if (existing) {
-          existing.status = resolveCompletionStatus(phase)
+          existing.status = terminalStatus
           existing.end_ts = endTimestamp
-          existing.name = this.stringPool.intern(details.name || details.action_details?.name || existing.name || '')
+          existing.name = resolveActionEventName(details, existing.name)
         } else {
-          actionRuntimeStates.set(actionId, {
-            action_id: actionId,
-            name: this.stringPool.intern(details.name || details.action_details?.name || ''),
-            ts: endTimestamp,
-            end_ts: endTimestamp,
-            status: resolveCompletionStatus(phase),
-            order: eventOrder,
-          })
+          actionRuntimeStates.set(
+            actionId,
+            createCurrentTaskActionRuntimeState(
+              actionId,
+              details,
+              endTimestamp,
+              eventOrder,
+              terminalStatus
+            )
+          )
         }
       }
       refreshActivePipelineNodePreview(timestamp)
@@ -2972,7 +3001,7 @@ export class LogParser {
           name: this.stringPool.intern(details.name || ''),
           ts: startTimestamp,
           end_ts: endTimestamp,
-          status: resolveCompletionStatus(phase),
+          status: resolveRuntimeStatusFromPhase(phase),
           action_details: withActionTimestamps(details.action_details, startTimestamp, endTimestamp, endTimestamp)
         })
       }
@@ -2984,15 +3013,11 @@ export class LogParser {
       details: Record<string, any>,
       timestamp: string
     ): void => {
-      const isStarting = phase === 'Starting'
-      if (isStarting) {
-        const actionId = resolveActionNodeEventId(details)
-        if (actionId != null) {
+      const actionId = resolveActionNodeEventId(details)
+      if (actionId != null) {
+        if (phase === 'Starting') {
           actionNodeStartTimes.set(actionId, this.stringPool.intern(timestamp))
-        }
-      } else {
-        const actionId = resolveActionNodeEventId(details)
-        if (actionId != null) {
+        } else {
           actionNodeStartTimes.delete(actionId)
         }
       }
@@ -3049,6 +3074,9 @@ export class LogParser {
           return false
       }
     }
+    const resolveScopedTaskId = (fixedTaskId: number | undefined, taskId: number | null): number | null => {
+      return fixedTaskId ?? taskId
+    }
     const createScopedSimpleNodeEventHandler = (params: {
       fixedTaskId?: number
       handleActionEvent: ScopedActionEventHandler
@@ -3065,7 +3093,7 @@ export class LogParser {
         timestamp: string,
         eventOrder: number
       ): boolean => {
-        const scopedTaskId = params.fixedTaskId ?? taskId
+        const scopedTaskId = resolveScopedTaskId(params.fixedTaskId, taskId)
         return handleSimpleNodeEvent(
           scopedTaskId,
           messageMeta,
@@ -3090,7 +3118,7 @@ export class LogParser {
         phase: KnownMaaPhase,
         timestamp: string
       ): void => {
-        const scopedTaskId = params.fixedTaskId ?? taskId
+        const scopedTaskId = resolveScopedTaskId(params.fixedTaskId, taskId)
         if (scopedTaskId == null) return
         if (scopedTaskId === task.task_id) {
           finalizeTaskPipelineNodeEvent(task.task_id, details, phase, timestamp)
@@ -3170,21 +3198,14 @@ export class LogParser {
       subTasks.addRecognitionNode(taskId, recognition)
     }
     const handleTaskerTaskLifecycleMetaEvent = (
-      messageMeta: ReturnType<typeof parseMaaMessageMeta>,
+      messageMeta: MaaMessageMeta,
       eventTaskId: number | undefined,
       details: Record<string, any>,
       message: string,
       timestamp: string
     ) => {
-      if (
-        messageMeta.domain !== 'Tasker' ||
-        messageMeta.taskerKind !== 'Task' ||
-        eventTaskId == null
-      ) {
-        return
-      }
-      const phase = toKnownMaaPhase(messageMeta.phase)
-      if (!phase) return
+      const phase = resolveTaskLifecyclePhase(messageMeta)
+      if (phase == null || eventTaskId == null) return
 
       if (phase === 'Starting') {
         const parentTaskId = peekActiveTask()
@@ -3207,7 +3228,7 @@ export class LogParser {
         snapshot.start_message = this.stringPool.intern(message)
         snapshot.start_details = markRawTaskDetails(details)
       } else {
-        snapshot.status = phase === 'Succeeded' ? 'succeeded' : 'failed'
+        snapshot.status = resolveTaskTerminalStatus(phase)
         snapshot.end_ts = this.stringPool.intern(timestamp)
         snapshot.end_message = this.stringPool.intern(message)
         snapshot.end_details = markRawTaskDetails(details)
