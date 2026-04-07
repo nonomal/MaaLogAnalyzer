@@ -10,26 +10,40 @@
   <!-- 主题颜色（控制浏览器地址栏/状态栏颜色）-->
   <meta name="theme-color" content="#18181c" id="theme-color-meta">
   <title>MAA 日志分析器</title>
-  <script defer src="https://cloud.umami.is/script.js" data-website-id="14964f46-1293-4fc8-82c3-09446ba85c11"></script>
+  <script async src="https://cloud.umami.is/script.js" data-website-id="14964f46-1293-4fc8-82c3-09446ba85c11"></script>
   <style>
     * {
       margin: 0;
       padding: 0;
       box-sizing: border-box;
     }
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+    }
     /* 初始主题由 VS Code 变量或应用主题控制 */
     body {
       font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-      background: var(--vscode-panel-background);
-      color: var(--vscode-foreground);
+      background: var(--vscode-panel-background, #18181c);
+      color: var(--vscode-foreground, rgba(255, 255, 255, 0.82));
     }
     #app {
       height: 100vh;
       overflow: hidden;
     }
-    /* 平滑主题切换 */
-    * {
-      transition: background-color 0.3s ease, color 0.3s ease, border-color 0.3s ease;
+    /* 启动占位，避免白/黑屏 */
+    #app:empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--vscode-panel-background, #18181c);
+      color: var(--vscode-foreground, rgba(255, 255, 255, 0.62));
+      font-size: 12px;
+      letter-spacing: 0.4px;
+    }
+    #app:empty::before {
+      content: "正在加载 MAA 日志分析器...";
     }
   </style>
 </head>

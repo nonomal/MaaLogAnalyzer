@@ -1,12 +1,8 @@
 <script setup lang="ts">
+import { defineAsyncComponent } from 'vue'
 import type { LogParser } from '../../../utils/logParser'
 import type { NodeInfo, TaskInfo } from '../../../types'
-import SearchModePane from './SearchModePane.vue'
-import StatisticsModePane from './StatisticsModePane.vue'
-import FlowchartModePane from './FlowchartModePane.vue'
-import AiModePane from './AiModePane.vue'
 import MainContentAnalysisSection from './MainContentAnalysisSection.vue'
-import MainContentSplitSection from './MainContentSplitSection.vue'
 import type {
   DetailViewForwardProps,
   ProcessViewEventHandlers,
@@ -15,6 +11,12 @@ import type {
   UploadContentHandler,
   UploadFileHandler,
 } from './types'
+
+const SearchModePane = defineAsyncComponent(() => import('./SearchModePane.vue'))
+const StatisticsModePane = defineAsyncComponent(() => import('./StatisticsModePane.vue'))
+const FlowchartModePane = defineAsyncComponent(() => import('./FlowchartModePane.vue'))
+const AiModePane = defineAsyncComponent(() => import('./AiModePane.vue'))
+const MainContentSplitSection = defineAsyncComponent(() => import('./MainContentSplitSection.vue'))
 
 defineProps<{
   viewMode: string

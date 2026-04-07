@@ -752,10 +752,38 @@ function getWebviewContent(webview: vscode.Webview, extensionUri: vscode.Uri): s
   <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${webview.cspSource} 'unsafe-inline'; script-src ${webview.cspSource} https://cloud.umami.is 'nonce-${nonce}'; img-src ${webview.cspSource} data:; font-src ${webview.cspSource}; connect-src https://cloud.umami.is;">
   <title>MAA 日志分析器</title>
   <link rel="stylesheet" href="${webviewUri}/assets/index.css">
+  <style>
+    html, body {
+      width: 100%;
+      height: 100%;
+    }
+    body {
+      margin: 0;
+      background: var(--vscode-panel-background, #1e1e1e);
+      color: var(--vscode-editor-foreground, rgba(255, 255, 255, 0.82));
+      overflow: hidden;
+    }
+    #app {
+      height: 100vh;
+      overflow: hidden;
+    }
+    #app:empty {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--vscode-panel-background, #1e1e1e);
+      color: var(--vscode-descriptionForeground, rgba(255, 255, 255, 0.62));
+      font-size: 12px;
+      letter-spacing: 0.4px;
+    }
+    #app:empty::before {
+      content: "正在加载 MAA 日志分析器...";
+    }
+  </style>
 </head>
 <body>
   <div id="app"></div>
-  <script nonce="${nonce}" defer src="https://cloud.umami.is/script.js" data-website-id="14964f46-1293-4fc8-82c3-09446ba85c11"></script>
+  <script nonce="${nonce}" async src="https://cloud.umami.is/script.js" data-website-id="14964f46-1293-4fc8-82c3-09446ba85c11"></script>
   <script nonce="${nonce}">
     // 注入 VS Code API
     const vscode = acquireVsCodeApi();
