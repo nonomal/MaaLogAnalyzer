@@ -1,9 +1,9 @@
-import type { EventNotification } from '../types'
+import type { EventNotification } from '../../types'
 import {
   buildEventDedupSignature,
   formatEventTimestampMs,
   parseEventTimestampMs,
-} from './logParserEventMeta'
+} from './eventMeta'
 
 // 事件行正则：提取 timestamp, level, processId, threadId, msg, detailsJson
 const EVENT_LINE_REGEX = /^\[([^\]]+)\]\[([^\]]+)\]\[(Px[^\]]+)\]\[(Tx[^\]]+)\].*!!!OnEventNotify!!!\s*\[handle=[^\]]*\]\s*\[msg=([^\]]+)\]\s*\[details=(.*)\]\s*$/

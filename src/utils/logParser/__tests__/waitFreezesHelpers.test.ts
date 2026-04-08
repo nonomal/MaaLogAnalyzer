@@ -3,11 +3,11 @@ import {
   buildWaitFreezesFlowItems,
   normalizeWaitFreezesId,
   upsertWaitFreezesState,
-} from '../logParserWaitFreezesHelpers'
+} from '../waitFreezesHelpers'
 
 const identity = (value: string) => value
 
-describe('logParserWaitFreezesHelpers', () => {
+describe('WaitFreezesHelpers', () => {
   it('normalizes wait_freezes id from number/string and rejects invalid values', () => {
     expect(normalizeWaitFreezesId(12)).toBe(12)
     expect(normalizeWaitFreezesId('34')).toBe(34)

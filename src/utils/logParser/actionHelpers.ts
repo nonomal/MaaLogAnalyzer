@@ -1,5 +1,5 @@
-import { readNumberField } from './logEventDecoders'
-import { resolveCompletionStatus, type KnownMaaPhase } from './logParserEventMeta'
+import { readNumberField } from '../logEventDecoders'
+import { resolveCompletionStatus, type KnownMaaPhase } from './eventMeta'
 
 export const resolveRuntimeStatusFromPhase = (
   phase: KnownMaaPhase

@@ -31,50 +31,50 @@ import {
   type KnownMaaPhase,
   type MaaMessageMeta,
   type TaskTerminalPhase,
-} from './logParserEventMeta'
+} from './logParser/eventMeta'
 import {
   handleTaskLifecycleMetaEvent,
   resolveEventTaskId,
   resolveTaskLifecycleEventDetails,
   type TaskLifecycleMetaEventContext,
-} from './logParserTaskLifecycle'
+} from './logParser/taskLifecycle'
 import {
   SubTaskCollector,
   summarizeRuntimeStatus,
   type SubTaskActionSnapshot,
-} from './logParserSubTaskCollector'
-import { parseEventLine as parseMaaEventLine, type ParsedEventLine } from './logParserEventLine'
+} from './logParser/subTaskCollector'
+import { parseEventLine as parseMaaEventLine, type ParsedEventLine } from './logParser/eventLine'
 import {
   resolveActionDetailsActionId,
   resolveActionEventName,
   resolveActionNodeEventId,
   resolveRuntimeStatusFromPhase,
   resolveSubTaskActionKey,
-} from './logParserActionHelpers'
-import { createRecognitionAttemptHelpers } from './logParserRecognitionHelpers'
+} from './logParser/actionHelpers'
+import { createRecognitionAttemptHelpers } from './logParser/recognitionHelpers'
 import {
   attachActionLevelRecognitionAcrossScopes,
   cloneNestedActionGroup,
   resolveFallbackRecoDetails,
   splitRecognitionAttemptsByActionWindow,
-} from './logParserRecognitionScopeHelpers'
-import { nestSubTaskActionGroups } from './logParserSubTaskNestingHelpers'
+} from './logParser/recognitionScopeHelpers'
+import { nestSubTaskActionGroups } from './logParser/subTaskNestingHelpers'
 import {
   applySubTaskSnapshotStarting,
   applySubTaskSnapshotTerminal,
   getOrCreateSubTaskSnapshot,
   mergeSubTaskActionGroupWithSnapshot,
   type SubTaskSnapshot,
-} from './logParserSubTaskSnapshotHelpers'
+} from './logParser/subTaskSnapshotHelpers'
 import {
   buildWaitFreezesFlowItems,
   upsertWaitFreezesState,
-} from './logParserWaitFreezesHelpers'
+} from './logParser/waitFreezesHelpers'
 import {
   partitionActionScopeWaitFreezes,
   sortFlowItemsByTimestamp,
   splitAndAttachWaitFreezesFlowItems,
-} from './logParserFlowAssemblyHelpers'
+} from './logParser/flowAssemblyHelpers'
 import {
   clearTaskNodeAggregation,
   getOrCreateTaskNodeAggregation,
@@ -82,8 +82,8 @@ import {
   resetTaskNodeAggregation,
   setTaskNextList,
   type TaskScopedNodeAggregation,
-} from './logParserTaskScopedAggregationHelpers'
-import { createTaskStackTracker } from './logParserTaskStackHelpers'
+} from './logParser/taskScopedAggregationHelpers'
+import { createTaskStackTracker } from './logParser/taskStackHelpers'
 import { toTimestampMs } from './timestamp'
 
 export interface ParseProgress {

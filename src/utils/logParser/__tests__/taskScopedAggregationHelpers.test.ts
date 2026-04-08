@@ -5,9 +5,9 @@ import {
   getTaskNextList,
   resetTaskNodeAggregation,
   setTaskNextList,
-} from '../logParserTaskScopedAggregationHelpers'
+} from '../taskScopedAggregationHelpers'
 
-describe('logParserTaskScopedAggregationHelpers', () => {
+describe('TaskScopedAggregationHelpers', () => {
   it('creates and returns task scoped aggregation', () => {
     const map = new Map<number, any>()
     const a = getOrCreateTaskNodeAggregation(map, 1)

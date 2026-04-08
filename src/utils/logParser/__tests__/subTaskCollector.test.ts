@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import type { RecognitionAttempt } from '../../types'
-import { StringPool } from '../stringPool'
-import { SubTaskCollector, summarizeRuntimeStatus } from '../logParserSubTaskCollector'
+import type { RecognitionAttempt } from '../../../types'
+import { StringPool } from '../../stringPool'
+import { SubTaskCollector, summarizeRuntimeStatus } from '../subTaskCollector'
 
-describe('logParserSubTaskCollector', () => {
+describe('SubTaskCollector', () => {
   it('summarizes runtime status by failed > running > success priority', () => {
     expect(summarizeRuntimeStatus([{ status: 'success' }, { status: 'success' }])).toBe('success')
     expect(summarizeRuntimeStatus([{ status: 'running' }, { status: 'success' }])).toBe('running')

@@ -1,4 +1,4 @@
-import type { UnifiedFlowItem } from '../types'
+import type { UnifiedFlowItem } from '../../types'
 
 export const sortFlowItemsByTimestamp = (
   items: UnifiedFlowItem[],

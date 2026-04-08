@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { RecognitionAttempt } from '../../types'
-import { createRecognitionAttemptHelpers } from '../logParserRecognitionHelpers'
+import type { RecognitionAttempt } from '../../../types'
+import { createRecognitionAttemptHelpers } from '../recognitionHelpers'
 
 const createAttempt = (
   recoId: number,
@@ -15,7 +15,7 @@ const createAttempt = (
   status,
 })
 
-describe('logParserRecognitionHelpers', () => {
+describe('RecognitionHelpers', () => {
   it('dedupes attempts by reco_id and prefers terminal/latest attempt', () => {
     const orderMeta = new WeakMap<RecognitionAttempt, { startSeq: number; endSeq: number }>()
     const { dedupeRecognitionAttempts } = createRecognitionAttemptHelpers(orderMeta)

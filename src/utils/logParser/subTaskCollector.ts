@@ -4,8 +4,8 @@ import type {
   NodeInfo,
   RecognitionAttempt,
   UnifiedFlowItem,
-} from '../types'
-import { StringPool } from './stringPool'
+} from '../../types'
+import { StringPool } from '../stringPool'
 
 export const summarizeRuntimeStatus = <T extends { status: UnifiedFlowItem['status'] }>(
   items: readonly T[]

@@ -1,11 +1,11 @@
 import { markRaw } from 'vue'
-import type { UnifiedFlowItem, WaitFreezesDetail } from '../types'
+import type { UnifiedFlowItem, WaitFreezesDetail } from '../../types'
 import {
   parseNumericArray,
   parseRoi,
   parseWaitFreezesParam,
   readNumberField,
-} from './logEventDecoders'
+} from '../logEventDecoders'
 
 export type WaitFreezesRuntimeState = {
   wf_id: number

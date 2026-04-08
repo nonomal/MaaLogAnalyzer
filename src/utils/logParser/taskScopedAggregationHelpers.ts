@@ -1,5 +1,5 @@
-import type { NextListItem } from '../types'
-import type { WaitFreezesRuntimeState } from './logParserWaitFreezesHelpers'
+import type { NextListItem } from '../../types'
+import type { WaitFreezesRuntimeState } from './waitFreezesHelpers'
 
 export type TaskScopedNodeAggregation = {
   nextList: NextListItem[]

@@ -9,9 +9,9 @@ import {
   resolveTaskLifecyclePhase,
   resolveTaskTerminalStatus,
   resolveTerminalCompletionStatus,
-} from '../logParserEventMeta'
+} from '../eventMeta'
 
-describe('logParserEventMeta', () => {
+describe('EventMeta', () => {
   it('parses Tasker.Task message meta and resolves task lifecycle phase', () => {
     const meta = parseMaaMessageMeta('Tasker.Task.Succeeded')
     expect(meta).toEqual({

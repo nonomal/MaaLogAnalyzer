@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { TaskInfo, UnifiedFlowItem } from '../../types'
-import { LogParser } from '../logParser'
+import type { TaskInfo, UnifiedFlowItem } from '../../../types'
+import { LogParser } from '../../logParser'
 
 const formatTimestamp = (eventIndex: number): string => {
   const second = Math.floor(eventIndex / 1000)

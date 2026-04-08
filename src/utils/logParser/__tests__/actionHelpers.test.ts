@@ -5,9 +5,9 @@ import {
   resolveActionNodeEventId,
   resolveRuntimeStatusFromPhase,
   resolveSubTaskActionKey,
-} from '../logParserActionHelpers'
+} from '../actionHelpers'
 
-describe('logParserActionHelpers', () => {
+describe('ActionHelpers', () => {
   it('maps known phase to runtime status', () => {
     expect(resolveRuntimeStatusFromPhase('Starting')).toBe('running')
     expect(resolveRuntimeStatusFromPhase('Succeeded')).toBe('success')

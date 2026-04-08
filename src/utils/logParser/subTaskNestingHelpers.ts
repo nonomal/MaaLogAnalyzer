@@ -1,4 +1,4 @@
-import type { NestedActionGroup, NestedActionNode } from '../types'
+import type { NestedActionGroup, NestedActionNode } from '../../types'
 
 const pickParentActionNodeForSubTask = (
   parentGroup: NestedActionGroup,

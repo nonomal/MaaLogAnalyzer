@@ -4,7 +4,7 @@ import type {
   NodeInfo,
   RecognitionAttempt,
   UnifiedFlowItem,
-} from '../types'
+} from '../../types'
 
 const cloneUnifiedFlowItem = (
   item: UnifiedFlowItem,

@@ -1,16 +1,16 @@
 import { describe, expect, it } from 'vitest'
-import type { NestedActionGroup } from '../../types'
+import type { NestedActionGroup } from '../../../types'
 import {
   applySubTaskSnapshotStarting,
   applySubTaskSnapshotTerminal,
   getOrCreateSubTaskSnapshot,
   mergeSubTaskActionGroupWithSnapshot,
   type SubTaskSnapshot,
-} from '../logParserSubTaskSnapshotHelpers'
+} from '../subTaskSnapshotHelpers'
 
 const identity = (value: string) => value
 
-describe('logParserSubTaskSnapshotHelpers', () => {
+describe('SubTaskSnapshotHelpers', () => {
   it('creates and reuses sub task snapshots by task id', () => {
     const snapshots = new Map<number, SubTaskSnapshot>()
     const first = getOrCreateSubTaskSnapshot(snapshots, 42)

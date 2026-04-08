@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest'
-import { parseMaaMessageMeta } from '../logParserEventMeta'
+import { parseMaaMessageMeta } from '../eventMeta'
 import {
   handleTaskLifecycleMetaEvent,
   resolveEventTaskId,
   resolveTaskLifecycleEventDetails,
   type TaskLifecycleMetaEventContext,
-} from '../logParserTaskLifecycle'
+} from '../taskLifecycle'
 
-describe('logParserTaskLifecycle', () => {
+describe('TaskLifecycle', () => {
   it('parses lifecycle details and task id with numeric guard', () => {
     expect(resolveEventTaskId({ task_id: 123 })).toBe(123)
     expect(resolveEventTaskId({ task_id: '123' })).toBeUndefined()

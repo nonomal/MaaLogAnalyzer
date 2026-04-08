@@ -1,4 +1,4 @@
-import type { RecognitionAttempt } from '../types'
+import type { RecognitionAttempt } from '../../types'
 
 export type RecognitionOrderMeta = {
   startSeq: number

@@ -2,12 +2,12 @@ import {
   decodeTaskLifecycleEventDetails,
   readNumberField,
   type TaskLifecycleEventDetails,
-} from './logEventDecoders'
+} from '../logEventDecoders'
 import {
   resolveTaskLifecyclePhase,
   type MaaMessageMeta,
   type TaskTerminalPhase,
-} from './logParserEventMeta'
+} from './eventMeta'
 
 export const resolveEventTaskId = (details: Record<string, any> | undefined): number | undefined => {
   return readNumberField(details, 'task_id')

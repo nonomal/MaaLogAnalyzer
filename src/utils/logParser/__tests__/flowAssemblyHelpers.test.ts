@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import type { UnifiedFlowItem } from '../../types'
+import type { UnifiedFlowItem } from '../../../types'
 import {
   partitionActionScopeWaitFreezes,
   sortFlowItemsByTimestamp,
   splitAndAttachWaitFreezesFlowItems,
-} from '../logParserFlowAssemblyHelpers'
+} from '../flowAssemblyHelpers'
 
 const toTimestampMs = (value?: string): number => {
   if (!value) return Number.POSITIVE_INFINITY
@@ -29,7 +29,7 @@ const wf = (
   },
 })
 
-describe('logParserFlowAssemblyHelpers', () => {
+describe('FlowAssemblyHelpers', () => {
   it('sorts flow items by timestamp and keeps stable order for ties', () => {
     const items: UnifiedFlowItem[] = [
       wf(2, '2026-04-08 00:00:01.000'),

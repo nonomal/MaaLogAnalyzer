@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { createTaskStackTracker } from '../logParserTaskStackHelpers'
+import { createTaskStackTracker } from '../taskStackHelpers'
 
-describe('logParserTaskStackHelpers', () => {
+describe('TaskStackHelpers', () => {
   it('push keeps latest task on top and deduplicates existing task id', () => {
     const tracker = createTaskStackTracker(1)
     tracker.push(2)

@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { NestedActionGroup, RecognitionAttempt } from '../../types'
-import { createRecognitionAttemptHelpers } from '../logParserRecognitionHelpers'
-import { cloneNestedActionGroup } from '../logParserRecognitionScopeHelpers'
-import { nestSubTaskActionGroups } from '../logParserSubTaskNestingHelpers'
+import type { NestedActionGroup, RecognitionAttempt } from '../../../types'
+import { createRecognitionAttemptHelpers } from '../recognitionHelpers'
+import { cloneNestedActionGroup } from '../recognitionScopeHelpers'
+import { nestSubTaskActionGroups } from '../subTaskNestingHelpers'
 
 const toTimestampMs = (value?: string): number => {
   if (!value) return Number.POSITIVE_INFINITY
@@ -41,7 +41,7 @@ const createGroup = (
   }
 }
 
-describe('logParserSubTaskNestingHelpers', () => {
+describe('SubTaskNestingHelpers', () => {
   it('nests sub task into explicit parent task and prefers Custom action node', () => {
     const recognitionOrderMeta = new WeakMap<RecognitionAttempt, { startSeq: number; endSeq: number }>()
     const { cloneRecognitionAttempt } = createRecognitionAttemptHelpers(recognitionOrderMeta)

@@ -1,10 +1,10 @@
 import { markRaw } from 'vue'
-import type { NestedActionGroup } from '../types'
+import type { NestedActionGroup } from '../../types'
 import {
   resolveTaskTerminalStatus,
   type TaskTerminalPhase,
-} from './logParserEventMeta'
-import { resolveTaskLifecycleEventDetails } from './logParserTaskLifecycle'
+} from './eventMeta'
+import { resolveTaskLifecycleEventDetails } from './taskLifecycle'
 
 export type SubTaskStatus = 'running' | 'succeeded' | 'failed'
 

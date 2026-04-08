@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import type { NestedActionGroup, RecognitionAttempt } from '../../types'
-import { createRecognitionAttemptHelpers } from '../logParserRecognitionHelpers'
+import type { NestedActionGroup, RecognitionAttempt } from '../../../types'
+import { createRecognitionAttemptHelpers } from '../recognitionHelpers'
 import {
   attachActionLevelRecognitionAcrossScopes,
   resolveFallbackRecoDetails,
   splitRecognitionAttemptsByActionWindow,
-} from '../logParserRecognitionScopeHelpers'
+} from '../recognitionScopeHelpers'
 
 const createAttempt = (
   recoId: number,
@@ -28,7 +28,7 @@ const createAttempt = (
     : undefined,
 })
 
-describe('logParserRecognitionScopeHelpers', () => {
+describe('RecognitionScopeHelpers', () => {
   it('attaches action-level recognitions to nested actions first, then top-level by action window', () => {
     const recognitionOrderMeta = new WeakMap<RecognitionAttempt, { startSeq: number; endSeq: number }>()
     const helpers = createRecognitionAttemptHelpers(recognitionOrderMeta)

@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { parseEventLine } from '../logParserEventLine'
+import { parseEventLine } from '../eventLine'
 
 const identity = (value: string) => value
 
-describe('logParserEventLine', () => {
+describe('EventLine', () => {
   it('parses valid OnEventNotify line with normalized timestamp and dedup signature', () => {
     const line = '[2026-04-08 00:01:02.345][INF][Px1][Tx2][test] !!!OnEventNotify!!! [handle=1] [msg=Tasker.Task.Starting] [details={"task_id":1,"entry":"Main"}]'
     const parsed = parseEventLine(line, 10, {
