@@ -37,6 +37,11 @@ import {
   resolveRuntimeStatusFromPhase,
   resolveSubTaskActionKey,
 } from './logParser/actionHelpers'
+import {
+  handleCurrentTaskActionEvent as handleCurrentTaskActionEventHelper,
+  handleCurrentTaskActionNodeEvent as handleCurrentTaskActionNodeEventHelper,
+  handleSubTaskActionEvent as handleSubTaskActionEventHelper,
+} from './logParser/actionEventLifecycleHelpers'
 import { createRecognitionAttemptHelpers } from './logParser/recognitionHelpers'
 import { createRecognitionAttemptRuntime } from './logParser/recognitionAttemptRuntime'
 import { pushActionLevelRecognitionIfUnknown } from './logParser/recognitionCollectionHelpers'
@@ -58,6 +63,7 @@ import {
   buildWaitFreezesFlowItems,
   upsertWaitFreezesState,
 } from './logParser/waitFreezesHelpers'
+import { handleWaitFreezesNodeEvent as handleWaitFreezesNodeEventHelper } from './logParser/waitFreezesEventHelpers'
 import {
   getOrCreateTaskNodeAggregation,
   getTaskNextList,
@@ -1046,24 +1052,24 @@ export class LogParser {
       eventOrder: number,
       onUpdated?: (details: Record<string, any>) => void
     ): boolean => {
-      if (taskId != null) {
-        const waitFreezesStatus = resolveRuntimeStatusFromPhase(phase)
-        const aggregation = getOrCreateTaskNodeAggregation(taskScopedNodeAggregationByTaskId, taskId)
-        upsertWaitFreezesState({
-          runtimeStates: aggregation.waitFreezesRuntimeStates,
-          details,
-          timestamp,
-          status: waitFreezesStatus,
-          eventOrder,
-          activeNodeName: taskId === task.task_id ? getActivePipelineNode()?.name : undefined,
-          intern: (value) => this.stringPool.intern(value),
-          resolveEventFocus,
-          findWaitFreezesImages: (ts, actionName) => findWaitFreezesImages(this.waitFreezesImages, ts, actionName),
-        })
-        onUpdated?.(details)
-      }
-      refreshActivePipelineNodePreview(timestamp)
-      return true
+      return handleWaitFreezesNodeEventHelper({
+        taskId,
+        rootTaskId: task.task_id,
+        phase,
+        details,
+        timestamp,
+        eventOrder,
+        onUpdated,
+        taskScopedNodeAggregationByTaskId,
+        getOrCreateTaskNodeAggregation,
+        upsertWaitFreezesState,
+        resolveRuntimeStatusFromPhase,
+        getActivePipelineNodeName: () => getActivePipelineNode()?.name,
+        intern: (value) => this.stringPool.intern(value),
+        resolveEventFocus,
+        findWaitFreezesImages: (ts, actionName) => findWaitFreezesImages(this.waitFreezesImages, ts, actionName),
+        refresh: refreshActivePipelineNodePreview,
+      })
     }
     const handleRecognitionNodeEvent = (
       taskId: number | null,
@@ -1088,24 +1094,6 @@ export class LogParser {
         skipRefreshWhenTaskMissingOnFinish,
       })
     }
-    const createCurrentTaskActionRuntimeState = (
-      actionId: number,
-      details: Record<string, any>,
-      timestamp: string,
-      eventOrder: number,
-      status: 'running' | 'success' | 'failed'
-    ) => {
-      return {
-        action_id: actionId,
-        name: resolveActionEventName(details, {
-          intern: (name) => this.stringPool.intern(name),
-        }),
-        ts: timestamp,
-        end_ts: timestamp,
-        status,
-        order: eventOrder,
-      }
-    }
     const handleCurrentTaskActionEvent: ScopedActionEventHandler = (
       _taskId: number | null,
       phase: KnownMaaPhase,
@@ -1113,47 +1101,25 @@ export class LogParser {
       timestamp: string,
       eventOrder: number
     ): void => {
-      const actionId = readNumberField(details, 'action_id')
-      if (actionId == null) {
-        refreshActivePipelineNodePreview(timestamp)
-        return
-      }
-      const isStarting = phase === 'Starting'
-      if (isStarting) {
-        const startTimestamp = this.stringPool.intern(timestamp)
-        actionStartTimes.set(actionId, startTimestamp)
-        actionStartOrders.set(actionId, eventOrder)
-        actionRuntimeStates.set(
-          actionId,
-          createCurrentTaskActionRuntimeState(actionId, details, startTimestamp, eventOrder, 'running')
-        )
-      } else {
-        const endTimestamp = this.stringPool.intern(timestamp)
-        actionEndTimes.set(actionId, endTimestamp)
-        actionEndOrders.set(actionId, eventOrder)
-        const existing = actionRuntimeStates.get(actionId)
-        const terminalStatus = resolveRuntimeStatusFromPhase(phase)
-        if (existing) {
-          existing.status = terminalStatus
-          existing.end_ts = endTimestamp
-          existing.name = resolveActionEventName(details, {
-            fallbackName: existing.name,
-            intern: (name) => this.stringPool.intern(name),
-          })
-        } else {
-          actionRuntimeStates.set(
-            actionId,
-            createCurrentTaskActionRuntimeState(
-              actionId,
-              details,
-              endTimestamp,
-              eventOrder,
-              terminalStatus
-            )
-          )
-        }
-      }
-      refreshActivePipelineNodePreview(timestamp)
+      handleCurrentTaskActionEventHelper({
+        phase,
+        details,
+        timestamp,
+        eventOrder,
+        actionStartTimes,
+        actionEndTimes,
+        actionStartOrders,
+        actionEndOrders,
+        actionRuntimeStates,
+        readNumberField,
+        resolveRuntimeStatusFromPhase,
+        resolveActionName: (eventDetails, fallbackName) => resolveActionEventName(eventDetails, {
+          fallbackName,
+          intern: (name) => this.stringPool.intern(name),
+        }),
+        intern: (value) => this.stringPool.intern(value),
+        refresh: refreshActivePipelineNodePreview,
+      })
     }
     const handleSubTaskActionEvent: ScopedActionEventHandler = (
       subTaskId: number | null,
@@ -1162,39 +1128,28 @@ export class LogParser {
       timestamp: string,
       eventOrder: number
     ): void => {
-      if (subTaskId == null) {
-        refreshActivePipelineNodePreview(timestamp)
-        return
-      }
-      const actionId = readNumberField(details, 'action_id')
-      if (phase === 'Starting') {
-        if (actionId != null) {
-          const actionKey = resolveSubTaskActionKey(subTaskId, actionId)!
-          subTaskActionStartTimes.set(actionKey, this.stringPool.intern(timestamp))
-          subTaskActionStartOrders.set(actionKey, eventOrder)
-        }
-      } else {
-        const actionKey = resolveSubTaskActionKey(subTaskId, actionId)
-        const endTimestamp = this.stringPool.intern(timestamp)
-        const startTimestamp = actionKey
-          ? (subTaskActionStartTimes.get(actionKey) || endTimestamp)
-          : endTimestamp
-        if (actionKey) {
-          subTaskActionEndTimes.set(actionKey, endTimestamp)
-          subTaskActionEndOrders.set(actionKey, eventOrder)
-        }
-        subTasks.addAction(subTaskId, {
-          action_id: actionId,
-          name: resolveActionEventName(details, {
-            intern: (name) => this.stringPool.intern(name),
-          }),
-          ts: startTimestamp,
-          end_ts: endTimestamp,
-          status: resolveRuntimeStatusFromPhase(phase),
-          action_details: withTimestamps(details.action_details, startTimestamp, endTimestamp, endTimestamp)
-        })
-      }
-      refreshActivePipelineNodePreview(timestamp)
+      handleSubTaskActionEventHelper({
+        subTaskId,
+        phase,
+        details,
+        timestamp,
+        eventOrder,
+        subTaskActionStartTimes,
+        subTaskActionEndTimes,
+        subTaskActionStartOrders,
+        subTaskActionEndOrders,
+        resolveSubTaskActionKey,
+        readNumberField,
+        resolveRuntimeStatusFromPhase,
+        resolveActionName: (eventDetails, fallbackName) => resolveActionEventName(eventDetails, {
+          fallbackName,
+          intern: (name) => this.stringPool.intern(name),
+        }),
+        withTimestamps,
+        addSubTaskAction: (id, action) => subTasks.addAction(id, action),
+        intern: (value) => this.stringPool.intern(value),
+        refresh: refreshActivePipelineNodePreview,
+      })
     }
     const handleCurrentTaskActionNodeEvent: ScopedActionNodeEventHandler = (
       _taskId: number | null,
@@ -1202,15 +1157,15 @@ export class LogParser {
       details: Record<string, any>,
       timestamp: string
     ): void => {
-      const actionId = resolveActionNodeEventId(details)
-      if (actionId != null) {
-        if (phase === 'Starting') {
-          actionNodeStartTimes.set(actionId, this.stringPool.intern(timestamp))
-        } else {
-          actionNodeStartTimes.delete(actionId)
-        }
-      }
-      refreshActivePipelineNodePreview(timestamp)
+      handleCurrentTaskActionNodeEventHelper({
+        phase,
+        details,
+        timestamp,
+        actionNodeStartTimes,
+        resolveActionNodeEventId,
+        intern: (value) => this.stringPool.intern(value),
+        refresh: refreshActivePipelineNodePreview,
+      })
     }
     const syncActiveNodeFocusAfterWaitFreezes = (details: Record<string, any>) => {
       const activeNode = getActivePipelineNode()
