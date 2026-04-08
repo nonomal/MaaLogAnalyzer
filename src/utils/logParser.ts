@@ -42,6 +42,8 @@ import {
   resolveSubTaskActionKey,
 } from './logParser/actionHelpers'
 import { createRecognitionAttemptHelpers } from './logParser/recognitionHelpers'
+import { createRecognitionAttemptRuntime } from './logParser/recognitionAttemptRuntime'
+import { pushActionLevelRecognitionIfUnknown } from './logParser/recognitionCollectionHelpers'
 import {
   attachActionLevelRecognitionAcrossScopes,
   cloneNestedActionGroup,
@@ -80,7 +82,6 @@ import {
 } from './logParser/imageLookupHelpers'
 import { buildTasksFromEvents } from './logParser/taskBuilder'
 import {
-  normalizeRecoId,
   parseRecognitionAnchorName as parseRecognitionAnchorNameHelper,
   resolveEventFocus,
   resolveRecognitionNodeRecoId,
@@ -88,6 +89,11 @@ import {
   toNextListItems as toNextListItemsHelper,
   withActionTimestamps as withActionTimestampsHelper,
 } from './logParser/nodeEventValueHelpers'
+import {
+  dedupeNestedActionNodes,
+  getLatestActionRuntimeState,
+  type ActionRuntimeState,
+} from './logParser/actionRuntimeHelpers'
 import { toTimestampMs } from './timestamp'
 
 export interface ParseProgress {
@@ -441,14 +447,7 @@ export class LogParser {
     const actionStartOrders = new Map<number, number>()
     const actionEndOrders = new Map<number, number>()
     const actionNodeStartTimes = new Map<number, string>()
-    const actionRuntimeStates = new Map<number, {
-      action_id: number
-      name: string
-      ts: string
-      end_ts?: string
-      status: 'running' | 'success' | 'failed'
-      order: number
-    }>()
+    const actionRuntimeStates = new Map<number, ActionRuntimeState>()
     const activeSubTaskActionNodes = new Map<string, NestedActionNode>()
     const subTaskPipelineNodeStartTimes = new Map<string, string>()
     const subTaskRecognitionNodeStartTimes = new Map<string, string>()
@@ -483,98 +482,21 @@ export class LogParser {
     ) => withActionTimestampsHelper(actionDetails, this.stringPool, startTimestamp, endTimestamp, fallbackEndTimestamp)
     const toListItems = (list: unknown[]) => toNextListItemsHelper(list, this.stringPool)
     const parseAnchorName = (details: Record<string, any>) => parseRecognitionAnchorNameHelper(details, this.stringPool)
-    const removeFromActiveRecognitionStack = (taskId: number, recoId: number) => {
-      for (let i = activeRecognitionStack.length - 1; i >= 0; i--) {
-        const frame = activeRecognitionStack[i]
-        if (frame.taskId === taskId && frame.recoId === recoId) {
-          activeRecognitionStack.splice(i, 1)
-          return
-        }
-      }
-    }
-    const startRecognitionAttempt = (
-      taskId: number,
-      details: Record<string, any>,
-      timestamp: string,
-      eventOrder: number
-    ): RecognitionAttempt | undefined => {
-      const recoId = normalizeRecoId(details.reco_id)
-      if (recoId == null) return undefined
-      const key = scopedKey(taskId, recoId)
-      if (finishedRecognitionKeys.has(key)) return undefined
-      const existing = activeRecognitionAttempts.get(key)
-      if (existing) {
-        const parsedAnchorName = parseAnchorName(details)
-        if (parsedAnchorName && !existing.anchor_name) {
-          existing.anchor_name = parsedAnchorName
-        }
-        return existing
-      }
-
-      const startTimestamp = this.stringPool.intern(timestamp)
-      const parsedAnchorName = parseAnchorName(details)
-      const attempt: RecognitionAttempt = {
-        reco_id: recoId,
-        name: this.stringPool.intern(details.name || ''),
-        ts: startTimestamp,
-        end_ts: startTimestamp,
-        status: 'running',
-        ...(parsedAnchorName ? { anchor_name: parsedAnchorName } : {}),
-      }
-      recognitionOrderMeta.set(attempt, { startSeq: eventOrder, endSeq: eventOrder })
-      activeRecognitionAttempts.set(key, attempt)
-      activeRecognitionStack.push({ taskId, recoId })
-      return attempt
-    }
-    const finishRecognitionAttempt = (
-      taskId: number,
-      details: Record<string, any>,
-      timestamp: string,
-      status: 'success' | 'failed',
-      eventOrder: number
-    ): RecognitionAttempt | undefined => {
-      const recoId = normalizeRecoId(details.reco_id)
-      if (recoId == null) return undefined
-      const key = scopedKey(taskId, recoId)
-      if (finishedRecognitionKeys.has(key)) return undefined
-
-      const endTimestamp = this.stringPool.intern(timestamp)
-      const existing = activeRecognitionAttempts.get(key)
-      const attempt: RecognitionAttempt = existing ?? {
-        reco_id: recoId,
-        name: this.stringPool.intern(details.name || ''),
-        ts: endTimestamp,
-        end_ts: endTimestamp,
-        status,
-      }
-
-      attempt.status = status
-      attempt.name = attempt.name || this.stringPool.intern(details.name || '')
-      attempt.ts = attempt.ts || endTimestamp
-      attempt.end_ts = endTimestamp
-      if (!attempt.anchor_name) {
-        const parsedAnchorName = parseAnchorName(details)
-        if (parsedAnchorName) {
-          attempt.anchor_name = parsedAnchorName
-        }
-      }
-      if (details.reco_details) {
-        attempt.reco_details = markRaw(details.reco_details)
-      }
-      attempt.error_image = this.findRecognitionImage(timestamp, details.name || '')
-      attempt.vision_image = this.findVisionImage(timestamp, details.name || '', recoId)
-
-      const existingMeta = recognitionOrderMeta.get(attempt)
-      recognitionOrderMeta.set(attempt, {
-        startSeq: existingMeta?.startSeq ?? eventOrder,
-        endSeq: eventOrder
-      })
-
-      activeRecognitionAttempts.delete(key)
-      removeFromActiveRecognitionStack(taskId, recoId)
-      finishedRecognitionKeys.add(key)
-      return attempt
-    }
+    const {
+      startRecognitionAttempt,
+      finishRecognitionAttempt,
+      findActiveParentRecognition,
+    } = createRecognitionAttemptRuntime({
+      stringPool: this.stringPool,
+      activeRecognitionAttempts,
+      activeRecognitionStack,
+      finishedRecognitionKeys,
+      recognitionOrderMeta,
+      scopedKey,
+      parseAnchorName,
+      findRecognitionImage: (timestamp, nodeName) => this.findRecognitionImage(timestamp, nodeName),
+      findVisionImage: (timestamp, nodeName, recoId) => this.findVisionImage(timestamp, nodeName, recoId),
+    })
     const ensureRecognitionNodeAttempt = (
       taskId: number,
       recoId: number,
@@ -804,24 +726,8 @@ export class LogParser {
       }
       dispatchStandaloneRecognition(taskId, recoNodeAttempt)
     }
-    const hasRecognitionByRecoId = (items: RecognitionAttempt[], recoId: number): boolean => {
-      return items.some(item => item.reco_id === recoId)
-    }
-    const isKnownRecognitionRecoId = (recoId: number): boolean => {
-      return hasRecognitionByRecoId(currentTaskRecognitions, recoId) || hasRecognitionByRecoId(actionLevelRecognitionNodes, recoId)
-    }
     const pushActionLevelRecognition = (attempt: RecognitionAttempt) => {
-      if (isKnownRecognitionRecoId(attempt.reco_id)) return
-      actionLevelRecognitionNodes.push(attempt)
-    }
-    const findActiveParentRecognition = (excludeTaskId?: number): RecognitionAttempt | undefined => {
-      for (let i = activeRecognitionStack.length - 1; i >= 0; i--) {
-        const frame = activeRecognitionStack[i]
-        if (excludeTaskId != null && frame.taskId === excludeTaskId) continue
-        const attempt = activeRecognitionAttempts.get(scopedKey(frame.taskId, frame.recoId))
-        if (attempt) return attempt
-      }
-      return undefined
+      pushActionLevelRecognitionIfUnknown(currentTaskRecognitions, actionLevelRecognitionNodes, attempt)
     }
     const resolveFinalNestedActionGroups = (
       taskId: number,
@@ -847,33 +753,7 @@ export class LogParser {
       })
       return fallbackActionGroup ? [fallbackActionGroup] : []
     }
-    const getLatestActionRuntimeState = () => {
-      let latest: {
-        action_id: number
-        name: string
-        ts: string
-        end_ts?: string
-        status: 'running' | 'success' | 'failed'
-        order: number
-      } | null = null
-      for (const state of actionRuntimeStates.values()) {
-        if (!latest || state.order > latest.order) {
-          latest = state
-        }
-      }
-      return latest
-    }
-    const dedupeNestedActionNodes = (items: NestedActionNode[]) => {
-      const seen = new Set<string>()
-      const result: NestedActionNode[] = []
-      for (const item of items) {
-        const key = `${item.node_id}|${item.name}|${item.ts}|${item.status}`
-        if (seen.has(key)) continue
-        seen.add(key)
-        result.push(item)
-      }
-      return result
-    }
+    const latestActionRuntimeState = () => getLatestActionRuntimeState(actionRuntimeStates)
     const createActionNodeGroup = (params: {
       taskId: number
       ts: string
@@ -1135,7 +1015,7 @@ export class LogParser {
       })
       const runtimeNestedActionGroups: NestedActionGroup[] = runtimeActionGroup ? [runtimeActionGroup] : []
 
-      const runtimeActionState = getLatestActionRuntimeState()
+      const runtimeActionState = latestActionRuntimeState()
       const resolvedActionId =
         runtimeActionState?.action_id ??
         activeNode.action_details?.action_id ??
