@@ -151,6 +151,7 @@ pnpm build:vscode
 
 ## 更多文档
 
+- 解析器架构说明：`src/utils/logParser/README.md`
 - 新手教程协议文档：`docs/TUTORIAL_PROTOCOL.md`
 - VSCode 插件说明：`src-vscode/README.md`
 

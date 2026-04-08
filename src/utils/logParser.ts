@@ -1,3 +1,12 @@
+/**
+ * Parser entry orchestration file.
+ *
+ * Architecture guide: ./logParser/README.md
+ * Helper modules: ./logParser/
+ *
+ * Keep this file focused on high-level flow wiring; move detailed domain logic
+ * into helper modules under ./logParser/ whenever possible.
+ */
 import { markRaw } from 'vue'
 import type {
   EventNotification,
