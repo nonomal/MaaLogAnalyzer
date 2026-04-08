@@ -96,6 +96,7 @@ import {
   consumeMatchedSubTaskAction,
 } from './logParser/subTaskRuntimeCleanupHelpers'
 import { finalizeSubTaskPipelineNodeEvent as finalizeSubTaskPipelineNodeEventHelper } from './logParser/subTaskPipelineFinalizeHelpers'
+import { finalizeTaskPipelineNodeEvent as finalizeTaskPipelineNodeEventHelper } from './logParser/taskPipelineFinalizeHelpers'
 import { resetCurrentNodeAggregationState } from './logParser/nodeAggregationResetHelpers'
 import {
   startCurrentPipelineNodeEvent as startCurrentPipelineNodeEventHelper,
@@ -864,122 +865,47 @@ export class LogParser {
       phase: TaskTerminalPhase,
       timestamp: string
     ) => {
-      const nodeId = readNumberField(details, 'node_id')
-      if (!nodeId) return
-
-      const pipelineStatus = resolveTerminalCompletionStatus(phase)
-      settleCurrentNodeRuntimeStates(pipelineStatus, timestamp)
-
-      const nodeName = details.name || ''
-      const startTimestamp = pipelineNodeStartTimes.get(nodeId) || this.stringPool.intern(timestamp)
-      const endTimestamp = this.stringPool.intern(timestamp)
-      const actionId = resolveActionDetailsActionId(details)
-      const actionStartTimestamp = actionId != null ? actionStartTimes.get(actionId) : undefined
-      const actionEndTimestamp = actionId != null ? actionEndTimes.get(actionId) : undefined
-      const actionStartOrder = actionId != null ? actionStartOrders.get(actionId) : undefined
-      const actionEndOrder = actionId != null ? actionEndOrders.get(actionId) : undefined
-      const currentTaskRecognitionAttempts = dedupeRecognitionAttempts(currentTaskRecognitions)
-      const { topLevel: scopedTopLevelRecognitions, actionLevel: scopedActionRecognitions } =
-        splitRecognitionAttemptsByActionWindow(
-          currentTaskRecognitionAttempts,
-          recognitionOrderMeta,
-          actionStartOrder,
-          actionEndOrder
-        )
-      const subTaskActionGroups: NestedActionGroup[] =
-        subTasks.consumeAsNestedActionGroups(this.stringPool).map((group) => {
-          const snapshot = subTaskSnapshots.get(group.task_id)
-          return snapshot
-            ? mergeSubTaskActionGroupWithSnapshot(
-              group,
-              snapshot,
-              (value) => this.stringPool.intern(value)
-            )
-            : group
-        })
-      const subTaskOrphanRecognitionAttempts = subTasks.consumeOrphanRecognitions()
-      const subTaskOrphanRecognitionNodes = subTasks.consumeOrphanRecognitionNodes()
-      const pendingActionLevelRecognitions = dedupeRecognitionAttempts([
-        ...actionLevelRecognitionNodes,
-        ...scopedActionRecognitions,
-        ...subTaskOrphanRecognitionAttempts,
-        ...subTaskOrphanRecognitionNodes
-      ])
-      const scopedAttachResult = attachActionLevelRecognitionAcrossScopes({
-        topLevelAttempts: scopedTopLevelRecognitions,
-        nestedActionGroups: subTaskActionGroups,
-        actionLevelNodes: pendingActionLevelRecognitions,
-        actionStartOrder,
+      finalizeTaskPipelineNodeEventHelper({
+        taskId,
+        details,
+        phase,
+        timestamp,
+        readNumberField,
+        resolveTerminalCompletionStatus,
+        settleCurrentNodeRuntimeStates,
+        pipelineNodeStartTimes,
+        resolveActionDetailsActionId,
+        actionStartTimes,
+        actionEndTimes,
+        actionStartOrders,
+        actionEndOrders,
+        currentTaskRecognitions,
+        actionLevelRecognitionNodes,
+        dedupeRecognitionAttempts,
+        splitRecognitionAttemptsByActionWindow,
         recognitionOrderMeta,
+        subTasks,
+        consumeSubTaskActionGroups: () => subTasks.consumeAsNestedActionGroups(this.stringPool),
+        subTaskSnapshots,
+        mergeSubTaskActionGroupWithSnapshot,
+        attachActionLevelRecognitionAcrossScopes,
         cloneRecognitionAttempt,
         sortByParseOrderThenRecoId,
         pickBestAttemptIndex,
         attachNodeToAttempt,
-        dedupeRecognitionAttempts,
-      })
-      const nestedRecognitionInAction = scopedAttachResult.remaining
-      const resolvedNestedActionGroups = resolveFinalNestedActionGroups(
-        taskId,
-        startTimestamp,
-        endTimestamp,
-        scopedAttachResult.nestedActionGroups
-      )
-      const fallbackRecoDetails = resolveFallbackRecoDetails(details, scopedAttachResult.topLevelAttempts)
-      const mergedActionDetails = withTimestamps(details.action_details, actionStartTimestamp, actionEndTimestamp, endTimestamp)
-      const resolvedNodeName = this.stringPool.intern(nodeName)
-      const composedFlow = composeFinalPipelineNodeFlow({
-        taskScopedNodeAggregationByTaskId,
-        taskId,
-        topLevelRecognitions: scopedAttachResult.topLevelAttempts,
-        actionLevelRecognitions: nestedRecognitionInAction,
-        nestedActionGroups: resolvedNestedActionGroups,
-        actionDetails: mergedActionDetails,
-        fallbackStatus: pipelineStatus,
-        eventTimestamp: timestamp,
-        details,
-        nodeName: resolvedNodeName,
-        actionId,
-        nodeId,
-        fallbackTimestamp: endTimestamp,
+        resolveFinalNestedActionGroups,
+        resolveFallbackRecoDetails,
+        withTimestamps,
+        composeFinalPipelineNodeFlow,
         findErrorImageByNames: (eventTs, names) => this.findErrorImageByNames(eventTs, names),
+        getTaskNextList,
+        taskScopedNodeAggregationByTaskId,
+        pipelineNodesById,
+        resolveEventFocus,
+        upsertCurrentTaskPipelineNode,
+        cleanupCurrentTaskPipelineRuntimeState,
+        intern: (value) => this.stringPool.intern(value),
       })
-      const nodeFlow = composedFlow.nodeFlow
-      const actionFlow = composedFlow.actionFlow
-
-      const resolvedNextList = getTaskNextList(taskScopedNodeAggregationByTaskId, taskId)
-      let nodeStatus: NodeInfo['status'] = pipelineStatus
-      if (nodeStatus === 'success' && actionFlow.some(item => item.type === 'task' && item.status === 'failed')) {
-        nodeStatus = 'failed'
-      }
-
-      const resolvedRecoDetails = fallbackRecoDetails ? markRaw(fallbackRecoDetails) : undefined
-      const existingNode = pipelineNodesById.get(nodeId)
-      const resolvedFocus = resolveEventFocus(details, existingNode?.focus)
-      const resolvedNodeDetails = details.node_details ? markRaw(details.node_details) : undefined
-      const resolvedNodeFlow = nodeFlow.length > 0 ? nodeFlow : undefined
-      const resolvedErrorImage = this.findErrorImageByNames(timestamp, [
-        details.action_details?.name,
-        details.node_details?.name,
-        details.reco_details?.name,
-        nodeName,
-      ])
-      const resolvedNode: NodeInfo = {
-        node_id: nodeId,
-        task_id: taskId,
-        name: resolvedNodeName,
-        ts: startTimestamp,
-        end_ts: endTimestamp,
-        status: nodeStatus,
-        reco_details: resolvedRecoDetails,
-        action_details: mergedActionDetails,
-        focus: resolvedFocus,
-        next_list: resolvedNextList,
-        node_flow: resolvedNodeFlow,
-        node_details: resolvedNodeDetails,
-        error_image: resolvedErrorImage,
-      }
-      upsertCurrentTaskPipelineNode(resolvedNode)
-      cleanupCurrentTaskPipelineRuntimeState(nodeId, actionId)
     }
     const handleNextListNodeEvent = (
       taskId: number | null,
