@@ -126,7 +126,6 @@ import { settleCurrentNodeRuntimeStates as settleCurrentNodeRuntimeStatesHelper 
 import {
   type ScopedActionEventHandler,
   type ScopedActionNodeEventHandler,
-  type ScopedPipelineNodeStartingHandler,
 } from './logParser/scopedNodeDispatchHelpers'
 import { createNodeDispatchConfigs } from './logParser/nodeDispatchConfigFactory'
 import {
@@ -1034,42 +1033,6 @@ export class LogParser {
     const addSubTaskRecognitionNode = (taskId: number, recognition: RecognitionAttempt) => {
       subTasks.addRecognitionNode(taskId, recognition)
     }
-    const startCurrentPipelineNodeEvent: ScopedPipelineNodeStartingHandler = (
-      _taskId: number | null,
-      details: Record<string, any>,
-      timestamp: string
-    ) => {
-      const startedNodeId = startCurrentPipelineNodeEventHelper({
-        details,
-        timestamp,
-        rootTaskId: task.task_id,
-        nodes,
-        pipelineNodesById,
-        resetCurrentNodeAggregation,
-        withTimestamps,
-        intern: (value) => this.stringPool.intern(value),
-      })
-      if (startedNodeId == null) return
-      pipelineNodeStartTimes.set(startedNodeId, this.stringPool.intern(timestamp))
-      activePipelineNodeId = startedNodeId
-      refreshActivePipelineNodePreview(timestamp)
-    }
-    const startSubTaskPipelineNodeEvent: ScopedPipelineNodeStartingHandler = (
-      subTaskId: number | null,
-      details: Record<string, any>,
-      timestamp: string
-    ) => {
-      startSubTaskPipelineNodeEventHelper({
-        subTaskId,
-        details,
-        timestamp,
-        scopedKey,
-        taskScopedNodeAggregationByTaskId,
-        subTaskPipelineNodeStartTimes,
-        intern: (value) => this.stringPool.intern(value),
-      })
-      refreshActivePipelineNodePreview(timestamp)
-    }
     const {
       currentTaskNodeDispatchConfig,
       subTaskNodeDispatchConfig,
@@ -1086,8 +1049,34 @@ export class LogParser {
       },
       handleSubTaskActionEvent,
       handleSubTaskActionNodeLifecycleEvent,
-      startCurrentPipelineNodeEvent,
-      startSubTaskPipelineNodeEvent,
+      startCurrentPipelineNodeEvent: (_taskId, details, timestamp) => {
+        const startedNodeId = startCurrentPipelineNodeEventHelper({
+          details,
+          timestamp,
+          rootTaskId: task.task_id,
+          nodes,
+          pipelineNodesById,
+          resetCurrentNodeAggregation,
+          withTimestamps,
+          intern: (value) => this.stringPool.intern(value),
+        })
+        if (startedNodeId == null) return
+        pipelineNodeStartTimes.set(startedNodeId, this.stringPool.intern(timestamp))
+        activePipelineNodeId = startedNodeId
+        refreshActivePipelineNodePreview(timestamp)
+      },
+      startSubTaskPipelineNodeEvent: (subTaskId, details, timestamp) => {
+        startSubTaskPipelineNodeEventHelper({
+          subTaskId,
+          details,
+          timestamp,
+          scopedKey,
+          taskScopedNodeAggregationByTaskId,
+          subTaskPipelineNodeStartTimes,
+          intern: (value) => this.stringPool.intern(value),
+        })
+        refreshActivePipelineNodePreview(timestamp)
+      },
       finalizeTaskPipelineNodeEvent,
       finalizeSubTaskPipelineNodeEvent,
       pushActionLevelRecognition,
