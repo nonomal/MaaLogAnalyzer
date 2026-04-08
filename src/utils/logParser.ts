@@ -28,7 +28,6 @@ import {
 } from './logParser/taskLifecycle'
 import {
   SubTaskCollector,
-  type SubTaskActionSnapshot,
 } from './logParser/subTaskCollector'
 import { parseEventLine as parseMaaEventLine, type ParsedEventLine } from './logParser/eventLine'
 import {
@@ -60,7 +59,6 @@ import {
   upsertWaitFreezesState,
 } from './logParser/waitFreezesHelpers'
 import {
-  clearTaskNodeAggregation,
   getOrCreateTaskNodeAggregation,
   getTaskNextList,
   resetTaskNodeAggregation,
@@ -91,6 +89,10 @@ import {
   finishSubTaskActionNode,
   startSubTaskActionNode,
 } from './logParser/subTaskActionNodeHelpers'
+import {
+  clearSubTaskRuntimeStateAfterPipelineFinalize,
+  consumeMatchedSubTaskAction,
+} from './logParser/subTaskRuntimeCleanupHelpers'
 import { settleCurrentNodeRuntimeStates as settleCurrentNodeRuntimeStatesHelper } from './logParser/runtimeSettlementHelpers'
 import {
   createScopedPipelineNodeFinalizeHandler,
@@ -806,58 +808,6 @@ export class LogParser {
 
     // 子任务事件收集器
     const subTasks = new SubTaskCollector()
-    const consumeMatchedSubTaskAction = (subTaskId: number, actionId: number | null | undefined) => {
-      const taskActions = subTasks.consumeActions(subTaskId)
-      if (taskActions.length === 0) return undefined
-
-      let matchedTaskAction: SubTaskActionSnapshot | undefined
-      let matchedTaskActionIndex = -1
-      if (actionId != null) {
-        for (let i = taskActions.length - 1; i >= 0; i--) {
-          if (taskActions[i]?.action_id === actionId) {
-            matchedTaskAction = taskActions[i]
-            matchedTaskActionIndex = i
-            break
-          }
-        }
-      }
-      if (!matchedTaskAction) {
-        matchedTaskActionIndex = taskActions.length - 1
-        matchedTaskAction = taskActions[matchedTaskActionIndex]
-      }
-      for (let i = 0; i < taskActions.length; i++) {
-        if (i === matchedTaskActionIndex) continue
-        subTasks.addAction(subTaskId, taskActions[i])
-      }
-      return matchedTaskAction
-    }
-    const clearSubTaskRuntimeStateAfterPipelineFinalize = (
-      subTaskId: number,
-      nodeId: number | null | undefined,
-      actionKey: string | null
-    ) => {
-      if (nodeId != null) {
-        subTaskPipelineNodeStartTimes.delete(scopedKey(subTaskId, nodeId))
-      }
-      if (actionKey) {
-        subTaskActionStartTimes.delete(actionKey)
-        subTaskActionEndTimes.delete(actionKey)
-        subTaskActionStartOrders.delete(actionKey)
-        subTaskActionEndOrders.delete(actionKey)
-      }
-      const scopedPrefix = `${subTaskId}:`
-      for (const key of activeSubTaskActionNodes.keys()) {
-        if (key.startsWith(scopedPrefix)) {
-          activeSubTaskActionNodes.delete(key)
-        }
-      }
-      for (const key of activeRecognitionNodeAttempts.keys()) {
-        if (key.startsWith(scopedPrefix)) {
-          activeRecognitionNodeAttempts.delete(key)
-        }
-      }
-      clearTaskNodeAggregation(taskScopedNodeAggregationByTaskId, subTaskId)
-    }
     const finalizeSubTaskPipelineNodeEvent = (
       subTaskId: number,
       details: Record<string, any>,
@@ -875,7 +825,7 @@ export class LogParser {
       const actionKey = resolveSubTaskActionKey(subTaskId, actionId)
       const actionStartTimestamp = actionKey ? subTaskActionStartTimes.get(actionKey) : undefined
       const actionEndTimestamp = actionKey ? subTaskActionEndTimes.get(actionKey) : undefined
-      const matchedTaskAction = consumeMatchedSubTaskAction(subTaskId, actionId)
+      const matchedTaskAction = consumeMatchedSubTaskAction(subTasks, subTaskId, actionId)
       const mergedActionDetails = details.action_details || matchedTaskAction?.action_details
       const mergedActionStartTimestamp = actionStartTimestamp || matchedTaskAction?.ts
       const mergedActionEndTimestamp = actionEndTimestamp || matchedTaskAction?.end_ts
@@ -930,7 +880,20 @@ export class LogParser {
         node_flow: resolvedNodeFlow,
         recognitions: attachedNodeRecognitions
       })
-      clearSubTaskRuntimeStateAfterPipelineFinalize(subTaskId, nodeId, actionKey)
+      clearSubTaskRuntimeStateAfterPipelineFinalize({
+        subTaskId,
+        nodeId,
+        actionKey,
+        scopedKey,
+        subTaskPipelineNodeStartTimes,
+        subTaskActionStartTimes,
+        subTaskActionEndTimes,
+        subTaskActionStartOrders,
+        subTaskActionEndOrders,
+        activeSubTaskActionNodes,
+        activeRecognitionNodeAttempts,
+        taskScopedNodeAggregationByTaskId,
+      })
       refreshActivePipelineNodePreview(timestamp)
     }
     const getActivePipelineNode = (): NodeInfo | null => {
