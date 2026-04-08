@@ -92,6 +92,7 @@ import {
   finishSubTaskActionNode,
   startSubTaskActionNode,
 } from './logParser/subTaskActionNodeHelpers'
+import { handleSubTaskActionNodeLifecycleEvent as handleSubTaskActionNodeLifecycleEventHelper } from './logParser/subTaskActionNodeLifecycleHandler'
 import {
   clearSubTaskRuntimeStateAfterPipelineFinalize,
   consumeMatchedSubTaskAction,
@@ -1057,37 +1058,41 @@ export class LogParser {
       details: Record<string, any>,
       timestamp: string
     ): void => {
-      if (subTaskId == null) {
-        refreshActivePipelineNodePreview(timestamp)
-        return
-      }
-      if (phase === 'Starting') {
-        startSubTaskActionNode({
-          subTaskId,
-          details,
-          timestamp,
-          nestedActionNodes,
-          activeSubTaskActionNodes,
-          subTaskActionNodeStartTimes,
-          withTimestamps,
-          intern: (value) => this.stringPool.intern(value),
-        })
-      } else {
-        finishSubTaskActionNode({
-          subTaskId,
-          details,
-          timestamp,
-          status: resolveTerminalCompletionStatus(phase),
-          nestedActionNodes,
-          activeSubTaskActionNodes,
-          subTaskActionNodeStartTimes,
-          subTaskActionStartTimes,
-          subTaskActionEndTimes,
-          withTimestamps,
-          intern: (value) => this.stringPool.intern(value),
-        })
-      }
-      refreshActivePipelineNodePreview(timestamp)
+      handleSubTaskActionNodeLifecycleEventHelper({
+        subTaskId,
+        phase,
+        details,
+        timestamp,
+        startSubTaskActionNode: (id, eventDetails, eventTimestamp) => {
+          startSubTaskActionNode({
+            subTaskId: id,
+            details: eventDetails,
+            timestamp: eventTimestamp,
+            nestedActionNodes,
+            activeSubTaskActionNodes,
+            subTaskActionNodeStartTimes,
+            withTimestamps,
+            intern: (value) => this.stringPool.intern(value),
+          })
+        },
+        finishSubTaskActionNode: (id, eventDetails, eventTimestamp, status) => {
+          finishSubTaskActionNode({
+            subTaskId: id,
+            details: eventDetails,
+            timestamp: eventTimestamp,
+            status,
+            nestedActionNodes,
+            activeSubTaskActionNodes,
+            subTaskActionNodeStartTimes,
+            subTaskActionStartTimes,
+            subTaskActionEndTimes,
+            withTimestamps,
+            intern: (value) => this.stringPool.intern(value),
+          })
+        },
+        resolveTerminalCompletionStatus: (nodePhase) => resolveTerminalCompletionStatus(nodePhase as TaskTerminalPhase),
+        refresh: refreshActivePipelineNodePreview,
+      })
     }
     const dispatchActionLevelRecognition = (_taskId: number, recognition: RecognitionAttempt) => {
       pushActionLevelRecognition(recognition)
