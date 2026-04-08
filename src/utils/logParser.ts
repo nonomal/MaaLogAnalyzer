@@ -93,6 +93,14 @@ import {
 } from './logParser/subTaskActionNodeHelpers'
 import { settleCurrentNodeRuntimeStates as settleCurrentNodeRuntimeStatesHelper } from './logParser/runtimeSettlementHelpers'
 import {
+  createScopedPipelineNodeFinalizeHandler,
+  createScopedSimpleNodeEventHandler,
+  type ScopedActionEventHandler,
+  type ScopedActionNodeEventHandler,
+  type ScopedNodeDispatchConfig,
+  type ScopedPipelineNodeStartingHandler,
+} from './logParser/scopedNodeDispatchHelpers'
+import {
   composeFinalPipelineNodeFlow,
   composePipelineNodeFlow,
   createActionRootFlowItem,
@@ -395,48 +403,6 @@ export class LogParser {
     if (taskStartIndex === -1) return []
 
     const taskEvents = this.events.slice(taskStartIndex, taskEndIndex + 1)
-
-    type ScopedSimpleNodeEventHandler = (
-      taskId: number | null,
-      messageMeta: MaaMessageMeta,
-      phase: KnownMaaPhase,
-      details: Record<string, any>,
-      timestamp: string,
-      eventOrder: number
-    ) => boolean
-    type ScopedActionEventHandler = (
-      taskId: number | null,
-      phase: KnownMaaPhase,
-      details: Record<string, any>,
-      timestamp: string,
-      eventOrder: number
-    ) => void
-    type ScopedActionNodeEventHandler = (
-      taskId: number | null,
-      phase: KnownMaaPhase,
-      details: Record<string, any>,
-      timestamp: string
-    ) => void
-    type ScopedPipelineNodeStartingHandler = (
-      taskId: number | null,
-      details: Record<string, any>,
-      timestamp: string
-    ) => void
-    type ScopedPipelineNodeFinalizeHandler = (
-      taskId: number | null,
-      details: Record<string, any>,
-      phase: TaskTerminalPhase,
-      timestamp: string
-    ) => void
-    type ScopedNodeDispatchConfig = {
-      handleSimpleNodeEvent: ScopedSimpleNodeEventHandler
-      dispatchPendingRecognition: (taskId: number, recognition: RecognitionAttempt) => void
-      dispatchStandaloneRecognition: (taskId: number, recognition: RecognitionAttempt) => void
-      handlePipelineNodeStarting: ScopedPipelineNodeStartingHandler
-      handlePipelineNodeFinalize: ScopedPipelineNodeFinalizeHandler
-      excludeTaskIdFromParentRecognitionLookup?: boolean
-      dispatchDetachedRecognition?: (recognition: RecognitionAttempt) => void
-    }
 
     // 当前节点的累积状态
     const taskScopedNodeAggregationByTaskId = new Map<number, TaskScopedNodeAggregation>()
@@ -1412,59 +1378,6 @@ export class LogParser {
           return false
       }
     }
-    const resolveScopedTaskId = (fixedTaskId: number | undefined, taskId: number | null): number | null => {
-      return fixedTaskId ?? taskId
-    }
-    const createScopedSimpleNodeEventHandler = (params: {
-      fixedTaskId?: number
-      handleActionEvent: ScopedActionEventHandler
-      handleActionNodeEvent: ScopedActionNodeEventHandler
-      onWaitFreezesUpdated?: (details: Record<string, any>) => void
-      onRecognitionAttempt?: (taskId: number, attempt: RecognitionAttempt) => void
-      skipRecognitionRefreshWhenTaskMissingOnFinish?: boolean
-    }): ScopedSimpleNodeEventHandler => {
-      return (
-        taskId: number | null,
-        messageMeta: MaaMessageMeta,
-        phase: KnownMaaPhase,
-        details: Record<string, any>,
-        timestamp: string,
-        eventOrder: number
-      ): boolean => {
-        const scopedTaskId = resolveScopedTaskId(params.fixedTaskId, taskId)
-        return handleSimpleNodeEvent(
-          scopedTaskId,
-          messageMeta,
-          phase,
-          details,
-          timestamp,
-          eventOrder,
-          params.handleActionEvent,
-          params.handleActionNodeEvent,
-          params.onWaitFreezesUpdated,
-          params.onRecognitionAttempt,
-          params.skipRecognitionRefreshWhenTaskMissingOnFinish
-        )
-      }
-    }
-    const createScopedPipelineNodeFinalizeHandler = (params: {
-      fixedTaskId?: number
-    }): ScopedPipelineNodeFinalizeHandler => {
-      return (
-        taskId: number | null,
-        details: Record<string, any>,
-        phase: TaskTerminalPhase,
-        timestamp: string
-      ): void => {
-        const scopedTaskId = resolveScopedTaskId(params.fixedTaskId, taskId)
-        if (scopedTaskId == null) return
-        if (scopedTaskId === task.task_id) {
-          finalizeTaskPipelineNodeEvent(task.task_id, details, phase, timestamp)
-        } else {
-          finalizeSubTaskPipelineNodeEvent(scopedTaskId, details, phase, timestamp)
-        }
-      }
-    }
     const handleRecognitionNodeLifecycleEvent = (
       taskId: number | null,
       phase: KnownMaaPhase,
@@ -1649,6 +1562,7 @@ export class LogParser {
     const currentTaskNodeDispatchConfig: ScopedNodeDispatchConfig = {
       handleSimpleNodeEvent: createScopedSimpleNodeEventHandler({
         fixedTaskId: task.task_id,
+        handleSimpleNodeEvent,
         handleActionEvent: handleCurrentTaskActionEvent,
         handleActionNodeEvent: handleCurrentTaskActionNodeEvent,
         onWaitFreezesUpdated: syncActiveNodeFocusAfterWaitFreezes,
@@ -1659,11 +1573,15 @@ export class LogParser {
       handlePipelineNodeStarting: startCurrentPipelineNodeEvent,
       handlePipelineNodeFinalize: createScopedPipelineNodeFinalizeHandler({
         fixedTaskId: task.task_id,
+        rootTaskId: task.task_id,
+        finalizeTaskPipelineNodeEvent,
+        finalizeSubTaskPipelineNodeEvent,
       }),
       dispatchDetachedRecognition: pushActionLevelRecognition,
     }
     const subTaskNodeDispatchConfig: ScopedNodeDispatchConfig = {
       handleSimpleNodeEvent: createScopedSimpleNodeEventHandler({
+        handleSimpleNodeEvent,
         handleActionEvent: handleSubTaskActionEvent,
         handleActionNodeEvent: handleSubTaskActionNodeLifecycleEvent,
         onRecognitionAttempt: addSubTaskRecognition,
@@ -1672,7 +1590,11 @@ export class LogParser {
       dispatchPendingRecognition: addSubTaskRecognition,
       dispatchStandaloneRecognition: addSubTaskRecognitionNode,
       handlePipelineNodeStarting: startSubTaskPipelineNodeEvent,
-      handlePipelineNodeFinalize: createScopedPipelineNodeFinalizeHandler({}),
+      handlePipelineNodeFinalize: createScopedPipelineNodeFinalizeHandler({
+        rootTaskId: task.task_id,
+        finalizeTaskPipelineNodeEvent,
+        finalizeSubTaskPipelineNodeEvent,
+      }),
       excludeTaskIdFromParentRecognitionLookup: true,
     }
     const taskLifecycleMetaContext: TaskLifecycleMetaEventContext = {
