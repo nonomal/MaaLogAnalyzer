@@ -15,7 +15,6 @@ import {
   parseMaaMessageMeta,
   resolveTaskLifecyclePhase,
   resolveTerminalCompletionStatus,
-  toKnownMaaPhase,
   type KnownMaaPhase,
   type MaaMessageMeta,
   type TaskTerminalPhase,
@@ -111,6 +110,10 @@ import {
   handleRecognitionStartEvent as handleRecognitionStartEventHelper,
   pushRecognitionAttemptIfMissing,
 } from './logParser/recognitionEventHandlers'
+import {
+  handleRecognitionNodeLifecycleEvent as handleRecognitionNodeLifecycleEventHelper,
+  handleScopedNodeEvent as handleScopedNodeEventHelper,
+} from './logParser/nodeDispatchLifecycleHelpers'
 import {
   applyTaskNextList as applyTaskNextListHelper,
   handleNextListNodeEvent as handleNextListNodeEventHelper,
@@ -1214,32 +1217,22 @@ export class LogParser {
       excludeParentTaskId?: number,
       dispatchDetachedRecognition?: (recognition: RecognitionAttempt) => void
     ): void => {
-      if (phase === 'Starting') {
-        if (taskId == null) return
-        startRecognitionNodeEvent(
-          taskId,
-          details,
-          timestamp,
-          eventOrder,
-          excludeParentTaskId,
-          dispatchDetachedRecognition
-        )
-        refreshActivePipelineNodePreview(timestamp)
-        return
-      }
-      if (taskId == null) return
-      finalizeRecognitionNodeEvent(
+      handleRecognitionNodeLifecycleEventHelper({
         taskId,
+        phase,
         details,
         timestamp,
-        resolveTerminalCompletionStatus(phase),
         eventOrder,
-        subTasks.consumeRecognitions(taskId),
         dispatchPendingRecognition,
         dispatchStandaloneRecognition,
-        excludeParentTaskId
-      )
-      refreshActivePipelineNodePreview(timestamp)
+        excludeParentTaskId,
+        dispatchDetachedRecognition,
+        startRecognitionNodeEvent,
+        finalizeRecognitionNodeEvent,
+        resolveTerminalCompletionStatus,
+        consumeRecognitions: (id) => subTasks.consumeRecognitions(id),
+        refresh: refreshActivePipelineNodePreview,
+      })
     }
     const handleSubTaskActionNodeLifecycleEvent: ScopedActionNodeEventHandler = (
       subTaskId: number | null,
@@ -1335,38 +1328,25 @@ export class LogParser {
       eventOrder: number,
       config: ScopedNodeDispatchConfig
     ) => {
-      const phase = toKnownMaaPhase(messageMeta.phase)
-      if (!phase) return
-      const excludeParentTaskId = config.excludeTaskIdFromParentRecognitionLookup
-        ? (taskId ?? undefined)
-        : undefined
-      if (config.handleSimpleNodeEvent(taskId, messageMeta, phase, details, timestamp, eventOrder)) {
-        return
-      }
-      switch (messageMeta.nodeKind) {
-        case 'RecognitionNode':
-          handleRecognitionNodeLifecycleEvent(
-            taskId,
-            phase,
-            details,
-            timestamp,
-            eventOrder,
-            config.dispatchPendingRecognition,
-            config.dispatchStandaloneRecognition,
-            excludeParentTaskId,
-            config.dispatchDetachedRecognition
-          )
-          return
-        case 'PipelineNode':
-          if (phase === 'Starting') {
-            config.handlePipelineNodeStarting(taskId, details, timestamp)
-          } else {
-            config.handlePipelineNodeFinalize(taskId, details, phase, timestamp)
-          }
-          return
-        default:
-          return
-      }
+      handleScopedNodeEventHelper({
+        taskId,
+        messageMeta,
+        details,
+        timestamp,
+        eventOrder,
+        config,
+        handleRecognitionNodeLifecycleEvent: (args) => handleRecognitionNodeLifecycleEvent(
+          args.taskId,
+          args.phase,
+          args.details,
+          args.timestamp,
+          args.eventOrder,
+          args.dispatchPendingRecognition,
+          args.dispatchStandaloneRecognition,
+          args.excludeParentTaskId,
+          args.dispatchDetachedRecognition,
+        ),
+      })
     }
     const currentTaskNodeDispatchConfig: ScopedNodeDispatchConfig = {
       handleSimpleNodeEvent: createScopedSimpleNodeEventHandler({
