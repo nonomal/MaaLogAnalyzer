@@ -142,4 +142,66 @@ describe('useMergedRecognitionList', () => {
       { status: 'failed', attemptIndex: 2 },
     ])
   })
+
+  it('splits failed retries into rounds when no recognition succeeds', () => {
+    const nodeRef = ref(makeNode({
+      status: 'failed',
+      next_list: [
+        { name: 'A', anchor: false, jump_back: false },
+        { name: 'B', anchor: false, jump_back: false },
+      ],
+      node_flow: [
+        makeRecognitionFlowItem(0, 'A', 'failed', '2026-04-06 00:00:00.100'),
+        makeRecognitionFlowItem(1, 'B', 'failed', '2026-04-06 00:00:00.200'),
+        makeRecognitionFlowItem(2, 'A', 'failed', '2026-04-06 00:00:01.100'),
+        makeRecognitionFlowItem(3, 'B', 'failed', '2026-04-06 00:00:01.200'),
+      ],
+    }))
+    const showNotRecognizedNodes = ref(true)
+
+    const { visibleRecognitionList } = useMergedRecognitionList({
+      node: nodeRef,
+      showNotRecognizedNodes,
+    })
+
+    expect(visibleRecognitionList.value).toMatchObject([
+      { isRoundSeparator: true, roundIndex: 1 },
+      { name: 'A', status: 'failed', attemptIndex: 0 },
+      { name: 'B', status: 'failed', attemptIndex: 1 },
+      { isRoundSeparator: true, roundIndex: 2 },
+      { name: 'A', status: 'failed', attemptIndex: 2 },
+      { name: 'B', status: 'failed', attemptIndex: 3 },
+    ])
+  })
+
+  it('splits rounds when next_list is non-empty but attempt names do not match next names', () => {
+    const nodeRef = ref(makeNode({
+      status: 'failed',
+      next_list: [
+        { name: 'EntryA', anchor: false, jump_back: false },
+        { name: 'EntryB', anchor: false, jump_back: false },
+      ],
+      node_flow: [
+        makeRecognitionFlowItem(0, 'RecoA', 'failed', '2026-04-06 00:00:00.100'),
+        makeRecognitionFlowItem(1, 'RecoB', 'failed', '2026-04-06 00:00:00.200'),
+        makeRecognitionFlowItem(2, 'RecoA', 'failed', '2026-04-06 00:00:01.100'),
+        makeRecognitionFlowItem(3, 'RecoB', 'failed', '2026-04-06 00:00:01.200'),
+      ],
+    }))
+    const showNotRecognizedNodes = ref(false)
+
+    const { visibleRecognitionList } = useMergedRecognitionList({
+      node: nodeRef,
+      showNotRecognizedNodes,
+    })
+
+    expect(visibleRecognitionList.value).toMatchObject([
+      { isRoundSeparator: true, roundIndex: 1 },
+      { name: 'RecoA', status: 'failed', attemptIndex: 0 },
+      { name: 'RecoB', status: 'failed', attemptIndex: 1 },
+      { isRoundSeparator: true, roundIndex: 2 },
+      { name: 'RecoA', status: 'failed', attemptIndex: 2 },
+      { name: 'RecoB', status: 'failed', attemptIndex: 3 },
+    ])
+  })
 })

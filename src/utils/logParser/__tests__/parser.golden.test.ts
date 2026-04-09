@@ -405,7 +405,13 @@ describe('LogParser golden snapshots', () => {
                 },
               ],
               "name": "RootNode",
-              "next_list": [],
+              "next_list": [
+                {
+                  "anchor": false,
+                  "jump_back": false,
+                  "name": "KeepThenClear",
+                },
+              ],
               "node_id": 8101,
               "status": "success",
             },

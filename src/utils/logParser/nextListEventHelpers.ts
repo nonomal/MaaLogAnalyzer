@@ -32,13 +32,11 @@ export const handleNextListNodeEvent = (params: {
   refreshActivePipelineNodePreview: (timestamp: string) => void
 }): boolean => {
   if (params.taskId != null) {
-    if (params.phase === 'Failed') {
+    const nextListPayload = Array.isArray(params.details.list) ? params.details.list : null
+    if (params.phase === 'Failed' && nextListPayload == null) {
       params.applyTaskNextList(params.taskId, [])
     } else {
-      params.applyTaskNextList(
-        params.taskId,
-        Array.isArray(params.details.list) ? params.details.list : []
-      )
+      params.applyTaskNextList(params.taskId, nextListPayload ?? [])
     }
   }
   params.refreshActivePipelineNodePreview(params.timestamp)

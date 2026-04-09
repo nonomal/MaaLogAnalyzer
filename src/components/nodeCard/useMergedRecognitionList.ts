@@ -90,6 +90,25 @@ const splitAttemptsIntoRounds = (
   return rounds
 }
 
+const normalizeName = (value: string | undefined): string => {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+const registerRoundSplitName = (
+  name: string,
+  displayName: string,
+  nextListNames: Set<string>,
+  nextIndexMap: Map<string, number>,
+  nextDisplayMap: Map<string, string>
+) => {
+  if (!name) return
+  if (!nextIndexMap.has(name)) {
+    nextIndexMap.set(name, nextIndexMap.size)
+    nextDisplayMap.set(name, displayName)
+  }
+  nextListNames.add(name)
+}
+
 const appendRoundItems = (
   result: MergedRecognitionItem[],
   roundAttempts: RoundAttempt[],
@@ -196,24 +215,58 @@ const buildMergedRecognitionItems = (node: NodeInfo): MergedRecognitionItem[] =>
     }
   })
 
-  // Keep the original attempt sequence when next_list is empty.
-  if (nextEntries.length === 0) {
+  const primaryNextListNames = new Set<string>()
+  const primaryNextIndexMap = new Map<string, number>()
+  const primaryNextDisplayMap = new Map<string, string>()
+  nextEntries.forEach((nextEntry: NextEntry) => {
+    registerRoundSplitName(
+      nextEntry.name,
+      nextEntry.displayName,
+      primaryNextListNames,
+      primaryNextIndexMap,
+      primaryNextDisplayMap
+    )
+  })
+
+  const matchedByPrimaryNextListCount = attempts.reduce((count, attempt) => {
+    const matchName = resolveRecognitionNextListName(attempt, primaryNextListNames)
+    return primaryNextIndexMap.has(matchName) ? count + 1 : count
+  }, 0)
+
+  let splitNextListNames = primaryNextListNames
+  let splitNextIndexMap = primaryNextIndexMap
+  let splitNextDisplayMap = primaryNextDisplayMap
+
+  // Fallback only when next_list exists but primary names cannot match any attempts.
+  if (primaryNextIndexMap.size > 0 && matchedByPrimaryNextListCount === 0) {
+    splitNextListNames = new Set(primaryNextListNames)
+    splitNextIndexMap = new Map(primaryNextIndexMap)
+    splitNextDisplayMap = new Map(primaryNextDisplayMap)
+
+    for (const attempt of attempts) {
+      const anchorName = normalizeName(attempt.anchor_name)
+      const attemptName = normalizeName(attempt.name)
+      registerRoundSplitName(anchorName, anchorName, splitNextListNames, splitNextIndexMap, splitNextDisplayMap)
+      registerRoundSplitName(attemptName, attemptName, splitNextListNames, splitNextIndexMap, splitNextDisplayMap)
+    }
+  }
+
+  if (splitNextIndexMap.size === 0) {
     appendAttemptsInOriginalOrder(result, attempts)
     return result
   }
 
-  const nextListNames = new Set<string>(nextList.map((item: NextListItem) => item.name))
-  const nextIndexMap = new Map<string, number>()
-  const nextDisplayMap = new Map<string, string>()
-  nextEntries.forEach((nextEntry: NextEntry, idx: number) => {
-    if (!nextIndexMap.has(nextEntry.name)) {
-      nextIndexMap.set(nextEntry.name, idx)
-      nextDisplayMap.set(nextEntry.name, nextEntry.displayName)
-    }
-  })
-
-  const rounds = splitAttemptsIntoRounds(attempts, nextListNames, nextIndexMap)
+  const rounds = splitAttemptsIntoRounds(
+    attempts,
+    splitNextListNames,
+    splitNextIndexMap
+  )
   const useRoundSeparator = rounds.length > 1
+
+  if (!useRoundSeparator && nextEntries.length === 0) {
+    appendAttemptsInOriginalOrder(result, attempts)
+    return result
+  }
 
   for (let roundIdx = 0; roundIdx < rounds.length; roundIdx += 1) {
     appendRoundItems(
@@ -222,8 +275,8 @@ const buildMergedRecognitionItems = (node: NodeInfo): MergedRecognitionItem[] =>
       roundIdx,
       useRoundSeparator,
       nextEntries,
-      nextIndexMap,
-      nextDisplayMap
+      splitNextIndexMap,
+      splitNextDisplayMap
     )
   }
 

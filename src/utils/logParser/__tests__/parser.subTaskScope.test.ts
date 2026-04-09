@@ -211,7 +211,7 @@ describe('LogParser sub task scoped node aggregation', () => {
     expect(mainTask?.nodes[0].next_list).toEqual([])
   })
 
-  it('clears next_list when Node.NextList.Failed is emitted', async () => {
+  it('keeps next_list when Node.NextList.Failed carries list payload', async () => {
     const lines = [
       makeEventLine(161, 'Tasker.Task.Starting', { task_id: 41, entry: 'MainTask', hash: 'h-main-5', uuid: 'u-main-5' }),
       makeEventLine(162, 'Node.PipelineNode.Starting', { task_id: 41, node_id: 4101, name: 'MainNode' }),
@@ -233,6 +233,34 @@ describe('LogParser sub task scoped node aggregation', () => {
     await parser.parseFile(lines.join('\n'))
     const tasks = parser.getTasksSnapshot()
     const mainTask = tasks.find(item => item.task_id === 41)
+    expect(mainTask).toBeTruthy()
+    expect(mainTask?.nodes.length).toBe(1)
+    expect(mainTask?.nodes[0].next_list).toEqual([
+      { name: 'CandidateA', anchor: true, jump_back: false },
+    ])
+  })
+
+  it('clears next_list when Node.NextList.Failed has no list payload', async () => {
+    const lines = [
+      makeEventLine(167, 'Tasker.Task.Starting', { task_id: 42, entry: 'MainTask', hash: 'h-main-5b', uuid: 'u-main-5b' }),
+      makeEventLine(168, 'Node.PipelineNode.Starting', { task_id: 42, node_id: 4201, name: 'MainNode' }),
+      makeEventLine(169, 'Node.NextList.Succeeded', {
+        task_id: 42,
+        name: 'MainNode',
+        list: [{ name: 'CandidateA', anchor: true, jump_back: false }],
+      }),
+      makeEventLine(170, 'Node.NextList.Failed', {
+        task_id: 42,
+        name: 'MainNode',
+      }),
+      makeEventLine(171, 'Node.PipelineNode.Succeeded', { task_id: 42, node_id: 4201, name: 'MainNode' }),
+      makeEventLine(172, 'Tasker.Task.Succeeded', { task_id: 42, entry: 'MainTask', hash: 'h-main-5b', uuid: 'u-main-5b' }),
+    ]
+
+    const parser = new LogParser()
+    await parser.parseFile(lines.join('\n'))
+    const tasks = parser.getTasksSnapshot()
+    const mainTask = tasks.find(item => item.task_id === 42)
     expect(mainTask).toBeTruthy()
     expect(mainTask?.nodes.length).toBe(1)
     expect(mainTask?.nodes[0].next_list).toEqual([])
