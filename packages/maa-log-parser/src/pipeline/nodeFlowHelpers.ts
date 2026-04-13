@@ -77,6 +77,103 @@ export const createFinalActionRootFactory = (params: {
   }
 }
 
+const isRecognitionFlowItem = (item: UnifiedFlowItem): boolean => {
+  return item.type === 'recognition' || item.type === 'recognition_node'
+}
+
+const collectRecognitionFlowItems = (
+  items: UnifiedFlowItem[],
+  target: UnifiedFlowItem[]
+): void => {
+  for (const item of items) {
+    if (isRecognitionFlowItem(item)) {
+      target.push(item)
+    }
+    if (item.children && item.children.length > 0) {
+      collectRecognitionFlowItems(item.children, target)
+    }
+  }
+}
+
+const resolveFlowItemWindow = (
+  item: UnifiedFlowItem
+): { startMs: number; endMs: number } => {
+  const startMs = toTimestampMs(item.ts || item.end_ts)
+  const endMs = item.status === 'running'
+    ? Number.POSITIVE_INFINITY
+    : toTimestampMs(item.end_ts || item.ts)
+  return { startMs, endMs }
+}
+
+const pickLatestUnfinishedRecognitionParent = (
+  recognitionItems: UnifiedFlowItem[],
+  taskItem: UnifiedFlowItem
+): UnifiedFlowItem | null => {
+  const taskStartMs = toTimestampMs(taskItem.ts || taskItem.end_ts)
+  if (!Number.isFinite(taskStartMs)) return null
+
+  let bestItem: UnifiedFlowItem | null = null
+  let bestStartMs = Number.NEGATIVE_INFINITY
+
+  for (const recognition of recognitionItems) {
+    const { startMs, endMs } = resolveFlowItemWindow(recognition)
+    const inRange =
+      Number.isFinite(startMs) &&
+      taskStartMs >= startMs &&
+      (!Number.isFinite(endMs) || taskStartMs <= endMs + 1)
+    if (!inRange) continue
+    if (startMs > bestStartMs) {
+      bestStartMs = startMs
+      bestItem = recognition
+    }
+  }
+
+  return bestItem
+}
+
+const reassignCustomActionTasksByActiveScope = (
+  recognitionFlow: UnifiedFlowItem[],
+  actionFlow: UnifiedFlowItem[]
+): { recognitionFlow: UnifiedFlowItem[]; actionFlow: UnifiedFlowItem[] } => {
+  if (actionFlow.length === 0) {
+    return { recognitionFlow, actionFlow }
+  }
+
+  const recognitionCandidates: UnifiedFlowItem[] = []
+  collectRecognitionFlowItems(recognitionFlow, recognitionCandidates)
+  collectRecognitionFlowItems(actionFlow, recognitionCandidates)
+  if (recognitionCandidates.length === 0) {
+    return { recognitionFlow, actionFlow }
+  }
+
+  const retainedActionFlow: UnifiedFlowItem[] = []
+  for (const item of actionFlow) {
+    if (item.type !== 'task') {
+      retainedActionFlow.push(item)
+      continue
+    }
+
+    const recognitionParent = pickLatestUnfinishedRecognitionParent(recognitionCandidates, item)
+    if (!recognitionParent) {
+      retainedActionFlow.push(item)
+      continue
+    }
+
+    recognitionParent.children = sortFlowItemsByTimestamp(
+      [
+        ...(recognitionParent.children ?? []),
+        item,
+      ],
+      toTimestampMs
+    )
+  }
+
+  return {
+    recognitionFlow: sortFlowItemsByTimestamp(recognitionFlow, toTimestampMs),
+    actionFlow: sortFlowItemsByTimestamp(retainedActionFlow, toTimestampMs),
+  }
+}
+
 export const composePipelineNodeFlow = (params: {
   topLevelRecognitions: RecognitionAttempt[]
   actionLevelRecognitions: RecognitionAttempt[]
@@ -100,14 +197,27 @@ export const composePipelineNodeFlow = (params: {
   const actionScopeWaitFreezesAll = [...actionScopeWaitFreezes, ...unassignedContextWaitFreezes]
 
   const actionRootBase = params.createActionRoot(actionFlow)
+  const shouldReassignByScope = actionRootBase != null && (
+    actionRootBase.action_details == null ||
+    actionRootBase.action_details.action === 'Custom'
+  )
+  const {
+    recognitionFlow: reassignedRecognitionFlow,
+    actionFlow: reassignedActionFlow,
+  } = shouldReassignByScope
+    ? reassignCustomActionTasksByActiveScope(scopedRecognitionFlow, scopedActionFlow)
+    : {
+        recognitionFlow: scopedRecognitionFlow,
+        actionFlow: scopedActionFlow,
+      }
   const actionRoot: UnifiedFlowItem | null = actionRootBase
     ? {
         ...actionRootBase,
-        children: scopedActionFlow.length > 0
+        children: reassignedActionFlow.length > 0
           ? sortFlowItemsByTimestamp(
             [
               ...(actionRootBase.children ?? []),
-              ...scopedActionFlow,
+              ...reassignedActionFlow,
             ],
             toTimestampMs
           )
@@ -133,7 +243,7 @@ export const composePipelineNodeFlow = (params: {
   }
 
   const nodeFlow = [
-    ...scopedRecognitionFlow,
+    ...reassignedRecognitionFlow,
     ...waitFreezesPlacement.before,
     ...(!actionRoot ? waitFreezesPlacement.inside : []),
     ...(actionRoot ? [actionRoot] : []),
