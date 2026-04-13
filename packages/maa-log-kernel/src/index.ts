@@ -1,4 +1,4 @@
-import packageJson from '../package.json'
+import packageJson from '../package.json' with { type: 'json' }
 import {
   MLA_KERNEL_SCHEMA_VERSION,
   type KernelStatistics,
@@ -14,9 +14,9 @@ export const KERNEL_PACKAGE_VERSION = packageJson.version
 export const DEFAULT_KERNEL_PARSER_VERSION =
   `${KERNEL_PACKAGE_NAME}/${KERNEL_PACKAGE_VERSION}`
 
-export interface BuildKernelOutputInput {
+export interface BuildKernelOutputInput<TTask extends TaskInfo = TaskInfo> {
   content: string
-  tasks: TaskInfo[]
+  tasks: TTask[]
   events: EventNotification[]
   stats: KernelStatistics
   parserVersion?: string
@@ -41,9 +41,9 @@ export const buildKernelWarnings = (
   return warnings
 }
 
-export const buildKernelOutput = (
-  input: BuildKernelOutputInput,
-): KernelOutput => {
+export const buildKernelOutput = <TTask extends TaskInfo = TaskInfo>(
+  input: BuildKernelOutputInput<TTask>,
+): KernelOutput<TTask> => {
   return {
     meta: {
       schemaVersion: MLA_KERNEL_SCHEMA_VERSION,

@@ -1,4 +1,4 @@
-import type { KernelStatistics, TaskInfo } from '@windsland52/maa-log-kernel'
+import type { KernelStatistics } from '@windsland52/maa-log-kernel'
 import type {
   RuntimeExecutionAdapter,
   RuntimeParseInput,
@@ -8,9 +8,9 @@ import { LogParser } from '@windsland52/maa-log-parser'
 import { NodeStatisticsAnalyzer } from '@windsland52/maa-log-parser/node-statistics'
 import type { TaskInfo as ParserTaskInfo } from '@windsland52/maa-log-parser/types'
 
-export const createMlaRuntimeAdapter = (): RuntimeExecutionAdapter => {
+export const createMlaRuntimeAdapter = (): RuntimeExecutionAdapter<ParserTaskInfo> => {
   return {
-    async parse(input: RuntimeParseInput): Promise<RuntimeParseResult> {
+    async parse(input: RuntimeParseInput): Promise<RuntimeParseResult<ParserTaskInfo>> {
       const parser = new LogParser()
       parser.setErrorImages(input.errorImages ?? new Map())
       parser.setVisionImages(input.visionImages ?? new Map())
@@ -27,11 +27,10 @@ export const createMlaRuntimeAdapter = (): RuntimeExecutionAdapter => {
         events: parser.getEventsSnapshot(),
       }
     },
-    buildStatistics(tasks: TaskInfo[]): KernelStatistics {
-      const sourceTasks = tasks as ParserTaskInfo[]
+    buildStatistics(tasks: ParserTaskInfo[]): KernelStatistics {
       return {
-        nodes: NodeStatisticsAnalyzer.analyze(sourceTasks),
-        recognitionActions: NodeStatisticsAnalyzer.analyzeRecognitionAction(sourceTasks),
+        nodes: NodeStatisticsAnalyzer.analyze(tasks),
+        recognitionActions: NodeStatisticsAnalyzer.analyzeRecognitionAction(tasks),
       }
     },
   }

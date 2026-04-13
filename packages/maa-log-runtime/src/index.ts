@@ -26,24 +26,24 @@ export interface RuntimeParseInput {
   parseOptions?: ParseFileOptions
 }
 
-export interface RuntimeParseResult {
-  tasks: TaskInfo[]
+export interface RuntimeParseResult<TTask extends TaskInfo = TaskInfo> {
+  tasks: TTask[]
   events: EventNotification[]
 }
 
-export interface RuntimeExecutionAdapter {
-  parse: (input: RuntimeParseInput) => Promise<RuntimeParseResult>
-  buildStatistics: (tasks: TaskInfo[]) => KernelStatistics
+export interface RuntimeExecutionAdapter<TTask extends TaskInfo = TaskInfo> {
+  parse: (input: RuntimeParseInput) => Promise<RuntimeParseResult<TTask>>
+  buildStatistics: (tasks: TTask[]) => KernelStatistics
 }
 
 export const DEFAULT_CORE_PARSE_OPTIONS: ParseFileOptions = {
   yieldControl: null,
 }
 
-export const analyzeLogContentWith = async (
-  adapter: RuntimeExecutionAdapter,
+export const analyzeLogContentWith = async <TTask extends TaskInfo = TaskInfo>(
+  adapter: RuntimeExecutionAdapter<TTask>,
   input: AnalyzeLogContentInput,
-): Promise<KernelOutput> => {
+): Promise<KernelOutput<TTask>> => {
   const parseResult = await adapter.parse({
     content: input.content,
     errorImages: input.errorImages,
@@ -53,7 +53,7 @@ export const analyzeLogContentWith = async (
   })
   const stats = adapter.buildStatistics(parseResult.tasks)
 
-  return buildKernelOutput({
+  return buildKernelOutput<TTask>({
     content: input.content,
     tasks: parseResult.tasks,
     events: parseResult.events,

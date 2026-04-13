@@ -14,9 +14,9 @@ export interface KernelStatistics {
   recognitionActions: RecognitionActionStatistics[]
 }
 
-export interface KernelOutput {
+export interface KernelOutput<TTask extends TaskInfo = TaskInfo> {
   meta: KernelOutputMeta
-  tasks: TaskInfo[]
+  tasks: TTask[]
   events: EventNotification[]
   stats: KernelStatistics
   warnings: string[]
