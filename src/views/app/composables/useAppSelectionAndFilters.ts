@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 import type { TaskInfo, NodeInfo, UnifiedFlowItem } from '../../../types'
-import type { LogParser } from '../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import { useTaskSelection } from './useTaskSelection'
 import { useAppUiState } from './useAppUiState'
 import { useTaskFilters } from './useTaskFilters'

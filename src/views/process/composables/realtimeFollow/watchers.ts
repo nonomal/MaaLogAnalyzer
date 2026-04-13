@@ -2,7 +2,7 @@ import { computed, nextTick, watch, type Ref } from 'vue'
 import type { TaskInfo } from '../../../../types'
 import { buildFollowTasksFingerprint } from './fingerprint'
 import type { RealtimeNodeItem } from './types'
-import { findTaskIndex, isSameTask } from '../../../../utils/taskIdentity'
+import { findTaskIndex, isSameTask } from '@windsland52/maa-log-tools/task-identity'
 
 interface SetupRealtimeFollowWatchersOptions {
   tasks: Ref<TaskInfo[]>

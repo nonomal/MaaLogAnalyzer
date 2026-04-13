@@ -10,7 +10,7 @@ import {
   formatNodeNavMatchHint,
   formatNodeNavMatchPreview,
 } from './nodeNavSearch/format'
-import { buildNodeExecutionTimeline } from '../../../utils/nodeExecutionTimeline'
+import { buildNodeExecutionTimeline } from '@windsland52/maa-log-tools/node-execution-timeline'
 import type {
   NodeNavStatus,
   NodeNavViewItem,

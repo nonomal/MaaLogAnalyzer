@@ -1,7 +1,7 @@
 import { computed, ref, type Ref } from 'vue'
 import type { UploadFileInfo } from 'naive-ui'
 import type { TaskInfo } from '../../../types'
-import { LogParser } from '../../../utils/logParser'
+import { LogParser } from '@windsland52/maa-log-parser'
 import { getErrorMessage } from '../../../utils/errorHandler'
 import { isTauri } from '../../../utils/platform'
 

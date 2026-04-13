@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 import type { NodeInfo, TaskInfo } from '../../../types'
-import { isSameTask } from '../../../utils/taskIdentity'
+import { isSameTask } from '@windsland52/maa-log-tools/task-identity'
 
 interface UseParsedTaskStateOptions {
   tasks: Ref<TaskInfo[]>

@@ -1,0 +1,21 @@
+{
+  "name": "@windsland52/maa-log-adapter",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc -p ./tsconfig.json",
+    "build": "pnpm run typecheck"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "dependencies": {
+    "@windsland52/maa-log-kernel": "workspace:*",
+    "@windsland52/maa-log-parser": "workspace:*",
+    "@windsland52/maa-log-runtime": "workspace:*"
+  }
+}

@@ -8,7 +8,7 @@ import { useDetailBridgeRecognition } from './useDetailBridgeRecognition'
 import { useDetailNodeDefinition } from './useDetailNodeDefinition'
 import { useDetailUiHelpers } from './useDetailUiHelpers'
 import type { BridgeOpenCropRequest } from './types'
-import { buildNodeFlowItems, buildNodeRecognitionAttempts } from '../../../utils/nodeFlow'
+import { buildNodeFlowItems, buildNodeRecognitionAttempts } from '@windsland52/maa-log-parser/node-flow'
 
 interface DetailViewControllerProps {
   selectedNode: NodeInfo | null

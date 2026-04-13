@@ -1,7 +1,7 @@
 import { computed, ref, watch, type Ref } from 'vue'
 import type { TaskInfo } from '../../../types'
-import type { LogParser } from '../../../utils/logParser'
-import { isSameTask } from '../../../utils/taskIdentity'
+import type { LogParser } from '@windsland52/maa-log-parser'
+import { isSameTask } from '@windsland52/maa-log-tools/task-identity'
 
 interface UseTaskFiltersOptions {
   tasks: Ref<TaskInfo[]>

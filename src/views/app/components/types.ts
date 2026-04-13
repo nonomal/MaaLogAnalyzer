@@ -1,4 +1,4 @@
-import type { LogParser } from '../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import type { NodeInfo, TaskInfo } from '../../../types'
 import type { LoadedTextFile } from '../../process/utils/fileLoadingHelpers'
 import type { BridgeOpenCropRequest } from '../composables/useBridgeTaskActions'

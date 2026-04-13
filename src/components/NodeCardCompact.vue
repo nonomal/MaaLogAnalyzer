@@ -8,7 +8,7 @@ import {
   buildNodeActionRootItem,
   buildNodeRecognitionAttempts,
   buildNodeTaskFlowItems,
-} from '../utils/nodeFlow'
+} from '@windsland52/maa-log-parser/node-flow'
 import TaskDocHoverPopover from './TaskDocHoverPopover.vue'
 import StatusIcon from './StatusIcon.vue'
 import { resolveResultStatusButtonType } from './nodeCard/statusButtonType'

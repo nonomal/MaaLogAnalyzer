@@ -5,7 +5,7 @@ import {
   buildNodeActionRootItem,
   buildNodeActionTimelineItems,
   buildNodeRecognitionFlowItems,
-} from '../../utils/nodeFlow'
+} from '@windsland52/maa-log-parser/node-flow'
 import { flattenFlowItems } from '../../utils/flowTree'
 
 interface UseNodeCardFlowRowsParams {

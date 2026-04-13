@@ -1,5 +1,5 @@
 import type { ComputedRef, Ref, VNodeChild } from 'vue'
-import type { LogParser } from '../../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import type { NodeInfo, TaskInfo } from '../../../../types'
 import type { TourStep } from '../../../../tutorial/types'
 import type {

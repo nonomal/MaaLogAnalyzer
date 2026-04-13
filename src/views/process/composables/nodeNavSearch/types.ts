@@ -1,5 +1,5 @@
 import type { NodeInfo } from '../../../../types'
-import type { NodeExecutionNavStatus } from '../../../../utils/nodeExecutionTimeline'
+import type { NodeExecutionNavStatus } from '@windsland52/maa-log-tools/node-execution-timeline'
 
 export type NodeNavMatchKind = 'node' | 'next-list' | 'flow'
 export type NodeNavStatus = NodeExecutionNavStatus

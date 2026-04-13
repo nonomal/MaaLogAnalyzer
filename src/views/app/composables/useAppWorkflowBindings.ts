@@ -1,7 +1,7 @@
 import { useMessage } from 'naive-ui'
 import type { Ref } from 'vue'
 import type { TaskInfo } from '../../../types'
-import type { LogParser } from '../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import type { TourStep } from '../../../tutorial/types'
 import { useLogLoadingPipeline } from './useLogLoadingPipeline'
 import { useTutorialTour } from './useTutorialTour'

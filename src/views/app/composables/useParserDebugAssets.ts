@@ -1,4 +1,4 @@
-import type { LogParser } from '../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 
 interface UseParserDebugAssetsOptions {
   parser: LogParser

@@ -4,7 +4,7 @@ import {
 } from 'naive-ui'
 import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import type { TaskInfo, NodeInfo } from '../types'
-import type { LogParser } from '../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import type { LoadedTextFile } from './process/utils/fileLoadingHelpers'
 import { useProcessViewController } from './process/composables/useProcessViewController'
 import ProcessMobileToolbar from './process/components/ProcessMobileToolbar.vue'

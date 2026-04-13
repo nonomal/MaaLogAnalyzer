@@ -1,7 +1,7 @@
 import { resolveImageSrcPath } from '../../../utils/imageSrc'
-import { buildNodeFlowItems, buildNodeRecognitionAttempts } from '../../../utils/nodeFlow'
+import { buildNodeFlowItems, buildNodeRecognitionAttempts } from '@windsland52/maa-log-parser/node-flow'
 import type { NodeInfo, RecognitionAttempt, UnifiedFlowItem } from '../../../types'
-import type { LogParser } from '../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 
 export const convertFileSrc = (filePath: string) => {
   return resolveImageSrcPath(filePath)

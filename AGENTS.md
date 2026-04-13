@@ -15,7 +15,8 @@ The core purpose is to parse MaaFramework logs (`maa.log`, `maa.bak.log`, zip lo
 ## Repository Map
 
 - `src/`: main web app source
-- `src/utils/logParser.ts`: log parsing core
+- `packages/maa-log-parser/src/logParser.ts`: log parsing core implementation
+- `src/utils/logParser.ts`: compatibility facade for parser entry
 - `src/utils/fileDialog.ts`: cross-platform file/folder open logic (Web/Tauri)
 - `src/views/ProcessView.vue`: task list + flow entry interactions
 - `src/views/FlowchartView.vue`: flowchart rendering
@@ -62,10 +63,15 @@ cd src-vscode && npm run compile
 
 See `src/types.ts` for canonical definitions.
 
+Compatibility note:
+
+- `src/types.ts` is now a compatibility type facade.
+- Canonical parser-owned type definitions live in `packages/maa-log-parser/src/types.ts`.
+
 ## Implementation Rules
 
 - Keep parser performance-first (avoid expensive per-line allocations)
-- Preserve string pooling behavior (`src/utils/stringPool.ts`)
+- Preserve string pooling behavior (`packages/maa-log-parser/src/stringPool.ts`)
 - Keep Web/Tauri behavior aligned for file and folder loading
 - Do not introduce platform-specific behavior unless explicitly required
 - Prefer incremental fixes over broad refactors in parser/view sync code

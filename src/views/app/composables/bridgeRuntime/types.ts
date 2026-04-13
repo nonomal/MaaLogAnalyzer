@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 import type { NodeInfo, TaskInfo, UnifiedFlowItem } from '../../../../types'
-import type { LogParser } from '../../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import type { RealtimeSessionState } from '../useRealtimeSession'
 
 export interface UseBridgeRuntimeOptions {

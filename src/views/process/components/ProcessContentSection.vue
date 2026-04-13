@@ -5,7 +5,7 @@ import type { VNodeChild } from 'vue'
 import EmptyUploadPanel from './EmptyUploadPanel.vue'
 import ProcessMobilePane from './ProcessMobilePane.vue'
 import ProcessDesktopPane from './ProcessDesktopPane.vue'
-import { buildTaskIdentity } from '../../../utils/taskIdentity'
+import { buildTaskIdentity } from '@windsland52/maa-log-tools/task-identity'
 
 type ReloadOption = { label: string; key: string; icon: () => VNodeChild }
 type NodeTimelineItem = NodeInfo & { _uniqueKey: string }

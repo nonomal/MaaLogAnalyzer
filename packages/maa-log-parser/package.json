@@ -1,0 +1,226 @@
+{
+  "name": "@windsland52/maa-log-parser",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "types": "./src/core/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p ./tsconfig.json",
+    "test": "vitest run src/__tests__",
+    "build": "pnpm run typecheck"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/core/index.ts",
+      "types": "./src/core/index.ts"
+    },
+    "./raw-value": {
+      "import": "./src/shared/rawValue.ts",
+      "types": "./src/shared/rawValue.ts"
+    },
+    "./event-meta": {
+      "import": "./src/event/meta.ts",
+      "types": "./src/event/meta.ts"
+    },
+    "./types": {
+      "import": "./src/shared/types.ts",
+      "types": "./src/shared/types.ts"
+    },
+    "./log-event-decoders": {
+      "import": "./src/shared/logEventDecoders.ts",
+      "types": "./src/shared/logEventDecoders.ts"
+    },
+    "./string-pool": {
+      "import": "./src/shared/stringPool.ts",
+      "types": "./src/shared/stringPool.ts"
+    },
+    "./task-builder": {
+      "import": "./src/task/builder.ts",
+      "types": "./src/task/builder.ts"
+    },
+    "./task-lifecycle": {
+      "import": "./src/task/lifecycle.ts",
+      "types": "./src/task/lifecycle.ts"
+    },
+    "./task-completion-helpers": {
+      "import": "./src/task/completionHelpers.ts",
+      "types": "./src/task/completionHelpers.ts"
+    },
+    "./task-event-compaction": {
+      "import": "./src/task/eventCompaction.ts",
+      "types": "./src/task/eventCompaction.ts"
+    },
+    "./scoped-node-dispatch-helpers": {
+      "import": "./src/node/scopedDispatchHelpers.ts",
+      "types": "./src/node/scopedDispatchHelpers.ts"
+    },
+    "./task-event-loop-helpers": {
+      "import": "./src/task/eventLoopHelpers.ts",
+      "types": "./src/task/eventLoopHelpers.ts"
+    },
+    "./sub-task-collector": {
+      "import": "./src/subtask/collector.ts",
+      "types": "./src/subtask/collector.ts"
+    },
+    "./event-line": {
+      "import": "./src/event/line.ts",
+      "types": "./src/event/line.ts"
+    },
+    "./action-helpers": {
+      "import": "./src/action/helpers.ts",
+      "types": "./src/action/helpers.ts"
+    },
+    "./action-runtime-helpers": {
+      "import": "./src/action/runtimeHelpers.ts",
+      "types": "./src/action/runtimeHelpers.ts"
+    },
+    "./action-event-lifecycle-helpers": {
+      "import": "./src/action/eventLifecycleHelpers.ts",
+      "types": "./src/action/eventLifecycleHelpers.ts"
+    },
+    "./recognition-helpers": {
+      "import": "./src/recognition/helpers.ts",
+      "types": "./src/recognition/helpers.ts"
+    },
+    "./recognition-attempt-runtime": {
+      "import": "./src/recognition/attemptRuntime.ts",
+      "types": "./src/recognition/attemptRuntime.ts"
+    },
+    "./recognition-collection-helpers": {
+      "import": "./src/recognition/collectionHelpers.ts",
+      "types": "./src/recognition/collectionHelpers.ts"
+    },
+    "./recognition-scope-helpers": {
+      "import": "./src/recognition/scopeHelpers.ts",
+      "types": "./src/recognition/scopeHelpers.ts"
+    },
+    "./recognition-event-handlers": {
+      "import": "./src/recognition/eventHandlers.ts",
+      "types": "./src/recognition/eventHandlers.ts"
+    },
+    "./image-lookup-helpers": {
+      "import": "./src/event/imageLookupHelpers.ts",
+      "types": "./src/event/imageLookupHelpers.ts"
+    },
+    "./wait-freezes-helpers": {
+      "import": "./src/waitFreezes/helpers.ts",
+      "types": "./src/waitFreezes/helpers.ts"
+    },
+    "./task-scoped-aggregation-helpers": {
+      "import": "./src/task/scopedAggregationHelpers.ts",
+      "types": "./src/task/scopedAggregationHelpers.ts"
+    },
+    "./wait-freezes-event-helpers": {
+      "import": "./src/waitFreezes/eventHelpers.ts",
+      "types": "./src/waitFreezes/eventHelpers.ts"
+    },
+    "./task-stack-helpers": {
+      "import": "./src/task/stackHelpers.ts",
+      "types": "./src/task/stackHelpers.ts"
+    },
+    "./task-lifecycle-context-factory": {
+      "import": "./src/task/lifecycleContextFactory.ts",
+      "types": "./src/task/lifecycleContextFactory.ts"
+    },
+    "./node-event-value-helpers": {
+      "import": "./src/node/eventValueHelpers.ts",
+      "types": "./src/node/eventValueHelpers.ts"
+    },
+    "./task-node-runtime-context": {
+      "import": "./src/task/nodeRuntimeContext.ts",
+      "types": "./src/task/nodeRuntimeContext.ts"
+    },
+    "./next-list-event-helpers": {
+      "import": "./src/node/nextListHelpers.ts",
+      "types": "./src/node/nextListHelpers.ts"
+    },
+    "./runtime-settlement-helpers": {
+      "import": "./src/pipeline/runtimeSettlementHelpers.ts",
+      "types": "./src/pipeline/runtimeSettlementHelpers.ts"
+    },
+    "./node-aggregation-reset-helpers": {
+      "import": "./src/node/aggregationResetHelpers.ts",
+      "types": "./src/node/aggregationResetHelpers.ts"
+    },
+    "./sub-task-snapshot-helpers": {
+      "import": "./src/subtask/snapshotHelpers.ts",
+      "types": "./src/subtask/snapshotHelpers.ts"
+    },
+    "./simple-node-event-router": {
+      "import": "./src/node/simpleEventRouter.ts",
+      "types": "./src/node/simpleEventRouter.ts"
+    },
+    "./simple-node-event-handler-factory": {
+      "import": "./src/node/simpleEventHandlerFactory.ts",
+      "types": "./src/node/simpleEventHandlerFactory.ts"
+    },
+    "./sub-task-action-node-helpers": {
+      "import": "./src/subtask/actionNodeHelpers.ts",
+      "types": "./src/subtask/actionNodeHelpers.ts"
+    },
+    "./sub-task-action-node-lifecycle-handler": {
+      "import": "./src/subtask/actionNodeLifecycleHandler.ts",
+      "types": "./src/subtask/actionNodeLifecycleHandler.ts"
+    },
+    "./sub-task-runtime-cleanup-helpers": {
+      "import": "./src/subtask/runtimeCleanupHelpers.ts",
+      "types": "./src/subtask/runtimeCleanupHelpers.ts"
+    },
+    "./sub-task-pipeline-finalize-helpers": {
+      "import": "./src/subtask/pipelineFinalizeHelpers.ts",
+      "types": "./src/subtask/pipelineFinalizeHelpers.ts"
+    },
+    "./task-pipeline-finalize-helpers": {
+      "import": "./src/task/pipelineFinalizeHelpers.ts",
+      "types": "./src/task/pipelineFinalizeHelpers.ts"
+    },
+    "./pipeline-node-start-helpers": {
+      "import": "./src/pipeline/startHelpers.ts",
+      "types": "./src/pipeline/startHelpers.ts"
+    },
+    "./pipeline-runtime-state-helpers": {
+      "import": "./src/pipeline/runtimeStateHelpers.ts",
+      "types": "./src/pipeline/runtimeStateHelpers.ts"
+    },
+    "./recognition-node-lifecycle-helpers": {
+      "import": "./src/recognition/nodeLifecycleHelpers.ts",
+      "types": "./src/recognition/nodeLifecycleHelpers.ts"
+    },
+    "./node-dispatch-lifecycle-helpers": {
+      "import": "./src/node/dispatchLifecycleHelpers.ts",
+      "types": "./src/node/dispatchLifecycleHelpers.ts"
+    },
+    "./node-dispatch-config-factory": {
+      "import": "./src/node/dispatchConfigFactory.ts",
+      "types": "./src/node/dispatchConfigFactory.ts"
+    },
+    "./sub-task-nesting-helpers": {
+      "import": "./src/subtask/nestingHelpers.ts",
+      "types": "./src/subtask/nestingHelpers.ts"
+    },
+    "./flow-assembly-helpers": {
+      "import": "./src/pipeline/flowAssemblyHelpers.ts",
+      "types": "./src/pipeline/flowAssemblyHelpers.ts"
+    },
+    "./pipeline-node-flow-helpers": {
+      "import": "./src/pipeline/nodeFlowHelpers.ts",
+      "types": "./src/pipeline/nodeFlowHelpers.ts"
+    },
+    "./active-node-preview-helpers": {
+      "import": "./src/pipeline/activePreviewHelpers.ts",
+      "types": "./src/pipeline/activePreviewHelpers.ts"
+    },
+    "./node-flow": {
+      "import": "./src/node/flow.ts",
+      "types": "./src/node/flow.ts"
+    },
+    "./timestamp": {
+      "import": "./src/shared/timestamp.ts",
+      "types": "./src/shared/timestamp.ts"
+    },
+    "./node-statistics": {
+      "import": "./src/node/statistics.ts",
+      "types": "./src/node/statistics.ts"
+    }
+  }
+}

@@ -1,11 +1,11 @@
 import type { Node, Edge } from '@vue-flow/core'
 import type ELK from 'elkjs/lib/elk.bundled.js'
 import type { TaskInfo, NodeInfo } from '../types'
-import { sortNodesByGlobalExecutionOrder } from './taskExecutionOrder'
+import { sortNodesByGlobalExecutionOrder } from '@windsland52/maa-log-tools/task-execution-order'
 import {
   resolveNodeExecutionName,
   resolveNodeMatchedNextListItem,
-} from './nodeExecutionName'
+} from '@windsland52/maa-log-tools/node-execution-name'
 
 export interface FlowNodeData {
   label: string

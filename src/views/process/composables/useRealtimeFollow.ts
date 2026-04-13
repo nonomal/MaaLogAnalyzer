@@ -4,7 +4,7 @@ import { createRealtimeFollowScrolling } from './realtimeFollow/scrolling'
 import { createFollowScheduler } from './realtimeFollow/scheduler'
 import { setupRealtimeFollowWatchers } from './realtimeFollow/watchers'
 import type { ScrollablePanelRef, UseRealtimeFollowOptions } from './realtimeFollow/types'
-import { buildTaskIdentity } from '../../../utils/taskIdentity'
+import { buildTaskIdentity } from '@windsland52/maa-log-tools/task-identity'
 
 export const useRealtimeFollow = (options: UseRealtimeFollowOptions) => {
   const activeTaskIndex = ref(0)

@@ -1,0 +1,54 @@
+{
+  "name": "@windsland52/maa-log-tools",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "typecheck": "tsc -p ./tsconfig.json",
+    "build": "pnpm run typecheck"
+  },
+  "bin": {
+    "mla-log-tools": "./src/cli.ts"
+  },
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    },
+    "./cli": {
+      "import": "./src/cli.ts",
+      "types": "./src/cli.ts"
+    },
+    "./node-input": {
+      "import": "./src/nodeInput.ts",
+      "types": "./src/nodeInput.ts"
+    },
+    "./task-identity": {
+      "import": "./src/taskIdentity.ts",
+      "types": "./src/taskIdentity.ts"
+    },
+    "./next-list-presentation": {
+      "import": "./src/nextListPresentation.ts",
+      "types": "./src/nextListPresentation.ts"
+    },
+    "./task-execution-order": {
+      "import": "./src/taskExecutionOrder.ts",
+      "types": "./src/taskExecutionOrder.ts"
+    },
+    "./node-execution-name": {
+      "import": "./src/nodeExecutionName.ts",
+      "types": "./src/nodeExecutionName.ts"
+    },
+    "./node-execution-timeline": {
+      "import": "./src/nodeExecutionTimeline.ts",
+      "types": "./src/nodeExecutionTimeline.ts"
+    }
+  },
+  "dependencies": {
+    "@windsland52/maa-log-adapter": "workspace:*",
+    "@windsland52/maa-log-kernel": "workspace:*",
+    "@windsland52/maa-log-parser": "workspace:*",
+    "@windsland52/maa-log-runtime": "workspace:*",
+    "fflate": "^0.8.2"
+  }
+}

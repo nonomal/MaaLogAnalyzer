@@ -1,9 +1,9 @@
 import type { NodeInfo, UnifiedFlowItem } from '../../../../types'
-import { buildNodeRecognitionAttempts } from '../../../../utils/nodeFlow'
+import { buildNodeRecognitionAttempts } from '@windsland52/maa-log-parser/node-flow'
 import {
   buildNextListDisplayName,
   buildRecognitionTargetByNextName,
-} from '../../../../utils/nextListPresentation'
+} from '@windsland52/maa-log-tools/next-list-presentation'
 import type { NodeNavMatchDetail, NodeNavMatchKind } from './types'
 
 export const normalizeSearchText = (value: unknown): string => {

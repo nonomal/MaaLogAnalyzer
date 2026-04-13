@@ -1,5 +1,5 @@
 import type { TaskInfo, NodeInfo } from '../../../../types'
-import type { LogParser } from '../../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import type { LoadedTextFile } from '../../utils/fileLoadingHelpers'
 
 export type ProcessViewControllerProps = Readonly<{

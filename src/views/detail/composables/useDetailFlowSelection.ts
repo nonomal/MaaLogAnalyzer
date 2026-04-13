@@ -1,6 +1,6 @@
 import { computed, type Ref } from 'vue'
 import type { NodeInfo, UnifiedFlowItem } from '../../../types'
-import { buildNodeFlowItems } from '../../../utils/nodeFlow'
+import { buildNodeFlowItems } from '@windsland52/maa-log-parser/node-flow'
 
 interface UseDetailFlowSelectionOptions {
   selectedNode: Ref<NodeInfo | null>

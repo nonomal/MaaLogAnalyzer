@@ -144,14 +144,33 @@ pnpm build:vscode
 ├─ src-tauri/           # Tauri 工程
 ├─ src-vscode/          # VS Code 插件工程
 ├─ docs/                # 文档
+├─ packages/            # 可复用内核/运行时/工具包
 ├─ sample/              # 示例日志
 ├─ public/              # 静态资源
 └─ README.md
 ```
 
+## 包结构（Workspace）
+
+仓库内已按职责拆分为五个可复用包，位于 [packages](packages)：
+
+- [packages/maa-log-kernel](packages/maa-log-kernel)：协议与契约层（schema/types/output builder）
+- [packages/maa-log-runtime](packages/maa-log-runtime)：通用运行时编排（adapter 驱动）
+- [packages/maa-log-tools](packages/maa-log-tools)：Node 输入适配与 CLI
+- [packages/maa-log-parser](packages/maa-log-parser)：解析器包壳（稳定导出 LogParser）
+- [packages/maa-log-adapter](packages/maa-log-adapter)：本仓实现绑定层（连接现有 parser/statistics）
+
+常用包级命令：
+
+```bash
+pnpm typecheck:packages
+pnpm build:packages
+pnpm kernel:cli <path> --pretty --no-events
+```
+
 ## 更多文档
 
-- 解析器架构说明：`src/utils/logParser/README.md`
+- 解析器架构说明：`packages/maa-log-parser/README.md`
 - 新手教程协议文档：`docs/TUTORIAL_PROTOCOL.md`
 - VSCode 插件说明：`src-vscode/README.md`
 
