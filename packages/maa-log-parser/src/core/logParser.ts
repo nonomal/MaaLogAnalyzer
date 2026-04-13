@@ -679,11 +679,12 @@ export class LogParser {
     const pushActionLevelRecognition = (attempt: RecognitionAttempt) => {
       pushActionLevelRecognitionIfUnknown(currentTaskRecognitions, actionLevelRecognitionNodes, attempt)
     }
-    const resolveFinalNestedActionGroups = (
+    const resolveNestedActionGroups = (
       taskId: number,
       startTimestamp: string,
       endTimestamp: string,
-      groups: NestedActionGroup[]
+      groups: NestedActionGroup[],
+      resolvedNestedActionNodes: typeof nestedActionNodes
     ): NestedActionGroup[] => {
       return resolveFinalNestedActionGroupsHelper({
         taskId,
@@ -692,13 +693,21 @@ export class LogParser {
         endTimestamp,
         groups,
         subTaskParentByTaskId,
-        nestedActionNodes,
+        nestedActionNodes: resolvedNestedActionNodes,
         createActionNodeGroup,
         cloneNestedActionGroup,
         cloneRecognitionAttempt,
         toTimestampMs,
         intern: (value) => this.stringPool.intern(value),
       })
+    }
+    const resolveFinalNestedActionGroups = (
+      taskId: number,
+      startTimestamp: string,
+      endTimestamp: string,
+      groups: NestedActionGroup[]
+    ): NestedActionGroup[] => {
+      return resolveNestedActionGroups(taskId, startTimestamp, endTimestamp, groups, nestedActionNodes)
     }
     const refreshActivePipelineNodePreview = (timestamp: string) => {
       refreshActivePipelineNodePreviewHelper({
@@ -710,8 +719,31 @@ export class LogParser {
         actionLevelRecognitionNodes,
         nestedActionNodes,
         activeSubTaskActionNodes,
+        collectSubTaskActionGroups: () => {
+          const groups = subTasks
+            .peekAsNestedActionGroups(this.stringPool)
+            .map((group) => {
+              const snapshot = subTaskSnapshots.get(group.task_id)
+              return snapshot
+                ? mergeSubTaskActionGroupWithSnapshot(group, snapshot, (value) => this.stringPool.intern(value))
+                : group
+            })
+          return groups
+        },
+        resolveRuntimeNestedActionGroups: ({
+          taskId,
+          startTimestamp,
+          endTimestamp,
+          groups,
+          nestedActionNodes: runtimeNestedActionNodes,
+        }) => resolveNestedActionGroups(
+          taskId,
+          startTimestamp,
+          endTimestamp,
+          groups,
+          runtimeNestedActionNodes
+        ),
         actionRuntimeStates,
-        createActionNodeGroup,
         composePipelineNodeFlow,
         summarizeActionFlowStatus,
         createActionRootFlowItem,

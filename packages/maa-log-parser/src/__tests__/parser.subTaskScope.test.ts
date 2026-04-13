@@ -194,6 +194,69 @@ describe('LogParser sub task scoped node aggregation', () => {
     expect(subTaskActionItems[0].item.status).toBe('failed')
   })
 
+  it('shows sub task flow under running parent action during realtime preview', () => {
+    const lines = [
+      makeEventLine(121, 'Tasker.Task.Starting', { task_id: 1, entry: 'MainTask', hash: 'h-main-rt', uuid: 'u-main-rt' }),
+      makeEventLine(122, 'Node.PipelineNode.Starting', { task_id: 1, node_id: 101, name: 'MainNode' }),
+      makeEventLine(123, 'Node.Action.Starting', { task_id: 1, action_id: 1001, name: 'MainAction' }),
+      makeEventLine(124, 'Node.ActionNode.Starting', {
+        task_id: 1,
+        node_id: 101,
+        action_id: 1001,
+        name: 'MainNode',
+        action_details: {
+          action_id: 1001,
+          action: 'Click',
+          box: [0, 0, 0, 0],
+          detail: {},
+          name: 'MainAction',
+          success: true,
+        },
+      }),
+      makeEventLine(125, 'Tasker.Task.Starting', { task_id: 2, entry: 'SubTask', hash: 'h-sub-rt', uuid: 'u-sub-rt' }),
+      makeEventLine(126, 'Node.PipelineNode.Starting', { task_id: 2, node_id: 201, name: 'SubNode' }),
+      makeEventLine(127, 'Node.PipelineNode.Succeeded', { task_id: 2, node_id: 201, name: 'SubNode' }),
+      makeEventLine(128, 'Tasker.Task.Succeeded', { task_id: 2, entry: 'SubTask', hash: 'h-sub-rt', uuid: 'u-sub-rt' }),
+    ]
+
+    const parser = new LogParser()
+    for (const eventLine of lines) {
+      parser.appendRealtimeLines([eventLine])
+    }
+
+    const tasks = parser.getTasksSnapshot()
+    const mainTask = tasks.find(item => item.task_id === 1)
+
+    expect(mainTask).toBeTruthy()
+    expect(mainTask?.nodes.length).toBe(1)
+
+    const mainNode = mainTask!.nodes[0]
+    const runningMainAction = collectFlowItems(
+      mainNode.node_flow,
+      (item) => item.type === 'action' && item.action_id === 1001 && item.status === 'running'
+    )
+    expect(runningMainAction.length).toBeGreaterThan(0)
+
+    const nestedSubTask = collectFlowItems(
+      mainNode.node_flow,
+      (item, path) =>
+        item.type === 'task' &&
+        item.task_id === 2 &&
+        path.some(pathNode => pathNode.type === 'action' && pathNode.action_id === 1001)
+    )
+    expect(nestedSubTask.length).toBeGreaterThan(0)
+
+    const nestedSubPipeline = collectFlowItems(
+      mainNode.node_flow,
+      (item, path) =>
+        item.type === 'pipeline_node' &&
+        item.task_id === 2 &&
+        path.some(pathNode => pathNode.type === 'task' && pathNode.task_id === 2)
+    )
+    expect(nestedSubPipeline.length).toBeGreaterThan(0)
+    expect(nestedSubPipeline[0].item.status).toBe('success')
+  })
+
   it('tolerates malformed NextList payloads', async () => {
     const lines = [
       makeEventLine(151, 'Tasker.Task.Starting', { task_id: 31, entry: 'MainTask', hash: 'h-main-4', uuid: 'u-main-4' }),

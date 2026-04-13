@@ -118,6 +118,19 @@ export class SubTaskCollector {
     return groups
   }
 
+  /** Read current sub-task pipeline snapshots without consuming internal state. */
+  peekAsNestedActionGroups(stringPool: StringPool): NestedActionGroup[] {
+    return Array.from(this.pipelineNodes.entries()).map(([taskId, nodes]) => {
+      return {
+        task_id: taskId,
+        name: stringPool.intern(nodes[0]?.name || 'SubTask'),
+        ts: stringPool.intern(nodes[0]?.ts || ''),
+        status: summarizeRuntimeStatus(nodes),
+        nested_actions: nodes,
+      }
+    })
+  }
+
   clear(): void {
     this.recognitions.clear()
     this.recognitionNodes.clear()

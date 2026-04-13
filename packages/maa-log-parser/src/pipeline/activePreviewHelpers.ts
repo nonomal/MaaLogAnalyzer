@@ -58,14 +58,15 @@ export const refreshActivePipelineNodePreview = (params: {
   actionLevelRecognitionNodes: RecognitionAttempt[]
   nestedActionNodes: NestedActionNode[]
   activeSubTaskActionNodes: Map<string, NestedActionNode>
-  actionRuntimeStates: Map<number, ActionRuntimeState>
-  createActionNodeGroup: (params: {
+  collectSubTaskActionGroups: () => NestedActionGroup[]
+  resolveRuntimeNestedActionGroups: (params: {
     taskId: number
-    ts: string
-    endTs?: string
-    nestedActions: NestedActionNode[]
-    intern: (value: string) => string
-  }) => NestedActionGroup | null
+    startTimestamp: string
+    endTimestamp: string
+    groups: NestedActionGroup[]
+    nestedActionNodes: NestedActionNode[]
+  }) => NestedActionGroup[]
+  actionRuntimeStates: Map<number, ActionRuntimeState>
   composePipelineNodeFlow: (params: {
     topLevelRecognitions: RecognitionAttempt[]
     actionLevelRecognitions: RecognitionAttempt[]
@@ -101,15 +102,13 @@ export const refreshActivePipelineNodePreview = (params: {
     ...params.nestedActionNodes,
     ...params.activeSubTaskActionNodes.values(),
   ])
-
-  const runtimeActionGroup = params.createActionNodeGroup({
+  const runtimeNestedActionGroups = params.resolveRuntimeNestedActionGroups({
     taskId: params.rootTaskId,
-    ts: activeNode.ts,
-    endTs: nowTimestamp,
-    nestedActions: runtimeNestedActionNodes,
-    intern: params.intern,
+    startTimestamp: activeNode.ts,
+    endTimestamp: nowTimestamp,
+    groups: params.collectSubTaskActionGroups(),
+    nestedActionNodes: runtimeNestedActionNodes,
   })
-  const runtimeNestedActionGroups: NestedActionGroup[] = runtimeActionGroup ? [runtimeActionGroup] : []
 
   const runtimeActionState = getLatestActionRuntimeState(params.actionRuntimeStates)
   const resolvedActionId =
