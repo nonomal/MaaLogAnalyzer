@@ -26,7 +26,6 @@ interface UseAppWorkflowBindingsOptions {
   ) => void
   pickPreferredLogTargetId: (targets: Array<{ id: string; label: string; fileName: string; content: string }>) => string
   applyParsedTasks: (tasks: TaskInfo[], preserveSelection: boolean) => void
-  clearRuntimeFilters: () => void
   steps: TourStep[]
   isMobile: Ref<boolean>
   viewMode: Ref<string>
@@ -56,7 +55,6 @@ export const useAppWorkflowBindings = (options: UseAppWorkflowBindingsOptions) =
     setDeferredTextSearchTargets: options.setDeferredTextSearchTargets,
     pickPreferredLogTargetId: options.pickPreferredLogTargetId,
     applyParsedTasks: options.applyParsedTasks,
-    clearRuntimeFilters: options.clearRuntimeFilters,
     onWarning: (text) => message.warning(text, { duration: 5000 }),
     onError: (text) => message.error(text, { duration: 5000 }),
   })

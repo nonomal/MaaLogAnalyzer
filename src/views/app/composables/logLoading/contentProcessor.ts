@@ -26,7 +26,6 @@ export const createProcessLogContent = (
       options.parseProgress.value = progress.percentage
     })
     const parsedTasks = options.parser.consumeTasks()
-    options.clearRuntimeFilters()
     options.applyParsedTasks(parsedTasks, false)
 
     if (parsedTasks.length === 0) {

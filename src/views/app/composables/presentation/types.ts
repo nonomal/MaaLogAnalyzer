@@ -21,16 +21,10 @@ export interface UseAppPresentationBindingsOptions {
   onToggleTheme: () => void
   isMobile: Ref<boolean>
   isVscodeLaunchEmbed: boolean
-  showProcessThreadFilters: boolean
   viewMode: Ref<string>
   viewModeOptions: Ref<ViewModeOptionLike[]>
   currentViewLabel: Ref<string>
   handleViewModeSelect: (key: string) => void
-  selectedProcessId: Ref<string>
-  selectedThreadId: Ref<string>
-  processIdOptions: Ref<Array<Record<string, unknown>>>
-  threadIdOptions: Ref<Array<Record<string, unknown>>>
-  clearFilters: () => void
   showTaskDrawer: Ref<boolean>
   showDetailDrawer: Ref<boolean>
   showSettingsModal: Ref<boolean>

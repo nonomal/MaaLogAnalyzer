@@ -22,7 +22,6 @@ export interface LogLoadingPipelineOptions {
   setDeferredTextSearchTargets: (targets: DeferredTextSearchTarget[], defaultId?: string) => void
   pickPreferredLogTargetId: (targets: TextSearchLoadedTarget[]) => string
   applyParsedTasks: (nextTasks: TaskInfo[], preserveSelection: boolean) => void
-  clearRuntimeFilters: () => void
   onWarning: (message: string) => void
   onError: (message: string) => void
 }

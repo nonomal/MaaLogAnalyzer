@@ -1,14 +1,11 @@
-import type { Ref } from 'vue'
+import { computed, type Ref } from 'vue'
 import type { TaskInfo, NodeInfo, UnifiedFlowItem } from '../../../types'
-import type { LogParser } from '@windsland52/maa-log-parser'
 import { useTaskSelection } from './useTaskSelection'
 import { useAppUiState } from './useAppUiState'
-import { useTaskFilters } from './useTaskFilters'
 import { useParsedTaskState } from './useParsedTaskState'
 
 interface UseAppSelectionAndFiltersOptions {
   isMobile: Ref<boolean>
-  parser: LogParser
   tasks: Ref<TaskInfo[]>
   selectedTask: Ref<TaskInfo | null>
   selectedNode: Ref<NodeInfo | null>
@@ -54,35 +51,9 @@ export const useAppSelectionAndFilters = (options: UseAppSelectionAndFiltersOpti
     onSelectTask: handleSelectTask,
   })
 
-  const handleFilterSelectTask = (task: TaskInfo) => {
-    options.selectedTask.value = task
-    options.selectedNode.value = null
-    options.selectedFlowItemId.value = null
-  }
-
-  const handleFilterClearSelection = () => {
-    options.selectedTask.value = null
-    options.selectedNode.value = null
-    options.selectedFlowItemId.value = null
-  }
-
-  const {
-    selectedProcessId,
-    selectedThreadId,
-    filteredTasks,
-    processIdOptions,
-    threadIdOptions,
-    clearFilters,
-    clearRuntimeFilters,
-    refreshAvailableTaskIds,
-    resetAvailableTaskIds,
-  } = useTaskFilters({
-    tasks: options.tasks,
-    selectedTask: options.selectedTask,
-    parser: options.parser,
-    onSelectTask: handleFilterSelectTask,
-    onClearSelection: handleFilterClearSelection,
-  })
+  const filteredTasks = computed(() => options.tasks.value)
+  const refreshAvailableTaskIds = () => {}
+  const resetAvailableTaskIds = () => {}
 
   const {
     resetAnalysisState,
@@ -114,13 +85,7 @@ export const useAppSelectionAndFilters = (options: UseAppSelectionAndFiltersOpti
     handleFileLoadingStart,
     handleFileLoadingEnd,
     handleMobileSelectTask,
-    selectedProcessId,
-    selectedThreadId,
     filteredTasks,
-    processIdOptions,
-    threadIdOptions,
-    clearFilters,
-    clearRuntimeFilters,
     refreshAvailableTaskIds,
     resetAvailableTaskIds,
     resetAnalysisState,

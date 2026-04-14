@@ -11,14 +11,6 @@ import type {
   EventNotification,
   TaskInfo,
 } from '../shared/types'
-import {
-  parseMaaMessageMeta,
-  resolveTaskLifecyclePhase,
-  type MaaMessageMeta,
-} from '../event/meta'
-import {
-  resolveTaskLifecycleEventDetails,
-} from '../task/lifecycle'
 import { parseEventLine as parseMaaEventLine, type ParsedEventLine } from '../event/line'
 import { createProtocolEvent } from '../protocol/eventFactory'
 import type { ProtocolEvent } from '../protocol/types'
@@ -88,10 +80,7 @@ export class LogParser {
   private events: EventNotification[] = []
   private protocolEvents: ProtocolEvent[] = []
   private rawLines: RawLineStore | null = null
-  private messageMetaCache = new Map<string, MaaMessageMeta>()
   private eventTokenPool = new Map<string, string>()
-  private taskProcessMap = new Map<number, string>()
-  private taskThreadMap = new Map<number, string>()
   private lastEventBySignature = new Map<string, {
     timestampMs: number
     processId: string
@@ -131,22 +120,11 @@ export class LogParser {
     this.events = []
     this.protocolEvents = []
     this.rawLines = null
-    this.messageMetaCache.clear()
-    this.taskProcessMap.clear()
-    this.taskThreadMap.clear()
     this.lastEventBySignature.clear()
     this.dedupSignatureTimeline = []
     this.dedupSignatureTimelineHead = 0
     this.eventTokenPool.clear()
     this.syntheticLineNumber = 1
-  }
-
-  private getCachedMaaMessageMeta(message: string): MaaMessageMeta {
-    const cached = this.messageMetaCache.get(message)
-    if (cached) return cached
-    const parsed = parseMaaMessageMeta(message)
-    this.messageMetaCache.set(message, parsed)
-    return parsed
   }
 
   private pruneDedupSignatures(currentTimestampMs: number): void {
@@ -241,16 +219,6 @@ export class LogParser {
         signature: event._dedupSignature,
         timestampMs: eventMs,
       })
-    }
-
-    const eventMeta = this.getCachedMaaMessageMeta(event.message)
-    const taskLifecyclePhase = resolveTaskLifecyclePhase(eventMeta)
-    const lifecycleDetails = resolveTaskLifecycleEventDetails(event.details)
-    if (taskLifecyclePhase === 'Starting' && lifecycleDetails.task_id != null) {
-      if (!this.taskProcessMap.has(lifecycleDetails.task_id)) {
-        this.taskProcessMap.set(lifecycleDetails.task_id, event.processId)
-        this.taskThreadMap.set(lifecycleDetails.task_id, event.threadId)
-      }
     }
   }
 
@@ -462,9 +430,6 @@ export class LogParser {
     this.events = []
     this.protocolEvents = []
     this.rawLines = null
-    this.messageMetaCache.clear()
-    this.taskProcessMap.clear()
-    this.taskThreadMap.clear()
     this.lastEventBySignature.clear()
     this.dedupSignatureTimeline = []
     this.dedupSignatureTimelineHead = 0
@@ -546,33 +511,5 @@ export class LogParser {
    */
   getEvents(): EventNotification[] {
     return this.events
-  }
-
-  /**
-   * 获取所有唯一的进程ID（已排序）
-   */
-  getProcessIds(): string[] {
-    return Array.from(new Set(this.taskProcessMap.values())).sort()
-  }
-
-  /**
-   * 获取所有唯一的线程ID（已排序）
-   */
-  getThreadIds(): string[] {
-    return Array.from(new Set(this.taskThreadMap.values())).sort()
-  }
-
-  /**
-   * 获取指定任务的进程ID
-   */
-  getTaskProcessId(taskId: number): string | undefined {
-    return this.taskProcessMap.get(taskId)
-  }
-
-  /**
-   * 获取指定任务的线程ID
-   */
-  getTaskThreadId(taskId: number): string | undefined {
-    return this.taskThreadMap.get(taskId)
   }
 }
