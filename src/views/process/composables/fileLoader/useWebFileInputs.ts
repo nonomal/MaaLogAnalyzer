@@ -1,41 +1,56 @@
 import { ref } from 'vue'
 import {
-  isMainLogFileName,
-  isBakLogFileName,
   collectTextFilesFromFiles,
   collectDebugAssetsFromFiles,
   readDirectoryFiles,
 } from '../../utils/fileLoadingHelpers'
+import {
+  combineLoadedPrimaryLogSegments,
+  PRIMARY_LOG_FILE_HINT,
+  selectPrimaryLogGroup,
+} from '../../../../utils/logFileDiscovery'
 import type { UseProcessFileLoaderOptions } from './types'
 
-const findLogPair = (files: Iterable<File>) => {
-  let bakLogFile: File | null = null
-  let mainLogFile: File | null = null
-
-  for (const file of files) {
-    const fileName = file.name.toLowerCase()
-    if (isBakLogFileName(fileName)) {
-      bakLogFile = file
-    } else if (isMainLogFileName(fileName)) {
-      mainLogFile = file
-    }
-  }
-
-  return { bakLogFile, mainLogFile }
+const getFileRelativePath = (file: File): string => {
+  return (file as File & { webkitRelativePath?: string }).webkitRelativePath || file.name
 }
 
-const readCombinedLogContent = async (bakLogFile: File | null, mainLogFile: File | null) => {
-  let combinedContent = ''
-  if (bakLogFile) {
-    combinedContent += await bakLogFile.text()
-  }
-  if (mainLogFile) {
-    if (combinedContent && !combinedContent.endsWith('\n')) {
-      combinedContent += '\n'
+const filterFilesBySelectedDir = (files: Iterable<File>, selectedDirPath: string) => {
+  const normalizedDir = selectedDirPath.replace(/\\/g, '/')
+  return Array.from(files).filter((file) => {
+    if (!normalizedDir) return true
+    const normalizedPath = getFileRelativePath(file).replace(/\\/g, '/')
+    return normalizedPath.startsWith(`${normalizedDir}/`)
+  })
+}
+
+const resolveSelectedLogContent = async (files: Iterable<File>) => {
+  const fileList = Array.from(files)
+  const selectedLogs = selectPrimaryLogGroup(
+    fileList.map(file => ({
+      file,
+      name: file.name,
+      path: getFileRelativePath(file),
+    })),
+  )
+
+  if (selectedLogs.length === 0) {
+    return {
+      content: '',
+      scopedFiles: [] as File[],
     }
-    combinedContent += await mainLogFile.text()
   }
-  return combinedContent
+
+  const loadedLogs = await Promise.all(selectedLogs.map(async ({ item }) => ({
+    name: item.name,
+    path: item.path,
+    content: await item.file.text(),
+  })))
+
+  return {
+    content: combineLoadedPrimaryLogSegments(loadedLogs),
+    scopedFiles: filterFilesBySelectedDir(fileList, selectedLogs[0].candidate.dirPath),
+  }
 }
 
 export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLoading: (loading: boolean) => void) => {
@@ -48,24 +63,21 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
       options.onFileLoadingStart()
 
       const files = await readDirectoryFiles(dirEntry)
-      const { bakLogFile, mainLogFile } = findLogPair(files)
-      if (!bakLogFile && !mainLogFile) {
-        alert('文件夹中未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
+      const { content: combinedContent, scopedFiles } = await resolveSelectedLogContent(files)
+      if (!combinedContent) {
+        alert(`文件夹中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
         return
       }
 
-      const combinedContent = await readCombinedLogContent(bakLogFile, mainLogFile)
-      if (combinedContent) {
-        const textFiles = await collectTextFilesFromFiles(files)
-        const debugAssets = await collectDebugAssetsFromFiles(files)
-        options.onUploadContent(
-          combinedContent,
-          debugAssets.errorImages,
-          debugAssets.visionImages,
-          debugAssets.waitFreezesImages,
-          textFiles,
-        )
-      }
+      const textFiles = await collectTextFilesFromFiles(scopedFiles)
+      const debugAssets = await collectDebugAssetsFromFiles(scopedFiles)
+      options.onUploadContent(
+        combinedContent,
+        debugAssets.errorImages,
+        debugAssets.visionImages,
+        debugAssets.waitFreezesImages,
+        textFiles,
+      )
     } catch (error) {
       alert('读取文件夹失败: ' + error)
     } finally {
@@ -104,28 +116,25 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
     const files = input.files
     if (!files || files.length === 0) return
 
-    const { bakLogFile, mainLogFile } = findLogPair(files)
-    if (!bakLogFile && !mainLogFile) {
-      alert('文件夹中未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
-      return
-    }
-
     try {
       setFileLoading(true)
       options.onFileLoadingStart()
 
-      const combinedContent = await readCombinedLogContent(bakLogFile, mainLogFile)
-      if (combinedContent) {
-        const textFiles = await collectTextFilesFromFiles(files)
-        const debugAssets = await collectDebugAssetsFromFiles(files)
-        options.onUploadContent(
-          combinedContent,
-          debugAssets.errorImages,
-          debugAssets.visionImages,
-          debugAssets.waitFreezesImages,
-          textFiles,
-        )
+      const { content: combinedContent, scopedFiles } = await resolveSelectedLogContent(files)
+      if (!combinedContent) {
+        alert(`文件夹中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
+        return
       }
+
+      const textFiles = await collectTextFilesFromFiles(scopedFiles)
+      const debugAssets = await collectDebugAssetsFromFiles(scopedFiles)
+      options.onUploadContent(
+        combinedContent,
+        debugAssets.errorImages,
+        debugAssets.visionImages,
+        debugAssets.waitFreezesImages,
+        textFiles,
+      )
     } catch (error) {
       alert('读取文件失败: ' + error)
     } finally {

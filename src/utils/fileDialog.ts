@@ -5,13 +5,16 @@
 
 import { isTauri, isVSCode } from './platform'
 import { invoke } from '@tauri-apps/api/core'
+import {
+  combineLoadedPrimaryLogSegments,
+  isPrimaryLogFileName,
+  PRIMARY_LOG_FILE_HINT,
+  selectPrimaryLogGroup,
+} from './logFileDiscovery'
 
 export { isTauri, isVSCode }
 
-const MAIN_LOG_CANDIDATES = ['maa.log', 'maafw.log'] as const
-const BAK_LOG_CANDIDATES = ['maa.bak.log', 'maafw.bak.log'] as const
 const TEXT_SEARCH_EXTENSIONS = ['.log', '.txt', '.jsonl'] as const
-const PRIMARY_LOG_NAME_SET = new Set<string>([...MAIN_LOG_CANDIDATES, ...BAK_LOG_CANDIDATES].map(name => name.toLowerCase()))
 
 export interface LoadedTextFile {
   path: string
@@ -32,7 +35,7 @@ const isTextSearchFileName = (name: string) => {
   return TEXT_SEARCH_EXTENSIONS.some(ext => lower.endsWith(ext))
 }
 
-const shouldSkipCollectedTextFile = (name: string) => PRIMARY_LOG_NAME_SET.has(name.toLowerCase())
+const shouldSkipCollectedTextFile = (name: string) => isPrimaryLogFileName(name)
 
 const toPosixPath = (value: string) => value.replace(/\\/g, '/')
 
@@ -419,6 +422,68 @@ async function collectTextFilesWeb(rootHandle: FileSystemDirectoryHandle): Promi
   return result
 }
 
+async function listPrimaryLogFilesTauri(dirPath: string): Promise<Array<{ path: string; name: string }>> {
+  const { readDir } = await import('@tauri-apps/plugin-fs')
+  const entries = await readDir(dirPath)
+  return entries
+    .filter(entry => !entry.isDirectory && !!entry.name && isPrimaryLogFileName(entry.name))
+    .map(entry => ({
+      path: `${dirPath}\\${entry.name}`,
+      name: entry.name!,
+    }))
+}
+
+async function hasPrimaryLogInTauri(dirPath: string): Promise<boolean> {
+  return (await listPrimaryLogFilesTauri(dirPath)).length > 0
+}
+
+async function readCombinedPrimaryLogsTauri(dirPath: string): Promise<string> {
+  const { readTextFile } = await import('@tauri-apps/plugin-fs')
+  const selectedLogs = selectPrimaryLogGroup(await listPrimaryLogFilesTauri(dirPath))
+  if (selectedLogs.length === 0) return ''
+
+  const loadedLogs = await Promise.all(selectedLogs.map(async ({ item }) => ({
+    path: item.path,
+    name: item.name,
+    content: await readTextFile(item.path),
+  })))
+
+  return combineLoadedPrimaryLogSegments(loadedLogs)
+}
+
+async function listPrimaryLogFilesWeb(
+  dirHandle: FileSystemDirectoryHandle,
+): Promise<Array<{ path: string; name: string; handle: FileSystemFileHandle }>> {
+  const result: Array<{ path: string; name: string; handle: FileSystemFileHandle }> = []
+  for await (const entry of dirHandle.values()) {
+    if (entry.kind !== 'file') continue
+    if (!isPrimaryLogFileName(entry.name)) continue
+    result.push({
+      path: entry.name,
+      name: entry.name,
+      handle: entry as FileSystemFileHandle,
+    })
+  }
+  return result
+}
+
+async function hasPrimaryLogInWeb(dirHandle: FileSystemDirectoryHandle): Promise<boolean> {
+  return (await listPrimaryLogFilesWeb(dirHandle)).length > 0
+}
+
+async function readCombinedPrimaryLogsWeb(dirHandle: FileSystemDirectoryHandle): Promise<string> {
+  const selectedLogs = selectPrimaryLogGroup(await listPrimaryLogFilesWeb(dirHandle))
+  if (selectedLogs.length === 0) return ''
+
+  const loadedLogs = await Promise.all(selectedLogs.map(async ({ item }) => ({
+    path: item.path,
+    name: item.name,
+    content: await (await item.handle.getFile()).text(),
+  })))
+
+  return combineLoadedPrimaryLogSegments(loadedLogs)
+}
+
 /**
  * 打开文件夹并读取日志
  */
@@ -437,7 +502,7 @@ async function openFolderDialogTauri(): Promise<OpenFolderResult | null> {
 
   try {
     const { open } = await import('@tauri-apps/plugin-dialog')
-    const { readTextFile, exists } = await import('@tauri-apps/plugin-fs')
+    const { exists } = await import('@tauri-apps/plugin-fs')
 
     console.log('[文件夹] 打开文件夹对话框')
 
@@ -453,24 +518,16 @@ async function openFolderDialogTauri(): Promise<OpenFolderResult | null> {
     }
 
     console.log('[文件夹] 选择的路径:', selected)
-
-    const hasAnyLogIn = async (dirPath: string) => {
-      for (const name of [...BAK_LOG_CANDIDATES, ...MAIN_LOG_CANDIDATES]) {
-        if (await exists(`${dirPath}\\${name}`)) return true
-      }
-      return false
-    }
-
     let debugPath = selected
 
-    if (!(await hasAnyLogIn(debugPath))) {
+    if (!(await hasPrimaryLogInTauri(debugPath))) {
       debugPath = `${selected}\\debug`
 
-      if (!(await exists(debugPath)) || !(await hasAnyLogIn(debugPath))) {
+      if (!(await exists(debugPath)) || !(await hasPrimaryLogInTauri(debugPath))) {
         console.log('[文件夹] debug文件夹不存在或不含日志，开始递归查找')
         const found = await findDebugFolder(selected)
-        if (!found || !(await hasAnyLogIn(found))) {
-          alert('未找到debug文件夹或日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
+        if (!found || !(await hasPrimaryLogInTauri(found))) {
+          alert(`未找到debug文件夹或日志文件（${PRIMARY_LOG_FILE_HINT}）`)
           return null
         }
         debugPath = found
@@ -478,31 +535,11 @@ async function openFolderDialogTauri(): Promise<OpenFolderResult | null> {
       }
     }
 
-    let content = ''
-
     console.log('[文件夹] 读取日志文件')
-
-    for (const bakName of BAK_LOG_CANDIDATES) {
-      const bakLogPath = `${debugPath}\\${bakName}`
-      if (await exists(bakLogPath)) {
-        console.log(`[文件夹] 读取 ${bakName}`)
-        content += await readTextFile(bakLogPath)
-      }
-    }
-
-    for (const mainName of MAIN_LOG_CANDIDATES) {
-      const mainLogPath = `${debugPath}\\${mainName}`
-      if (await exists(mainLogPath)) {
-        console.log(`[文件夹] 读取 ${mainName}`)
-        if (content && !content.endsWith('\n')) {
-          content += '\n'
-        }
-        content += await readTextFile(mainLogPath)
-      }
-    }
+    const content = await readCombinedPrimaryLogsTauri(debugPath)
 
     if (!content) {
-      alert('未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
+      alert(`未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
       return null
     }
 
@@ -668,32 +705,20 @@ async function openFolderDialogWeb(): Promise<OpenFolderResult | null> {
     const dirHandle = await (window as any).showDirectoryPicker()
     console.log('[文件夹] 选择的文件夹:', dirHandle.name)
 
-    const hasAnyLogIn = async (handle: FileSystemDirectoryHandle) => {
-      for (const name of [...BAK_LOG_CANDIDATES, ...MAIN_LOG_CANDIDATES]) {
-        try {
-          await handle.getFileHandle(name)
-          return true
-        } catch {
-          // continue
-        }
-      }
-      return false
-    }
-
     let debugHandle = dirHandle
 
-    if (!(await hasAnyLogIn(dirHandle))) {
+    if (!(await hasPrimaryLogInWeb(dirHandle))) {
       try {
         debugHandle = await dirHandle.getDirectoryHandle('debug')
-        if (!(await hasAnyLogIn(debugHandle))) {
+        if (!(await hasPrimaryLogInWeb(debugHandle))) {
           throw new Error('debug 不含日志')
         }
         console.log('[文件夹] 找到 debug 子文件夹')
       } catch {
         console.log('[文件夹] debug子文件夹不存在或不含日志，开始递归查找')
         const found = await findDebugFolderWeb(dirHandle)
-        if (!found || !(await hasAnyLogIn(found))) {
-          alert('未找到debug文件夹或日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
+        if (!found || !(await hasPrimaryLogInWeb(found))) {
+          alert(`未找到debug文件夹或日志文件（${PRIMARY_LOG_FILE_HINT}）`)
           return null
         }
         debugHandle = found
@@ -703,31 +728,10 @@ async function openFolderDialogWeb(): Promise<OpenFolderResult | null> {
       console.log('[文件夹] 当前文件夹就是 debug 文件夹')
     }
 
-    let content = ''
-
-    for (const bakName of BAK_LOG_CANDIDATES) {
-      try {
-        const bakLogHandle = await debugHandle.getFileHandle(bakName)
-        const bakFile = await bakLogHandle.getFile()
-        content += await bakFile.text()
-        console.log(`[文件夹] 读取 ${bakName}`)
-      } catch {}
-    }
-
-    for (const mainName of MAIN_LOG_CANDIDATES) {
-      try {
-        const mainLogHandle = await debugHandle.getFileHandle(mainName)
-        const mainFile = await mainLogHandle.getFile()
-        if (content && !content.endsWith('\n')) {
-          content += '\n'
-        }
-        content += await mainFile.text()
-        console.log(`[文件夹] 读取 ${mainName}`)
-      } catch {}
-    }
+    const content = await readCombinedPrimaryLogsWeb(debugHandle)
 
     if (!content) {
-      alert('未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
+      alert(`未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
       return null
     }
 

@@ -7,9 +7,12 @@
 
 import { unzipSync } from 'fflate'
 import { decodeFileContent } from './fileDialog'
+import {
+  combineLoadedPrimaryLogSegments,
+  isPrimaryLogFileName,
+  selectPrimaryLogGroup,
+} from './logFileDiscovery'
 
-const MAIN_LOG_NAMES = ['maa.log', 'maafw.log'] as const
-const BAK_LOG_NAMES = ['maa.bak.log', 'maafw.bak.log'] as const
 const SEARCH_TEXT_EXTENSIONS = ['.log', '.txt', '.jsonl'] as const
 
 export interface ExtractedTextFile {
@@ -28,8 +31,7 @@ function isNeededFile(path: string): boolean {
   const lower = path.replace(/\\/g, '/').toLowerCase()
   const name = lower.substring(lower.lastIndexOf('/') + 1)
   if (isSearchTextFile(lower)) return true
-  // 日志文件
-  if (MAIN_LOG_NAMES.includes(name as (typeof MAIN_LOG_NAMES)[number]) || BAK_LOG_NAMES.includes(name as (typeof BAK_LOG_NAMES)[number])) return true
+  if (isPrimaryLogFileName(name)) return true
   // on_error 截图
   if (lower.includes('/on_error/') && lower.endsWith('.png')) return true
   // vision 调试截图
@@ -60,35 +62,27 @@ export async function extractZipContent(
   })
 
   const paths = Object.keys(files)
-
-  // 找到主日志所在的 base 目录
-  const basePath = findBaseDirectory(paths)
-  if (basePath === null) {
+  const selectedLogs = selectPrimaryLogGroup(paths.map((path) => ({
+    path,
+    name: path.replace(/\\/g, '/').split('/').pop() || path,
+  })))
+  if (selectedLogs.length === 0) {
     return null
   }
 
-  // 读取日志内容
-  let content = ''
-
-  const bakLogName = BAK_LOG_NAMES.find((name) => findFile(files, paths, joinPath(basePath, name)))
-  const mainLogName = MAIN_LOG_NAMES.find((name) => findFile(files, paths, joinPath(basePath, name)))
-
-  // 先读 bak
-  const bakLogPath = bakLogName ? joinPath(basePath, bakLogName) : ''
-  const bakLogData = bakLogPath ? findFile(files, paths, bakLogPath) : null
-  if (bakLogData) {
-    content += decodeFileContent(bakLogData)
-  }
-
-  // 再读主日志
-  const mainLogPath = mainLogName ? joinPath(basePath, mainLogName) : ''
-  const mainLogData = mainLogPath ? findFile(files, paths, mainLogPath) : null
-  if (mainLogData) {
-    if (content && !content.endsWith('\n')) {
-      content += '\n'
-    }
-    content += decodeFileContent(mainLogData)
-  }
+  const basePath = selectedLogs[0].candidate.dirPath
+  const loadedLogs = selectedLogs
+    .map(({ item }) => {
+      const data = findFile(files, paths, item.path)
+      if (!data) return null
+      return {
+        path: item.path,
+        name: item.name,
+        content: decodeFileContent(data),
+      }
+    })
+    .filter((entry): entry is { path: string; name: string; content: string } => entry != null)
+  const content = combineLoadedPrimaryLogSegments(loadedLogs)
 
   if (!content) {
     return null
@@ -102,31 +96,9 @@ export async function extractZipContent(
 
   // 读取 wait_freezes 调试截图
   const waitFreezesImages = extractWaitFreezesImages(files, paths, basePath)
-  const textFiles = extractSearchTextFiles(files, paths)
+  const textFiles = extractSearchTextFiles(files, paths, basePath)
 
   return { content, errorImages, visionImages, waitFreezesImages, textFiles }
-}
-
-/**
- * 找到主日志所在的 base 目录
- * 支持：根目录日志、debug/日志、xxx/debug/日志
- */
-function findBaseDirectory(paths: string[]): string | null {
-  const normalizedPaths = paths.map((p) => p.replace(/\\/g, '/'))
-
-  for (const p of normalizedPaths) {
-    const lower = p.toLowerCase()
-    if (
-      lower.endsWith('/maa.log') ||
-      lower === 'maa.log' ||
-      lower.endsWith('/maafw.log') ||
-      lower === 'maafw.log'
-    ) {
-      const lastSlash = p.lastIndexOf('/')
-      return lastSlash === -1 ? '' : p.substring(0, lastSlash)
-    }
-  }
-  return null
 }
 
 /**
@@ -290,10 +262,14 @@ function extractWaitFreezesImages(
 function extractSearchTextFiles(
   files: Record<string, Uint8Array>,
   paths: string[],
+  basePath: string,
 ): ExtractedTextFile[] {
   const textFiles: ExtractedTextFile[] = []
+  const basePrefix = basePath ? `${basePath.toLowerCase()}/` : ''
   for (const p of paths) {
     const normalized = p.replace(/\\/g, '/')
+    const lower = normalized.toLowerCase()
+    if (basePrefix && !lower.startsWith(basePrefix)) continue
     if (!isSearchTextFile(normalized)) continue
     const data = files[p]
     if (!data) continue

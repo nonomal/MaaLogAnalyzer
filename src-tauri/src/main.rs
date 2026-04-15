@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use std::collections::HashMap;
+use std::cmp::Ordering;
 use std::io::{Read, copy};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -11,8 +12,29 @@ use tauri::Manager;
 
 use serde::Serialize;
 
-const MAIN_LOG_CANDIDATES: [&str; 2] = ["maa.log", "maafw.log"];
-const BAK_LOG_CANDIDATES: [&str; 2] = ["maa.bak.log", "maafw.bak.log"];
+const PRIMARY_LOG_FILE_HINT: &str = "maa.log / maa.bak*.log / maafw.log / maafw.bak*.log";
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum PrimaryLogKind {
+    Main,
+    Bak,
+}
+
+#[derive(Clone)]
+struct PrimaryLogCandidate {
+    path: String,
+    dir_path: String,
+    kind: PrimaryLogKind,
+    rotated_timestamp_hint: Option<String>,
+}
+
+struct LoadedPrimaryLogSegment {
+    path: String,
+    kind: PrimaryLogKind,
+    rotated_timestamp_hint: Option<String>,
+    content_timestamp: Option<String>,
+    content: String,
+}
 
 #[derive(Serialize)]
 struct ZipExtractResult {
@@ -34,21 +56,20 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
         .filter_map(|i| archive.by_index(i).ok().map(|f| f.name().to_string()))
         .collect();
 
-    // Find base directory containing main log (maa.log / maafw.log)
-    let base = find_base_directory(&names).ok_or("ZIP 中未找到主日志文件（maa.log / maafw.log）")?;
+    let selected_logs = select_primary_log_group(&names);
+    if selected_logs.is_empty() {
+        return Err(format!("ZIP 中未找到主日志文件（{PRIMARY_LOG_FILE_HINT}）"));
+    }
 
-    let bak_log_paths: Vec<String> = BAK_LOG_CANDIDATES
-        .iter()
-        .map(|name| join_path(&base, name))
-        .collect();
-    let main_log_paths: Vec<String> = MAIN_LOG_CANDIDATES
-        .iter()
-        .map(|name| join_path(&base, name))
+    let base = selected_logs[0].dir_path.clone();
+    let selected_log_lookup: HashMap<String, PrimaryLogCandidate> = selected_logs
+        .into_iter()
+        .map(|candidate| (candidate.path.to_lowercase(), candidate))
         .collect();
     let on_error_prefix = join_path(&base, "on_error/");
     let vision_prefix = join_path(&base, "vision/");
 
-    let mut content = String::new();
+    let mut log_segments: Vec<LoadedPrimaryLogSegment> = Vec::new();
     let mut error_images: HashMap<String, String> = HashMap::new();
     let mut vision_images: HashMap<String, String> = HashMap::new();
     let mut wait_freezes_images: HashMap<String, String> = HashMap::new();
@@ -58,17 +79,17 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
         let name = entry.name().replace('\\', "/");
         let lower = name.to_lowercase();
 
-        if bak_log_paths.iter().any(|p| lower == p.to_lowercase()) {
+        if let Some(candidate) = selected_log_lookup.get(&lower) {
             let mut buf = Vec::new();
             entry.read_to_end(&mut buf).map_err(|e| format!("读取失败: {e}"))?;
-            content.push_str(&decode_content(&buf));
-        } else if main_log_paths.iter().any(|p| lower == p.to_lowercase()) {
-            if !content.is_empty() && !content.ends_with('\n') {
-                content.push('\n');
-            }
-            let mut buf = Vec::new();
-            entry.read_to_end(&mut buf).map_err(|e| format!("读取失败: {e}"))?;
-            content.push_str(&decode_content(&buf));
+            let content = decode_content(&buf);
+            log_segments.push(LoadedPrimaryLogSegment {
+                path: candidate.path.clone(),
+                kind: candidate.kind,
+                rotated_timestamp_hint: candidate.rotated_timestamp_hint.clone(),
+                content_timestamp: extract_first_log_timestamp(&content),
+                content,
+            });
         } else if lower.starts_with(&on_error_prefix.to_lowercase()) && lower.ends_with(".png") {
             // Extract filename
             let file_name = name.rsplit('/').next().unwrap_or("");
@@ -87,6 +108,18 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
                 vision_images.insert(key, saved_path);
             }
         }
+    }
+
+    log_segments.sort_by(compare_loaded_log_segments);
+    let mut content = String::new();
+    for segment in log_segments {
+        if segment.content.is_empty() {
+            continue;
+        }
+        if !content.is_empty() && !content.ends_with('\n') {
+            content.push('\n');
+        }
+        content.push_str(&segment.content);
     }
 
     if content.is_empty() {
@@ -134,24 +167,151 @@ fn save_zip_entry_to_temp_file(
     Ok(path.to_string_lossy().into_owned())
 }
 
-/// Find the base directory containing main log (maa.log / maafw.log)
-fn find_base_directory(paths: &[String]) -> Option<String> {
-    for p in paths {
-        let normalized = p.replace('\\', "/");
-        let lower = normalized.to_lowercase();
-        if lower.ends_with("/maa.log")
-            || lower == "maa.log"
-            || lower.ends_with("/maafw.log")
-            || lower == "maafw.log"
-        {
-            let last_slash = normalized.rfind('/');
-            return Some(match last_slash {
-                Some(idx) => normalized[..idx].to_string(),
-                None => String::new(),
-            });
+fn normalize_timestamp_milliseconds(value: &str) -> Option<String> {
+    let dot_pos = value.rfind('.')?;
+    let ms = &value[dot_pos + 1..];
+    if ms.is_empty() || ms.len() > 3 || !ms.chars().all(|c| c.is_ascii_digit()) {
+        return None;
+    }
+    Some(format!("{}.{:0<3}", &value[..dot_pos], ms))
+}
+
+fn looks_like_rotation_timestamp(value: &str) -> bool {
+    let chars: Vec<char> = value.chars().collect();
+    if chars.len() < 21 || chars.len() > 23 {
+        return false;
+    }
+    for (idx, ch) in chars.iter().enumerate() {
+        let expected_sep = match idx {
+            4 | 7 | 13 | 16 => Some('.'),
+            10 => Some('-'),
+            _ => None,
+        };
+        if let Some(sep) = expected_sep {
+            if *ch != sep {
+                return false;
+            }
+        } else if !ch.is_ascii_digit() {
+            return false;
         }
     }
-    None
+    true
+}
+
+fn parse_primary_log_candidate(raw_path: &str) -> Option<PrimaryLogCandidate> {
+    let normalized = raw_path.replace('\\', "/");
+    let file_name = normalized.rsplit('/').next()?.to_string();
+    let lower = file_name.trim().to_ascii_lowercase();
+
+    let (kind, rotated_timestamp_hint) = if lower == "maa.log" || lower == "maafw.log" {
+        (PrimaryLogKind::Main, None)
+    } else if lower == "maa.bak.log" || lower == "maafw.bak.log" {
+        (PrimaryLogKind::Bak, None)
+    } else if let Some(rest) = lower
+        .strip_prefix("maa.bak.")
+        .or_else(|| lower.strip_prefix("maafw.bak."))
+    {
+        let timestamp = rest.strip_suffix(".log")?;
+        if !looks_like_rotation_timestamp(timestamp) {
+            return None;
+        }
+        (PrimaryLogKind::Bak, normalize_timestamp_milliseconds(timestamp))
+    } else {
+        return None;
+    };
+
+    let dir_path = match normalized.rfind('/') {
+        Some(idx) => normalized[..idx].to_string(),
+        None => String::new(),
+    };
+
+    Some(PrimaryLogCandidate {
+        path: normalized,
+        dir_path,
+        kind,
+        rotated_timestamp_hint,
+    })
+}
+
+fn select_primary_log_group(paths: &[String]) -> Vec<PrimaryLogCandidate> {
+    let mut groups: HashMap<String, Vec<PrimaryLogCandidate>> = HashMap::new();
+    for path in paths {
+        if let Some(candidate) = parse_primary_log_candidate(path) {
+            groups
+                .entry(candidate.dir_path.clone())
+                .or_default()
+                .push(candidate);
+        }
+    }
+
+    let mut ranked_groups: Vec<(String, Vec<PrimaryLogCandidate>)> = groups.into_iter().collect();
+    ranked_groups.sort_by(|(dir_a, group_a), (dir_b, group_b)| {
+        let main_count_a = group_a.iter().filter(|entry| entry.kind == PrimaryLogKind::Main).count();
+        let main_count_b = group_b.iter().filter(|entry| entry.kind == PrimaryLogKind::Main).count();
+        let has_main_a = main_count_a > 0;
+        let has_main_b = main_count_b > 0;
+        if has_main_a != has_main_b {
+            return if has_main_a { Ordering::Less } else { Ordering::Greater };
+        }
+
+        let depth_a = if dir_a.is_empty() { 0 } else { dir_a.split('/').filter(|part| !part.is_empty()).count() };
+        let depth_b = if dir_b.is_empty() { 0 } else { dir_b.split('/').filter(|part| !part.is_empty()).count() };
+        if depth_a != depth_b {
+            return depth_a.cmp(&depth_b);
+        }
+
+        if main_count_a != main_count_b {
+            return main_count_b.cmp(&main_count_a);
+        }
+
+        if group_a.len() != group_b.len() {
+            return group_b.len().cmp(&group_a.len());
+        }
+
+        dir_a.cmp(dir_b)
+    });
+
+    ranked_groups.into_iter().next().map(|(_, group)| group).unwrap_or_default()
+}
+
+fn extract_first_log_timestamp(content: &str) -> Option<String> {
+    let start = content.find('[')?;
+    let rest = &content[start + 1..];
+    let end = rest.find(']')?;
+    normalize_timestamp_milliseconds(&rest[..end])
+}
+
+fn compare_optional_strings(a: Option<&String>, b: Option<&String>) -> Ordering {
+    match (a, b) {
+        (Some(left), Some(right)) => left.cmp(right),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
+fn compare_loaded_log_segments(a: &LoadedPrimaryLogSegment, b: &LoadedPrimaryLogSegment) -> Ordering {
+    let chrono_a = a.content_timestamp.as_ref().or(a.rotated_timestamp_hint.as_ref());
+    let chrono_b = b.content_timestamp.as_ref().or(b.rotated_timestamp_hint.as_ref());
+    let chrono_cmp = compare_optional_strings(chrono_a, chrono_b);
+    if chrono_cmp != Ordering::Equal {
+        return chrono_cmp;
+    }
+
+    let content_cmp = compare_optional_strings(a.content_timestamp.as_ref(), b.content_timestamp.as_ref());
+    if content_cmp != Ordering::Equal {
+        return content_cmp;
+    }
+
+    if a.kind != b.kind {
+        return if a.kind == PrimaryLogKind::Bak {
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        };
+    }
+
+    a.path.cmp(&b.path)
 }
 
 /// Join base path and file name
