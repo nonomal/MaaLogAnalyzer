@@ -33,8 +33,8 @@ const expandedAttempts = ref<Map<number, boolean>>(new Map())
 // 跟踪 Recognition 部分是否展开
 const recognitionExpanded = ref(!settings.defaultCollapseRecognition)
 
-// 跟踪 Action 部分是否展开
-const actionExpanded = ref(!settings.defaultCollapseNestedActionNodes)
+// 跟踪根部 Action 列表是否展开
+const actionExpanded = ref(!settings.defaultCollapseRootActionList)
 
 const forceExpandRelatedWhileRunning = computed(() => props.node.status === 'running')
 const effectiveRecognitionExpanded = computed(() => forceExpandRelatedWhileRunning.value || recognitionExpanded.value)
@@ -43,7 +43,7 @@ const effectiveActionExpanded = computed(() => forceExpandRelatedWhileRunning.va
 // 监听node变化，清空展开状态
 const syncSectionExpandStateFromSettings = () => {
   recognitionExpanded.value = !settings.defaultCollapseRecognition
-  actionExpanded.value = !settings.defaultCollapseNestedActionNodes
+  actionExpanded.value = !settings.defaultCollapseRootActionList
 }
 
 watch(() => props.node?.node_id, () => {
@@ -55,7 +55,7 @@ watch(() => props.node?.node_id, () => {
 watch(
   [
     () => settings.defaultCollapseRecognition,
-    () => settings.defaultCollapseNestedActionNodes,
+    () => settings.defaultCollapseRootActionList,
   ],
   syncSectionExpandStateFromSettings,
   { flush: 'sync' }
