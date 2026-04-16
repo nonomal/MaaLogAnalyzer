@@ -3,9 +3,10 @@ import type { ProtocolEvent } from '../protocol/types'
 import { createQueryHelpers } from '../query/helpers'
 import type { NodeExecutionRef, QueryRawLine } from '../query/queryTypes'
 import { getRawLine, getRawLinesByRefs } from '../raw/store'
+import type { NodeInfo, TaskInfo, UnifiedFlowItem } from '../shared/types'
 import { readScopeIdentityFields } from '../trace/scopeId'
 import type { ScopeNode, ScopeStatus } from '../trace/scopeTypes'
-import { buildLineEvidence } from './evidenceBuilders'
+import { buildEvidence, buildLineEvidence } from './evidenceBuilders'
 import { createAnalyzerSessionStore } from './sessionStore'
 import type {
   AnalyzerSession,
@@ -152,6 +153,9 @@ const normalizeResolvedSources = (
   sourceKey: string
   sourcePath?: string
   inputIndex: number
+  errorImages?: Map<string, string>
+  visionImages?: Map<string, string>
+  waitFreezesImages?: Map<string, string>
 }> => {
   if (!resolved) return []
 
@@ -166,6 +170,9 @@ const normalizeResolvedSources = (
         sourceKey,
         sourcePath,
         inputIndex: sourceOffsetBase + offset,
+        errorImages: entry.error_images,
+        visionImages: entry.vision_images,
+        waitFreezesImages: entry.wait_freezes_images,
       }
     })
 }
@@ -278,6 +285,174 @@ const resolveNodeExecutions = (
   }
 
   return requireUnique ? { executions: [executions[0]] } : { executions }
+}
+
+const MAX_IMAGE_EVIDENCES = 20
+
+const sortNodeOccurrences = (
+  nodes: NodeInfo[],
+): NodeInfo[] => {
+  return [...nodes].sort((left, right) => {
+    const tsDiff = left.ts.localeCompare(right.ts)
+    if (tsDiff !== 0) return tsDiff
+    return left.name.localeCompare(right.name)
+  })
+}
+
+const findTaskById = (
+  session: AnalyzerSession,
+  taskId: number,
+): TaskInfo | undefined => {
+  return session.tasks.find((task) => task.task_id === taskId)
+}
+
+const findTaskNodeOccurrence = (
+  task: TaskInfo,
+  nodeId: number,
+  occurrenceIndex?: number,
+): NodeInfo | undefined => {
+  const matched = sortNodeOccurrences(task.nodes.filter((node) => node.node_id === nodeId))
+  if (matched.length === 0) return undefined
+  if (occurrenceIndex == null || occurrenceIndex <= 0) {
+    return matched[0]
+  }
+  return matched[occurrenceIndex - 1]
+}
+
+const collectImageEvidencesFromFlowItems = (
+  sessionId: string,
+  taskId: number,
+  nodeId: number | undefined,
+  occurrenceIndex: number | undefined,
+  items: UnifiedFlowItem[] | undefined,
+): ReturnType<typeof buildEvidence>[] => {
+  if (!items || items.length === 0) return []
+
+  const evidences: ReturnType<typeof buildEvidence>[] = []
+  const seen = new Set<string>()
+
+  const pushImageEvidence = (
+    imageKind: 'error' | 'vision' | 'wait_freezes',
+    imagePath: string | undefined,
+    item: UnifiedFlowItem,
+  ): void => {
+    if (!imagePath) return
+    const dedupeKey = `${imageKind}:${item.type}:${item.name}:${imagePath}`
+    if (seen.has(dedupeKey)) return
+    seen.add(dedupeKey)
+    evidences.push(buildEvidence({
+      source_tool: 'image_projection',
+      source_range: {
+        session_id: sessionId,
+        task_id: taskId,
+        node_id: nodeId,
+        occurrence_index: occurrenceIndex,
+      },
+      payload: {
+        image_kind: imageKind,
+        image_path: imagePath,
+        scope_kind: item.type,
+        scope_name: item.name,
+      },
+    }))
+  }
+
+  const walk = (currentItems: UnifiedFlowItem[]): void => {
+    for (const item of currentItems) {
+      pushImageEvidence('error', item.error_image, item)
+      pushImageEvidence('vision', item.vision_image, item)
+      for (const imagePath of item.wait_freezes_details?.images ?? []) {
+        pushImageEvidence('wait_freezes', imagePath, item)
+      }
+      if (item.children?.length) {
+        walk(item.children)
+      }
+    }
+  }
+
+  walk(items)
+  return evidences.slice(0, MAX_IMAGE_EVIDENCES)
+}
+
+const buildNodeImageEvidences = (
+  session: AnalyzerSession,
+  taskId: number,
+  nodeId: number,
+  occurrenceIndex?: number,
+): ReturnType<typeof buildEvidence>[] => {
+  const task = findTaskById(session, taskId)
+  if (!task) return []
+
+  const node = findTaskNodeOccurrence(task, nodeId, occurrenceIndex)
+  if (!node) return []
+
+  const evidences: ReturnType<typeof buildEvidence>[] = []
+  const seen = new Set<string>()
+  const pushEvidence = (evidence: ReturnType<typeof buildEvidence>): void => {
+    if (seen.has(evidence.evidence_id)) return
+    seen.add(evidence.evidence_id)
+    evidences.push(evidence)
+  }
+
+  if (node.error_image) {
+    pushEvidence(buildEvidence({
+      source_tool: 'image_projection',
+      source_range: {
+        session_id: session.sessionId,
+        task_id: taskId,
+        node_id: nodeId,
+        occurrence_index: occurrenceIndex,
+      },
+      payload: {
+        image_kind: 'error',
+        image_path: node.error_image,
+        scope_kind: 'pipeline_node',
+        scope_name: node.name,
+      },
+    }))
+  }
+
+  for (const evidence of collectImageEvidencesFromFlowItems(
+    session.sessionId,
+    taskId,
+    nodeId,
+    occurrenceIndex,
+    node.node_flow,
+  )) {
+    pushEvidence(evidence)
+  }
+
+  return evidences.slice(0, MAX_IMAGE_EVIDENCES)
+}
+
+const buildTaskImageEvidences = (
+  session: AnalyzerSession,
+  taskId: number,
+): ReturnType<typeof buildEvidence>[] => {
+  const task = findTaskById(session, taskId)
+  if (!task) return []
+
+  const evidences: ReturnType<typeof buildEvidence>[] = []
+  const seen = new Set<string>()
+
+  for (const node of sortNodeOccurrences(task.nodes)) {
+    const nodeEvidences = buildNodeImageEvidences(
+      session,
+      taskId,
+      node.node_id,
+      task.nodes.filter((item) => item.node_id === node.node_id && item.ts <= node.ts).length,
+    )
+    for (const evidence of nodeEvidences) {
+      if (seen.has(evidence.evidence_id)) continue
+      seen.add(evidence.evidence_id)
+      evidences.push(evidence)
+      if (evidences.length >= MAX_IMAGE_EVIDENCES) {
+        return evidences
+      }
+    }
+  }
+
+  return evidences
 }
 
 const buildTimelineEvidences = (
@@ -423,6 +598,9 @@ export const createAnalyzerToolHandlers = (
           sourceKey: string
           sourcePath?: string
           inputIndex: number
+          errorImages?: Map<string, string>
+          visionImages?: Map<string, string>
+          waitFreezesImages?: Map<string, string>
         }> = []
         let sourceOffset = 0
         for (const [inputIndex, input] of args.inputs.entries()) {
@@ -433,11 +611,37 @@ export const createAnalyzerToolHandlers = (
         }
 
         const parser = options.create_parser?.() ?? new LogParser()
+        const errorImages = new Map<string, string>()
+        const visionImages = new Map<string, string>()
+        const waitFreezesImages = new Map<string, string>()
+
+        for (const input of resolvedInputs) {
+          for (const [key, value] of input.errorImages ?? []) {
+            errorImages.set(key, value)
+          }
+          for (const [key, value] of input.visionImages ?? []) {
+            visionImages.set(key, value)
+          }
+          for (const [key, value] of input.waitFreezesImages ?? []) {
+            waitFreezesImages.set(key, value)
+          }
+        }
+
+        if (errorImages.size > 0) {
+          parser.setErrorImages?.(errorImages)
+        }
+        if (visionImages.size > 0) {
+          parser.setVisionImages?.(visionImages)
+        }
+        if (waitFreezesImages.size > 0) {
+          parser.setWaitFreezesImages?.(waitFreezesImages)
+        }
         await parser.parseInputs(resolvedInputs, undefined, {
           ...parseOptions,
           storeRawLines: true,
         })
         const artifacts = parser.getParseArtifactsSnapshot()
+        const tasks = parser.getTasksSnapshot()
         const warnings = buildWarnings(
           resolvedInputs.map((input) => ({
             content: input.content,
@@ -450,6 +654,7 @@ export const createAnalyzerToolHandlers = (
         store.set({
           sessionId: args.session_id,
           artifacts,
+          tasks,
           warnings,
           createdAt: options.now?.() ?? new Date().toISOString(),
         })
@@ -500,7 +705,10 @@ export const createAnalyzerToolHandlers = (
             failed_node_count: pipelineScopes.filter((scope) => scope.status === 'failed').length,
             reco_failed_count: countRecoFailures(session, args.task_id),
           },
-          evidences: buildTaskEvidences(session, taskScopes),
+          evidences: [
+            ...buildTaskEvidences(session, taskScopes),
+            ...buildTaskImageEvidences(session, args.task_id),
+          ],
         }, warnings, startedAt)
       }
 
@@ -574,14 +782,22 @@ export const createAnalyzerToolHandlers = (
 
       return ok({
         timeline,
-        evidences: buildTimelineEvidences(session, 'get_node_timeline', timeline.map((item) => ({
-          sourceKey: item.source_key,
-          line: item.line,
-          taskId: args.task_id,
-          nodeId: args.node_id,
-          scopeId: item.scope_id,
-          occurrenceIndex: item.occurrence_index,
-        }))),
+        evidences: [
+          ...buildTimelineEvidences(session, 'get_node_timeline', timeline.map((item) => ({
+            sourceKey: item.source_key,
+            line: item.line,
+            taskId: args.task_id,
+            nodeId: args.node_id,
+            scopeId: item.scope_id,
+            occurrenceIndex: item.occurrence_index,
+          }))),
+          ...buildNodeImageEvidences(
+            session,
+            args.task_id,
+            args.node_id,
+            resolution.executions[0]?.occurrenceIndex,
+          ),
+        ],
       }, warnings, startedAt)
     },
 
@@ -645,14 +861,22 @@ export const createAnalyzerToolHandlers = (
 
       return ok({
         history,
-        evidences: buildTimelineEvidences(session, 'get_next_list_history', history.map((item) => ({
-          sourceKey: item.source_key,
-          line: item.line,
-          taskId: args.task_id,
-          nodeId: args.node_id,
-          scopeId: item.scope_id,
-          occurrenceIndex: item.occurrence_index,
-        }))),
+        evidences: [
+          ...buildTimelineEvidences(session, 'get_next_list_history', history.map((item) => ({
+            sourceKey: item.source_key,
+            line: item.line,
+            taskId: args.task_id,
+            nodeId: args.node_id,
+            scopeId: item.scope_id,
+            occurrenceIndex: item.occurrence_index,
+          }))),
+          ...buildNodeImageEvidences(
+            session,
+            args.task_id,
+            args.node_id,
+            resolution.executions[0]?.occurrenceIndex,
+          ),
+        ],
       }, warnings, startedAt)
     },
 
@@ -715,18 +939,26 @@ export const createAnalyzerToolHandlers = (
 
       return ok({
         chain,
-        evidences: buildTimelineEvidences(session, 'get_parent_chain', chain.map((item) => {
-          const scope = session.artifacts.index.scopeById.get(item.scope_id)
-          const startEvent = scope ? readScopeEvent(scope, 'startEvent') : null
-          return {
-            sourceKey: startEvent?.source.sourceKey,
-            line: startEvent?.source.line,
-            taskId: item.task_id,
-            nodeId: item.node_id,
-            scopeId: item.scope_id,
-            occurrenceIndex: item.occurrence_index,
-          }
-        })),
+        evidences: [
+          ...buildTimelineEvidences(session, 'get_parent_chain', chain.map((item) => {
+            const scope = session.artifacts.index.scopeById.get(item.scope_id)
+            const startEvent = scope ? readScopeEvent(scope, 'startEvent') : null
+            return {
+              sourceKey: startEvent?.source.sourceKey,
+              line: startEvent?.source.line,
+              taskId: item.task_id,
+              nodeId: item.node_id,
+              scopeId: item.scope_id,
+              occurrenceIndex: item.occurrence_index,
+            }
+          })),
+          ...buildNodeImageEvidences(
+            session,
+            args.task_id,
+            args.node_id,
+            execution.occurrenceIndex,
+          ),
+        ],
       }, warnings, startedAt)
     },
 

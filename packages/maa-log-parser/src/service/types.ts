@@ -1,9 +1,11 @@
 import type { ParseArtifactsSnapshot, ParseFileOptions } from '../core/logParser'
+import type { TaskInfo } from '../shared/types'
 import type { ScopeKind } from '../trace/scopeTypes'
 
 export interface AnalyzerSession {
   sessionId: string
   artifacts: ParseArtifactsSnapshot
+  tasks: TaskInfo[]
   warnings: string[]
   createdAt: string
 }
@@ -24,6 +26,9 @@ export interface ResolvedLogSourceInput {
   content: string
   source_key?: string
   source_path?: string
+  error_images?: Map<string, string>
+  vision_images?: Map<string, string>
+  wait_freezes_images?: Map<string, string>
 }
 
 export interface ParseLogBundleArgs {
@@ -225,6 +230,10 @@ export interface AnalyzerToolHandlerOptions {
       options?: ParseFileOptions,
     ) => Promise<void>
     getParseArtifactsSnapshot: () => ParseArtifactsSnapshot
+    getTasksSnapshot: () => TaskInfo[]
+    setErrorImages?: (images: Map<string, string>) => void
+    setVisionImages?: (images: Map<string, string>) => void
+    setWaitFreezesImages?: (images: Map<string, string>) => void
   }
   now?: () => string
 }

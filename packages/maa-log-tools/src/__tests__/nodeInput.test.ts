@@ -56,6 +56,25 @@ describe('node input focus selectors', () => {
     expect(extracted?.content).not.toContain('OldHistory')
   })
 
+  it('collects root-level on_error screenshots for directory inputs', async () => {
+    const root = await mkdtemp(path.join(os.tmpdir(), 'mla-node-input-'))
+    tempRoots.push(root)
+    const debugDir = path.join(root, 'debug')
+    await mkdir(path.join(debugDir, 'on_error'), { recursive: true })
+
+    await writeFile(path.join(debugDir, 'maa.log'), `${makeTimestampedLine('2026-04-16 14:55:00.000', 'AutoCollectStart')}\n`)
+    await writeFile(
+      path.join(debugDir, 'on_error', '2026.04.16-14.57.56.745_AutoCollectRoute1AssertLocation.png'),
+      'fake-image',
+    )
+
+    const extracted = await loadNodeLogDirectory(root)
+    expect(extracted).not.toBeNull()
+    expect(extracted?.errorImages.get('2026.04.16-14.57.56.745_AutoCollectRoute1AssertLocation')).toContain(
+      'AutoCollectRoute1AssertLocation.png',
+    )
+  })
+
   it('filters zip logs by the same focus selectors', () => {
     const zipData = zipSync({
       'debug/maa.bak.20260415.log': strToU8(`${makeTimestampedLine('2026-04-15 09:00:00.000', 'OldHistory')}\n`),

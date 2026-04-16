@@ -158,6 +158,17 @@ const toFileReference = (absolutePath: string): string => {
   return `file:${toPosixPath(absolutePath)}`
 }
 
+const isRelativeImagePath = (
+  relativePath: string,
+  directory: 'on_error' | 'vision',
+  extension: '.png' | '.jpg',
+): boolean => {
+  const normalized = relativePath.toLowerCase()
+  return normalized === `${directory}${extension}`
+    || normalized.startsWith(`${directory}/`)
+    || normalized.includes(`/${directory}/`)
+}
+
 const normalizeTimestampBoundary = (value: string | undefined): string | null => {
   if (!value) return null
   const trimmed = value.trim()
@@ -494,14 +505,14 @@ export const loadNodeLogDirectory = async (
     const lowerRelativePath = relativePath.toLowerCase()
     const fileName = path.basename(absolutePath)
 
-    if (lowerRelativePath.includes('/on_error/') && lowerRelativePath.endsWith('.png')) {
+    if (isRelativeImagePath(lowerRelativePath, 'on_error', '.png')) {
       const key = parseErrorImageKey(fileName)
       if (key) {
         errorImages.set(key, toFileReference(absolutePath))
       }
     }
 
-    if (lowerRelativePath.includes('/vision/') && lowerRelativePath.endsWith('.jpg')) {
+    if (isRelativeImagePath(lowerRelativePath, 'vision', '.jpg')) {
       const visionKey = parseVisionImageKey(fileName)
       if (visionKey) {
         visionImages.set(visionKey, toFileReference(absolutePath))

@@ -221,4 +221,68 @@ describe('Analyzer tool handlers', () => {
       },
     ])
   })
+
+  it('returns projector-linked image evidences for task and node queries', async () => {
+    const failedContent = [
+      makeEventLine(1, 'Tasker.Task.Starting', { task_id: 7, entry: 'FailedTask', hash: 'hash-7', uuid: 'uuid-7' }),
+      makeEventLine(2, 'Node.PipelineNode.Starting', { task_id: 7, node_id: 701, name: 'FailedNode' }),
+      makeEventLine(3, 'Node.Recognition.Starting', { task_id: 7, reco_id: 1701, name: 'RecoNode' }),
+      makeEventLine(4, 'Node.Recognition.Succeeded', {
+        task_id: 7,
+        reco_id: 1701,
+        name: 'RecoNode',
+        reco_details: { reco_id: 1701, algorithm: 'DirectHit', box: [0, 0, 10, 10], detail: null, name: 'RecoNode' },
+      }),
+      makeEventLine(5, 'Node.Action.Starting', { task_id: 7, action_id: 2701, name: 'RecoNode' }),
+      makeEventLine(6, 'Node.Action.Failed', {
+        task_id: 7,
+        action_id: 2701,
+        name: 'RecoNode',
+        action_details: { action_id: 2701, action: 'Click', box: [0, 0, 10, 10], detail: {}, name: 'RecoNode', success: false },
+      }),
+      makeEventLine(7, 'Node.PipelineNode.Failed', {
+        task_id: 7,
+        node_id: 701,
+        name: 'FailedNode',
+        reco_details: { reco_id: 1701, algorithm: 'DirectHit', box: [0, 0, 10, 10], detail: null, name: 'RecoNode' },
+        node_details: { action_id: 2701, completed: false, name: 'RecoNode', node_id: 701, reco_id: 1701 },
+      }),
+      makeEventLine(8, 'Tasker.Task.Succeeded', { task_id: 7, entry: 'FailedTask', hash: 'hash-7', uuid: 'uuid-7' }),
+    ].join('\n')
+
+    const handlers = createAnalyzerToolHandlers({
+      async resolve_input() {
+        return { content: failedContent, source_key: 'failed.log', source_path: '/logs/failed.log' }
+      },
+      create_parser() {
+        const parser = new LogParser()
+        parser.setErrorImages(new Map([
+          ['2026.04.14-10.00.00.007_FailedNode', '/images/failed-node.png'],
+        ]))
+        parser.setVisionImages(new Map([
+          ['2026.04.14-10.00.00.004_RecoNode_1701', '/images/reco-vision.png'],
+        ]))
+        return parser
+      },
+    })
+
+    const parsed = await handlers.parse_log_bundle({
+      session_id: 's-images',
+      inputs: [
+        { path: '/logs/failed.log', kind: 'file' },
+      ],
+    })
+    expect(parsed.ok).toBe(true)
+
+    const timeline = await handlers.get_node_timeline({
+      session_id: 's-images',
+      task_id: 7,
+      node_id: 701,
+    })
+    expect(timeline.ok).toBe(true)
+    if (timeline.ok) {
+      expect(timeline.data.evidences.some((item) => item.payload.image_path === '/images/failed-node.png')).toBe(true)
+      expect(timeline.data.evidences.some((item) => item.payload.image_path === '/images/reco-vision.png')).toBe(true)
+    }
+  })
 })
