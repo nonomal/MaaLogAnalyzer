@@ -75,7 +75,7 @@ const forceCopyString = (value: string): string => {
 // milliseconds after the primary emitter. Keep the cross-source dedup window
 // wide enough so delayed mirrored terminal events do not create synthetic
 // empty scopes after the real scope has already been closed.
-const CROSS_SOURCE_DUPLICATE_WINDOW_MS = 50
+const CROSS_SOURCE_DUPLICATE_WINDOW_MS = 100
 
 export class LogParser {
   private events: EventNotification[] = []
