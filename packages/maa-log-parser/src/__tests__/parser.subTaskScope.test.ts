@@ -269,6 +269,114 @@ describe('LogParser sub task scoped node aggregation', () => {
     expect(nestedSubPipeline[0].item.status).toBe('success')
   })
 
+  it('nests outer-task wait_freezes into the active foreign pipeline flow', async () => {
+    const lines = [
+      makeEventLine(201, 'Tasker.Task.Starting', { task_id: 1, entry: 'MainTask', hash: 'h-main-3', uuid: 'u-main-3' }),
+      makeEventLine(202, 'Node.PipelineNode.Starting', { task_id: 1, node_id: 101, name: 'MainNode' }),
+      makeEventLine(203, 'Node.Action.Starting', { task_id: 1, action_id: 1001, name: 'SOSSelectNode' }),
+
+      makeEventLine(204, 'Node.PipelineNode.Starting', { task_id: 2, node_id: 201, name: 'Click' }),
+      makeEventLine(205, 'Node.NextList.Starting', {
+        task_id: 2,
+        name: 'Click',
+        list: [{ name: 'Click', anchor: false, jump_back: false }],
+      }),
+      makeEventLine(206, 'Node.Recognition.Starting', { task_id: 2, reco_id: 3001, name: 'Click' }),
+      makeEventLine(207, 'Node.Recognition.Succeeded', {
+        task_id: 2,
+        reco_id: 3001,
+        name: 'Click',
+        reco_details: {
+          reco_id: 3001,
+          algorithm: 'DirectHit',
+          box: [0, 0, 1280, 720],
+          detail: null,
+          name: 'Click',
+        },
+      }),
+      makeEventLine(208, 'Node.NextList.Succeeded', {
+        task_id: 2,
+        name: 'Click',
+        list: [{ name: 'Click', anchor: false, jump_back: false }],
+      }),
+      makeEventLine(209, 'Node.Action.Starting', { task_id: 2, action_id: 3002, name: 'Click' }),
+      makeEventLine(210, 'Node.Action.Succeeded', {
+        task_id: 2,
+        action_id: 3002,
+        name: 'Click',
+        action_details: {
+          action_id: 3002,
+          action: 'Click',
+          box: [0, 0, 1280, 720],
+          detail: {},
+          name: 'Click',
+          success: true,
+        },
+      }),
+      makeEventLine(211, 'Node.WaitFreezes.Starting', {
+        task_id: 1,
+        wf_id: 4001,
+        phase: 'post',
+        name: 'Click',
+      }),
+      makeEventLine(212, 'Node.WaitFreezes.Succeeded', {
+        task_id: 1,
+        wf_id: 4001,
+        phase: 'post',
+        name: 'Click',
+        elapsed: 33,
+      }),
+      makeEventLine(213, 'Node.PipelineNode.Succeeded', {
+        task_id: 2,
+        node_id: 201,
+        name: 'Click',
+      }),
+
+      makeEventLine(214, 'Node.Action.Succeeded', {
+        task_id: 1,
+        action_id: 1001,
+        name: 'SOSSelectNode',
+      }),
+      makeEventLine(215, 'Node.PipelineNode.Succeeded', { task_id: 1, node_id: 101, name: 'MainNode' }),
+      makeEventLine(216, 'Tasker.Task.Succeeded', { task_id: 1, entry: 'MainTask', hash: 'h-main-3', uuid: 'u-main-3' }),
+    ]
+
+    const parser = new LogParser()
+    await parser.parseFile(lines.join('\n'))
+    const tasks = parser.getTasksSnapshot()
+    const mainTask = tasks.find(item => item.task_id === 1)
+
+    expect(mainTask).toBeTruthy()
+    const mainNode = mainTask!.nodes[0]
+
+    const actionRoot = collectFlowItems(
+      mainNode.node_flow,
+      (item) => item.type === 'action' && item.action_id === 1001,
+    )[0]?.item
+    expect(actionRoot).toBeTruthy()
+
+    const nestedTask = collectFlowItems(
+      actionRoot?.children,
+      (item) => item.type === 'task' && item.task_id === 2,
+    )[0]?.item
+    expect(nestedTask).toBeTruthy()
+    expect(nestedTask?.children?.map((item) => item.type)).toEqual(['pipeline_node'])
+
+    const nestedPipeline = nestedTask?.children?.[0]
+    expect(nestedPipeline?.type).toBe('pipeline_node')
+    expect(nestedPipeline?.children?.map((item) => item.type)).toEqual([
+      'recognition',
+      'action',
+      'wait_freezes',
+    ])
+
+    const nestedWaitFreezes = nestedPipeline?.children?.[2]
+    expect(nestedWaitFreezes?.type).toBe('wait_freezes')
+    expect(nestedWaitFreezes?.task_id).toBe(1)
+    expect(nestedWaitFreezes?.node_id).toBe(201)
+    expect(nestedWaitFreezes?.wait_freezes_details?.wf_id).toBe(4001)
+  })
+
   it('tolerates malformed NextList payloads', async () => {
     const lines = [
       makeEventLine(151, 'Tasker.Task.Starting', { task_id: 31, entry: 'MainTask', hash: 'h-main-4', uuid: 'u-main-4' }),

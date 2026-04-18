@@ -231,6 +231,54 @@ const findNearestOpenBusinessScope = (
   return null
 }
 
+const findNearestOpenNonNextListBusinessScopeBySource = (
+  state: ReducerState,
+  event: ProtocolEvent,
+): TraceScopeNode | null => {
+  for (let index = state.openScopes.length - 1; index >= 0; index -= 1) {
+    const scope = state.openScopes[index]
+    if (!isBusinessScope(scope.kind) || scope.kind === 'next_list') continue
+    if (!matchesScopeSource(scope, event)) continue
+    return scope
+  }
+  return null
+}
+
+const resolveWaitFreezesParentScope = (
+  state: ReducerState,
+  event: WaitFreezesEvent,
+): TraceRootNode | TraceScopeNode => {
+  const taskId = event.taskId
+  const sameSourceScope = findNearestOpenBusinessScope(state, { event })
+  if (
+    sameSourceScope
+    && taskId != null
+    && sameSourceScope.taskId != null
+    && sameSourceScope.taskId !== taskId
+  ) {
+    if (sameSourceScope.kind !== 'next_list') {
+      return sameSourceScope
+    }
+
+    const sameSourceForeignScope = findNearestOpenNonNextListBusinessScopeBySource(state, event)
+    if (
+      sameSourceForeignScope
+      && sameSourceForeignScope.taskId != null
+      && sameSourceForeignScope.taskId !== taskId
+    ) {
+      return sameSourceForeignScope
+    }
+  }
+
+  if (taskId != null) {
+    return findNearestOpenBusinessScope(state, { taskId })
+      ?? peekMapStack(state.openTaskScopesByTaskId, taskId)
+      ?? state.root
+  }
+
+  return state.root
+}
+
 const resolveParentScope = (
   state: ReducerState,
   event: ProtocolEvent,
@@ -265,7 +313,6 @@ const resolveParentScope = (
           ?? state.root
         : state.root
     case 'action':
-    case 'wait_freezes':
     case 'recognition_node':
     case 'action_node':
       return taskId != null
@@ -274,6 +321,8 @@ const resolveParentScope = (
           ?? findNearestOpenBusinessScope(state, { event })
           ?? state.root
         : state.root
+    case 'wait_freezes':
+      return resolveWaitFreezesParentScope(state, event)
   }
 }
 
