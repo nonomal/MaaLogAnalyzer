@@ -176,6 +176,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
                   >
                     <n-button
                       size="small"
+                      class="flow-item-button"
                       :type="getFlowItemButtonType(nested.item)"
                       ghost
                       @click="emit('select-flow-item', node, nested.item.id)"
@@ -284,6 +285,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
             >
               <n-button
                 size="small"
+                class="flow-item-button"
                 :type="getFlowItemButtonType(row.item)"
                 ghost
                 @click="emit('select-flow-item', node, row.item.id)"
@@ -346,5 +348,17 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
 
 .recognition-item-fragment {
   display: contents;
+}
+
+.flow-item-button {
+  max-width: 100%;
+}
+
+.flow-item-button :deep(.n-button__content) {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
