@@ -5,7 +5,7 @@
  * 使用 fflate 的 filter 选项，只解压需要的文件，避免大 ZIP 全量解压导致内存暴涨。
  */
 
-import { unzipSync } from 'fflate'
+import { unzip, type Unzipped } from 'fflate'
 import { decodeFileContent } from './fileDialog'
 import {
   combineLoadedPrimaryLogSegments,
@@ -57,8 +57,16 @@ export async function extractZipContent(
   const zipData = new Uint8Array(buffer)
 
   // 只解压日志和截图，跳过其他文件（如录屏、大型 bin 等）
-  const files = unzipSync(zipData, {
-    filter: (file) => isNeededFile(file.name),
+  // 使用异步 unzip 防止阻塞主线程
+  const files = await new Promise<Unzipped>((resolve, reject) => {
+    unzip(
+      zipData,
+      { filter: (f) => isNeededFile(f.name) },
+      (err, unzipped) => {
+        if (err) reject(err)
+        else resolve(unzipped)
+      }
+    )
   })
 
   const paths = Object.keys(files)

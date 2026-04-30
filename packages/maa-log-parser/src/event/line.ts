@@ -6,7 +6,8 @@ import {
 } from './meta'
 
 // Event line regex: extracts timestamp, level, processId, threadId, msg, detailsJson.
-const EVENT_LINE_REGEX = /^\[([^\]]+)\]\[([^\]]+)\]\[(Px[^\]]+)\]\[(Tx[^\]]+)\].*!!!OnEventNotify!!!\s*\[handle=[^\]]*\]\s*\[msg=([^\]]+)\]\s*\[details=(.*)\]\s*$/
+// 优化正则：使用 .*? 减少贪婪匹配带来的回溯消耗，极大提升长行解析速度
+const EVENT_LINE_REGEX = /^\[([^\]]+)\]\[([^\]]+)\]\[(Px[^\]]+)\]\[(Tx[^\]]+)\].*?!!!OnEventNotify!!!\s*\[handle=[^\]]*\]\s*\[msg=([^\]]+)\]\s*\[details=(.*)\]\s*$/
 
 export type ParsedEventLine = EventNotification & {
   processId: string

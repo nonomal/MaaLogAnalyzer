@@ -1,4 +1,4 @@
-import { computed, ref, type Ref } from 'vue'
+import { computed, ref, watch, type Ref } from 'vue'
 import type { NodeInfo } from '../../../types'
 import {
   collectNodeNavMatchDetails,
@@ -38,7 +38,23 @@ export const useNodeNavSearch = (
   selectedRootTaskId: Ref<number | null>,
 ) => {
   const nodeNavSearchText = ref('')
-  const normalizedNodeNavSearchText = computed(() => normalizeSearchText(nodeNavSearchText.value))
+  // Add debouncing to prevent UI freeze during typing for large logs (e.g. 50MB+)
+  const debouncedNodeNavSearchText = ref('')
+  
+  let searchTimeout: ReturnType<typeof setTimeout> | null = null
+  watch(nodeNavSearchText, (newVal) => {
+    if (searchTimeout) clearTimeout(searchTimeout)
+    // Avoid delay when clearing the search box
+    if (!newVal) {
+      debouncedNodeNavSearchText.value = newVal
+    } else {
+      searchTimeout = setTimeout(() => {
+        debouncedNodeNavSearchText.value = newVal
+      }, 300)
+    }
+  })
+
+  const normalizedNodeNavSearchText = computed(() => normalizeSearchText(debouncedNodeNavSearchText.value))
   const nodeNavMode = ref<NodeNavMode>('pipeline')
   const nodeNavFailedOnly = ref(false)
 
