@@ -69,9 +69,9 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
       <span
         class="tree-toggle"
         :class="{ 'tree-toggle-collapsed': !isRecognitionExpanded }"
-        @click="emit('toggle-recognition')"
+        @click="emit('toggle-recognition')" @mousedown.prevent
       />
-      <n-text depth="3" style="font-size: 12px; cursor: pointer" @click="emit('toggle-recognition')">Recognition</n-text>
+      <n-text depth="3" style="font-size: 12px; cursor: pointer" @click="emit('toggle-recognition')" @mousedown.prevent>Recognition</n-text>
     </n-flex>
 
     <ul v-if="isRecognitionExpanded && mergedRecognitionList.length > 0" class="tree-list">
@@ -89,7 +89,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
                 v-if="item.attemptIndex != null && hasRecognitionNestedRows(item.attemptIndex)"
                 class="tree-toggle"
                 :class="{ 'tree-toggle-collapsed': !isRecognitionNestedExpanded(item.attemptIndex) }"
-                @click.stop="emit('toggle-nested', item.attemptIndex)"
+                @click.stop="emit('toggle-nested', item.attemptIndex)" @mousedown.prevent
               />
               <span v-else class="tree-toggle-placeholder" />
               <n-button
@@ -139,7 +139,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
               class="tree-toggle"
               :class="{ 'tree-toggle-collapsed': !nested.expanded }"
               :style="{ marginLeft: toTreeOffset(nested.depth) }"
-              @click.stop="toggleNestedRecognitionFlowItemExpand(nested.item.id)"
+              @click.stop="toggleNestedRecognitionFlowItemExpand(nested.item.id)" @mousedown.prevent
             />
             <span
               v-else
@@ -183,7 +183,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
           v-if="hasActionNestedChildren"
           class="tree-toggle"
           :class="{ 'tree-toggle-collapsed': !isActionExpanded }"
-          @click="emit('toggle-action')"
+          @click="emit('toggle-action')" @mousedown.prevent
         />
         <span v-else class="tree-toggle-placeholder" />
         <n-text
@@ -209,7 +209,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
             class="tree-toggle"
             :class="{ 'tree-toggle-collapsed': !row.expanded }"
             :style="{ marginLeft: toTreeOffset(row.depth) }"
-            @click.stop="toggleFlowItemExpand(row.item.id)"
+            @click.stop="toggleFlowItemExpand(row.item.id)" @mousedown.prevent
           />
           <span
             v-else

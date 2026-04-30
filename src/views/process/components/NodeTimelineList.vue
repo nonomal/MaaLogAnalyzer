@@ -61,7 +61,7 @@ const handleWheel = (event: WheelEvent) => {
       :ref="setDynamicScrollerRef"
       :key="selectedTaskKey ?? undefined"
       :items="nodes"
-      :min-item-size="150"
+      :min-item-size="40"
       key-field="_uniqueKey"
       class="virtual-scroller"
       :style="scrollerStyle"
@@ -102,6 +102,9 @@ const handleWheel = (event: WheelEvent) => {
   overflow-anchor: none;
 }
 /* 确保动态条目也避免锚定争夺 */
+.virtual-scroller :deep(*) {
+  overflow-anchor: none;
+}
 .virtual-scroller :deep(.vue-recycle-scroller__item-wrapper) {
   overflow-anchor: none;
 }

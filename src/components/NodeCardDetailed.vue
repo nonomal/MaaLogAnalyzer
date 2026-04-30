@@ -67,7 +67,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
           <n-button
             size="small"
             class="fixed-toggle-button"
-            @click="emit('toggle-recognition')"
+            @click="emit('toggle-recognition')" @mousedown.prevent
           >
             {{ recognitionExpanded ? 'Hide' : 'Show' }}
           </n-button>
@@ -125,7 +125,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
                 v-if="item.attemptIndex != null && hasRecognitionNestedRows(item.attemptIndex)"
                 size="small"
                 class="fixed-toggle-button"
-                @click="emit('toggle-nested', item.attemptIndex)"
+                @click="emit('toggle-nested', item.attemptIndex)" @mousedown.prevent
               >
                 {{ isExpanded(item.attemptIndex) ? 'Hide' : 'Show' }}
               </n-button>
@@ -199,7 +199,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
                     v-if="nested.hasChildren"
                     size="small"
                     class="fixed-toggle-button"
-                    @click.stop="toggleNestedRecognitionFlowItemExpand(nested.item.id)"
+                    @click.stop="toggleNestedRecognitionFlowItemExpand(nested.item.id)" @mousedown.prevent
                   >
                     {{ nested.expanded ? 'Hide' : 'Show' }}
                   </n-button>
@@ -254,7 +254,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
           v-if="actionTimelineRows.length > 0"
           size="small"
           class="fixed-toggle-button"
-          @click="emit('toggle-action')"
+          @click="emit('toggle-action')" @mousedown.prevent
         >
           {{ actionExpanded ? 'Hide' : 'Show' }}
         </n-button>
@@ -305,7 +305,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
               v-if="row.hasChildren"
               size="small"
               class="fixed-toggle-button"
-              @click.stop="toggleActionFlowItem(row.item.id)"
+              @click.stop="toggleActionFlowItem(row.item.id)" @mousedown.prevent
             >
               {{ row.expanded ? 'Hide' : 'Show' }}
             </n-button>
@@ -347,7 +347,9 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
 }
 
 .recognition-item-fragment {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .flow-item-button {
