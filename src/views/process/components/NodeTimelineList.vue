@@ -95,3 +95,14 @@ const handleWheel = (event: WheelEvent) => {
     </DynamicScroller>
   </div>
 </template>
+
+<style scoped>
+.virtual-scroller {
+  /* 禁用浏览器默认的滚动锚定，防止虚拟列表在内部元素高频收起/展开时自动乱滚位置 */
+  overflow-anchor: none;
+}
+/* 确保动态条目也避免锚定争夺 */
+.virtual-scroller :deep(.vue-recycle-scroller__item-wrapper) {
+  overflow-anchor: none;
+}
+</style>
