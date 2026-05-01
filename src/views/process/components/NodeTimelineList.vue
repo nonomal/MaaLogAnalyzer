@@ -92,6 +92,12 @@ const handleWheel = (event: WheelEvent) => {
           </div>
         </DynamicScrollerItem>
       </template>
+      
+      <!-- 增加底部留白（类似 VS Code 的 scrollBeyondLastLine） -->
+      <!-- 这从根本上解决了当列表最后几个巨型节点被收起时，因为整体 scrollHeight 锐减导致浏览器强制把滚动条往上推，进而产生点击位置向下乱跳的问题 -->
+      <template #after>
+        <div class="virtual-scroller-overscroll-padding" style="height: 100vh; pointer-events: none; opacity: 0;"></div>
+      </template>
     </DynamicScroller>
   </div>
 </template>
