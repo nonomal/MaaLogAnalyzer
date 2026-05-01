@@ -29,7 +29,7 @@ declare module 'vue-virtual-scroller' {
     {},
     {},
     SlotsType<{
-      default: DynamicScrollerSlotProps
+      default: DynamicScrollerSlotProps; after?: any; before?: any
     }>
   >
 

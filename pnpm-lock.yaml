@@ -4,6 +4,11 @@ settings:
   autoInstallPeers: true
   excludeLinksFromLockfile: false
 
+patchedDependencies:
+  vue-virtual-scroller@2.0.0-beta.8:
+    hash: c58381ac4d85097be5476877b99226369c438a3da54ee1bf860f9cf624f3313b
+    path: patches/vue-virtual-scroller@2.0.0-beta.8.patch
+
 importers:
 
   .:
@@ -58,7 +63,7 @@ importers:
         version: 8.0.1(echarts@6.0.0)(vue@3.5.27(typescript@5.9.3))
       vue-virtual-scroller:
         specifier: 2.0.0-beta.8
-        version: 2.0.0-beta.8(vue@3.5.27(typescript@5.9.3))
+        version: 2.0.0-beta.8(patch_hash=c58381ac4d85097be5476877b99226369c438a3da54ee1bf860f9cf624f3313b)(vue@3.5.27(typescript@5.9.3))
     devDependencies:
       '@tauri-apps/cli':
         specifier: ^2.0.0
@@ -172,6 +177,18 @@ packages:
     engines: {node: '>=18'}
     cpu: [ppc64]
     os: [aix]
+
+  '@esbuild/android-arm64@0.21.5':
+    resolution: {integrity: sha512-c0uX9VAUBQ7dTDCjq+wdyGLowMdtR/GoC2U5IYk/7D1H1JYC0qseD7+11iMP2mRLN9RcCMRcjC4YMclCzGwS/A==}
+    engines: {node: '>=12'}
+    cpu: [arm64]
+    os: [android]
+
+  '@esbuild/android-arm64@0.27.7':
+    resolution: {integrity: sha512-62dPZHpIXzvChfvfLJow3q5dDtiNMkwiRzPylSCfriLvZeq0a1bWChrGx/BbUbPwOrsWKMn8idSllklzBy+dgQ==}
+    engines: {node: '>=18'}
+    cpu: [arm64]
+    os: [android]
 
   '@esbuild/android-arm@0.21.5':
     resolution: {integrity: sha512-vCPvzSjpPHEi1siZdlvAlsPxXl7WbOVUBBAowWug4rJHb68Ox8KualB+1ocNvT5fjv6wpkX6o/iEpbDrf68zcg==}
@@ -1228,6 +1245,12 @@ snapshots:
   '@esbuild/aix-ppc64@0.27.7':
     optional: true
 
+  '@esbuild/android-arm64@0.21.5':
+    optional: true
+
+  '@esbuild/android-arm64@0.27.7':
+    optional: true
+
   '@esbuild/android-arm@0.21.5':
     optional: true
 
@@ -1774,6 +1797,7 @@ snapshots:
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.21.5
       '@esbuild/android-arm': 0.21.5
+      '@esbuild/android-arm64': 0.21.5
       '@esbuild/android-x64': 0.21.5
       '@esbuild/darwin-arm64': 0.21.5
       '@esbuild/darwin-x64': 0.21.5
@@ -1799,6 +1823,7 @@ snapshots:
     optionalDependencies:
       '@esbuild/aix-ppc64': 0.27.7
       '@esbuild/android-arm': 0.27.7
+      '@esbuild/android-arm64': 0.27.7
       '@esbuild/android-x64': 0.27.7
       '@esbuild/darwin-arm64': 0.27.7
       '@esbuild/darwin-x64': 0.27.7
@@ -2072,7 +2097,7 @@ snapshots:
       '@vue/language-core': 2.2.12(typescript@5.9.3)
       typescript: 5.9.3
 
-  vue-virtual-scroller@2.0.0-beta.8(vue@3.5.27(typescript@5.9.3)):
+  vue-virtual-scroller@2.0.0-beta.8(patch_hash=c58381ac4d85097be5476877b99226369c438a3da54ee1bf860f9cf624f3313b)(vue@3.5.27(typescript@5.9.3)):
     dependencies:
       mitt: 2.1.0
       vue: 3.5.27(typescript@5.9.3)
