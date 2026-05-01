@@ -13,6 +13,7 @@ interface UseAppSelectionAndFiltersOptions {
   pendingScrollNodeId: Ref<number | null>
   buildNodeFlowItems: (node: NodeInfo) => UnifiedFlowItem[]
   buildNodeRecognitionFlowItems: (node: NodeInfo) => UnifiedFlowItem[]
+  afterSelect?: () => void
 }
 
 export const useAppSelectionAndFilters = (options: UseAppSelectionAndFiltersOptions) => {
@@ -31,6 +32,7 @@ export const useAppSelectionAndFilters = (options: UseAppSelectionAndFiltersOpti
     pendingScrollNodeId: options.pendingScrollNodeId,
     buildNodeFlowItems: options.buildNodeFlowItems,
     buildNodeRecognitionFlowItems: options.buildNodeRecognitionFlowItems,
+    afterSelect: options.afterSelect,
   })
 
   const {

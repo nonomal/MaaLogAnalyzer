@@ -8,6 +8,8 @@ interface UseTaskSelectionOptions {
   pendingScrollNodeId: Ref<number | null>
   buildNodeFlowItems: (node: NodeInfo) => UnifiedFlowItem[]
   buildNodeRecognitionFlowItems: (node: NodeInfo) => UnifiedFlowItem[]
+  // 新增：选中后的回调，用于触发 UI 联动（如自动展开右侧详情面板）
+  afterSelect?: () => void
 }
 
 const flattenFlowItems = (items: UnifiedFlowItem[] | undefined, output: UnifiedFlowItem[] = []): UnifiedFlowItem[] => {
@@ -29,6 +31,14 @@ const hasMainActionFlowId = (node: NodeInfo, flowItemId: string): boolean => {
 }
 
 export const useTaskSelection = (options: UseTaskSelectionOptions) => {
+  
+  // 封装统一的选中后置处理
+  const triggerPostSelect = () => {
+    if (options.afterSelect) {
+      options.afterSelect()
+    }
+  }
+
   const hasFlowItemId = (node: NodeInfo | null, flowItemId: string | null | undefined): boolean => {
     if (!node || !flowItemId) return false
     if (flattenFlowItems(options.buildNodeRecognitionFlowItems(node)).some(item => item.id === flowItemId)) return true
@@ -58,16 +68,19 @@ export const useTaskSelection = (options: UseTaskSelectionOptions) => {
     options.selectedTask.value = task
     options.selectedNode.value = null
     options.selectedFlowItemId.value = null
+    // Task 级别的选中通常不需要强制展开右侧详情，因此未调用 triggerPostSelect
   }
 
   const handleSelectNode = (node: NodeInfo) => {
     options.selectedNode.value = node
     options.selectedFlowItemId.value = null
+    triggerPostSelect()
   }
 
   const handleSelectAction = (node: NodeInfo) => {
     options.selectedNode.value = node
     options.selectedFlowItemId.value = pickMainActionFlowItemId(node)
+    triggerPostSelect()
   }
 
   const handleSelectRecognition = (node: NodeInfo, attemptIndex: number) => {
@@ -77,11 +90,13 @@ export const useTaskSelection = (options: UseTaskSelectionOptions) => {
     options.selectedFlowItemId.value = targetRecognition
       ? pickFlowId(node, targetRecognition.id)
       : null
+    triggerPostSelect()
   }
 
   const handleSelectFlowItem = (node: NodeInfo, flowItemId: string) => {
     options.selectedNode.value = node
     options.selectedFlowItemId.value = pickFlowId(node, flowItemId)
+    triggerPostSelect()
   }
 
   return {

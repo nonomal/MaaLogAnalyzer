@@ -51,6 +51,7 @@ export const useAppRootViewModel = ({
     splitVerticalSize,
     detailViewCollapsed,
     toggleDetailView,
+    ensureDetailViewExpanded,
   } = useAppViewState()
   const parser = new LogParser()
 
@@ -120,6 +121,7 @@ export const useAppRootViewModel = ({
     pendingScrollNodeId,
     buildNodeFlowItems,
     buildNodeRecognitionFlowItems,
+    afterSelect: ensureDetailViewExpanded,
   })
 
   const {

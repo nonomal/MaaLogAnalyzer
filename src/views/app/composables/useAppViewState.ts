@@ -121,6 +121,13 @@ export const useAppViewState = () => {
     }
   }
 
+  const ensureDetailViewExpanded = () => {
+    if (detailViewCollapsed.value) {
+      splitSize.value = detailViewSavedSize.value
+      detailViewCollapsed.value = false
+    }
+  }
+
   watch([splitSize, detailViewCollapsed, splitVerticalSize], ([currentSplitSize, collapsed, currentVerticalSize]) => {
     const prev = readAppLayoutState()
     const next: AppLayoutState = {
@@ -152,5 +159,6 @@ export const useAppViewState = () => {
     splitVerticalSize,
     detailViewCollapsed,
     toggleDetailView,
+    ensureDetailViewExpanded,
   }
 }

@@ -2,10 +2,8 @@
 import { computed, toRef } from 'vue'
 import { NCard, NButton, NFlex, NText } from 'naive-ui'
 import type { NodeInfo, MergedRecognitionItem } from '../types'
-import { resolveImageSrcPath } from '../utils/imageSrc'
 import { getFlowItemButtonType, getFlowItemShortLabel } from '../utils/flowLabels'
 import TaskDocHoverPopover from './TaskDocHoverPopover.vue'
-import SafePreviewImage from './SafePreviewImage.vue'
 import StatusIcon from './StatusIcon.vue'
 import { useNodeCardFlowSectionState } from './nodeCard/useNodeCardFlowSectionState'
 import { buildRecognitionItemKey } from './nodeCard/recognitionListKeys'
@@ -132,25 +130,6 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
             </n-flex>
 
             <n-flex
-              v-if="item.attempt?.vision_image || item.attempt?.error_image"
-              vertical
-              style="gap: 8px; align-self: flex-start"
-            >
-              <safe-preview-image
-                v-if="item.attempt?.vision_image"
-                :src="resolveImageSrcPath(item.attempt.vision_image)"
-                width="200"
-                style="border-radius: 4px"
-              />
-              <safe-preview-image
-                v-if="item.attempt?.error_image"
-                :src="resolveImageSrcPath(item.attempt.error_image)"
-                width="200"
-                style="border-radius: 4px"
-              />
-            </n-flex>
-
-            <n-flex
               v-if="
                 item.attemptIndex != null &&
                 hasRecognitionNestedRows(item.attemptIndex) &&
@@ -203,41 +182,6 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
                   >
                     {{ nested.expanded ? 'Hide' : 'Show' }}
                   </n-button>
-                </n-flex>
-
-                <n-flex
-                  v-if="nested.item.type === 'recognition_node' && (nested.item.vision_image || nested.item.error_image)"
-                  vertical
-                  style="gap: 8px"
-                  :style="{ marginLeft: `${nested.depth * DETAIL_INDENT_PX + 24}px` }"
-                >
-                  <safe-preview-image
-                    v-if="nested.item.vision_image"
-                    :src="resolveImageSrcPath(nested.item.vision_image)"
-                    width="180"
-                    style="border-radius: 4px"
-                  />
-                  <safe-preview-image
-                    v-if="nested.item.error_image"
-                    :src="resolveImageSrcPath(nested.item.error_image)"
-                    width="180"
-                    style="border-radius: 4px"
-                  />
-                </n-flex>
-
-                <n-flex
-                  v-if="nested.item.type === 'wait_freezes' && nested.item.wait_freezes_details?.images && nested.item.wait_freezes_details.images.length > 0"
-                  vertical
-                  style="gap: 8px"
-                  :style="{ marginLeft: `${nested.depth * DETAIL_INDENT_PX + 24}px` }"
-                >
-                  <safe-preview-image
-                    v-for="(img, imgIndex) in nested.item.wait_freezes_details.images"
-                    :key="`nested-wf-img-${nested.item.id}-${imgIndex}`"
-                    :src="resolveImageSrcPath(img)"
-                    width="180"
-                    style="border-radius: 4px"
-                  />
                 </n-flex>
               </template>
             </n-flex>
@@ -309,21 +253,6 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
             >
               {{ row.expanded ? 'Hide' : 'Show' }}
             </n-button>
-          </n-flex>
-
-          <n-flex
-            v-if="row.item.type === 'wait_freezes' && row.item.wait_freezes_details?.images && row.item.wait_freezes_details.images.length > 0"
-            vertical
-            style="gap: 8px; align-self: flex-start"
-            :style="{ marginLeft: `${row.depth * DETAIL_INDENT_PX + 24}px` }"
-          >
-            <safe-preview-image
-              v-for="(img, idx) in row.item.wait_freezes_details.images"
-              :key="`detailed-wf-img-${row.item.id}-${idx}`"
-              :src="resolveImageSrcPath(img)"
-              width="200"
-              style="border-radius: 4px"
-            />
           </n-flex>
         </n-flex>
       </n-flex>
