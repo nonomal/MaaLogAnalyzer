@@ -37,4 +37,5 @@ src-vscode/webview
 src-vscode/vsix
 
 .codex
+.sisyphus
 
