@@ -1,6 +1,7 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
 import type { LogParser } from '@windsland52/maa-log-parser'
 import type { NodeInfo, TaskInfo } from '../../../types'
+import type { LoadedPrimaryLogFile } from '../../../utils/logFileDiscovery'
 import type { BridgeOpenCropRequest } from './useBridgeTaskActions'
 import type {
   LoadedSearchTarget,
@@ -47,7 +48,8 @@ interface UseMainContentBindingsOptions {
       path: string
       name: string
       content: string
-    }>
+    }>,
+    primaryLogFiles?: LoadedPrimaryLogFile[],
   ) => void | Promise<void>
   handleSelectNode: (node: NodeInfo) => void
   handleSelectAction: (node: NodeInfo) => void

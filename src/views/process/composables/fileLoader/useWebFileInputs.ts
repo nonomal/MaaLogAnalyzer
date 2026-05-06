@@ -5,9 +5,10 @@ import {
   readDirectoryFiles,
 } from '../../utils/fileLoadingHelpers'
 import {
-  combineLoadedPrimaryLogSegments,
+  type LoadedPrimaryLogFile,
   PRIMARY_LOG_FILE_HINT,
   selectPrimaryLogGroup,
+  sortLoadedPrimaryLogSegments,
 } from '../../../../utils/logFileDiscovery'
 import type { UseProcessFileLoaderOptions } from './types'
 
@@ -38,6 +39,7 @@ const resolveSelectedLogContent = async (files: Iterable<File>) => {
     return {
       content: '',
       scopedFiles: [] as File[],
+      primaryLogFiles: [] as LoadedPrimaryLogFile[],
     }
   }
 
@@ -48,8 +50,9 @@ const resolveSelectedLogContent = async (files: Iterable<File>) => {
   })))
 
   return {
-    content: combineLoadedPrimaryLogSegments(loadedLogs),
+    content: '',
     scopedFiles: filterFilesBySelectedDir(fileList, selectedLogs[0].candidate.dirPath),
+    primaryLogFiles: sortLoadedPrimaryLogSegments(loadedLogs),
   }
 }
 
@@ -63,8 +66,8 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
       options.onFileLoadingStart()
 
       const files = await readDirectoryFiles(dirEntry)
-      const { content: combinedContent, scopedFiles } = await resolveSelectedLogContent(files)
-      if (!combinedContent) {
+      const { scopedFiles, primaryLogFiles } = await resolveSelectedLogContent(files)
+      if (primaryLogFiles.length === 0) {
         alert(`文件夹中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
         return
       }
@@ -72,11 +75,12 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
       const textFiles = await collectTextFilesFromFiles(scopedFiles)
       const debugAssets = await collectDebugAssetsFromFiles(scopedFiles)
       options.onUploadContent(
-        combinedContent,
+        '',
         debugAssets.errorImages,
         debugAssets.visionImages,
         debugAssets.waitFreezesImages,
         textFiles,
+        primaryLogFiles,
       )
     } catch (error) {
       alert('读取文件夹失败: ' + error)
@@ -120,8 +124,8 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
       setFileLoading(true)
       options.onFileLoadingStart()
 
-      const { content: combinedContent, scopedFiles } = await resolveSelectedLogContent(files)
-      if (!combinedContent) {
+      const { scopedFiles, primaryLogFiles } = await resolveSelectedLogContent(files)
+      if (primaryLogFiles.length === 0) {
         alert(`文件夹中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
         return
       }
@@ -129,11 +133,12 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
       const textFiles = await collectTextFilesFromFiles(scopedFiles)
       const debugAssets = await collectDebugAssetsFromFiles(scopedFiles)
       options.onUploadContent(
-        combinedContent,
+        '',
         debugAssets.errorImages,
         debugAssets.visionImages,
         debugAssets.waitFreezesImages,
         textFiles,
+        primaryLogFiles,
       )
     } catch (error) {
       alert('读取文件失败: ' + error)

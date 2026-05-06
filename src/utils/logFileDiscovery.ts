@@ -1,3 +1,5 @@
+import type { ParseSourceInput } from '@windsland52/maa-log-parser'
+
 export const PRIMARY_LOG_FILE_HINT = 'maa.log / maa.bak*.log / maafw.log / maafw.bak*.log'
 
 export type PrimaryLogKind = 'main' | 'bak'
@@ -17,6 +19,10 @@ export interface PrimaryLogCandidate {
 export interface PrimaryLogSourceEntry {
   path: string
   name: string
+}
+
+export interface LoadedPrimaryLogFile extends PrimaryLogSourceEntry {
+  content: string
 }
 
 export interface MatchedPrimaryLogEntry<T extends PrimaryLogSourceEntry> {
@@ -192,4 +198,15 @@ export const combineLoadedPrimaryLogSegments = <
     combined += entry.content
   }
   return combined
+}
+
+export const createPrimaryLogParseInputs = <T extends LoadedPrimaryLogFile>(
+  entries: Iterable<T>,
+): ParseSourceInput[] => {
+  return sortLoadedPrimaryLogSegments(entries).map((entry, index) => ({
+    content: entry.content,
+    sourceKey: entry.path || entry.name || `primary-log:${index}`,
+    sourcePath: entry.path,
+    inputIndex: index,
+  }))
 }

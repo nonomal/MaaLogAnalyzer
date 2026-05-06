@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   combineLoadedPrimaryLogSegments,
+  createPrimaryLogParseInputs,
   isBakLogFileName,
   isMainLogFileName,
   isPrimaryLogFileName,
@@ -92,5 +93,35 @@ describe('logFileDiscovery', () => {
       '[2026-04-13 05:18:03.641][DBG] legacy-bak\n[2026-04-13 06:07:22.681][DBG] legacy-current\n',
     )
     expect(combineLoadedPrimaryLogSegments(segments).trimEnd().endsWith('[2026-04-14 04:37:25.504][DBG] current')).toBe(true)
+  })
+
+  it('creates parse inputs in primary log order without combining content', () => {
+    const inputs = createPrimaryLogParseInputs([
+      {
+        path: 'sample/focus/maafw.log',
+        name: 'maafw.log',
+        content: '[2026-04-14 04:37:25.504][DBG] current\n',
+      },
+      {
+        path: 'sample/focus/maafw.bak.2026.04.14-04.11.31.124.log',
+        name: 'maafw.bak.2026.04.14-04.11.31.124.log',
+        content: '[2026-04-13 22:36:52.556][DBG] bak\n',
+      },
+    ])
+
+    expect(inputs).toEqual([
+      {
+        content: '[2026-04-13 22:36:52.556][DBG] bak\n',
+        sourceKey: 'sample/focus/maafw.bak.2026.04.14-04.11.31.124.log',
+        sourcePath: 'sample/focus/maafw.bak.2026.04.14-04.11.31.124.log',
+        inputIndex: 0,
+      },
+      {
+        content: '[2026-04-14 04:37:25.504][DBG] current\n',
+        sourceKey: 'sample/focus/maafw.log',
+        sourcePath: 'sample/focus/maafw.log',
+        inputIndex: 1,
+      },
+    ])
   })
 })

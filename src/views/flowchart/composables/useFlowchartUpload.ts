@@ -1,9 +1,11 @@
 import { ref } from 'vue'
 import { isTauri } from '../../../utils/platform'
+import type { LoadedTextFile } from '../../process/utils/fileLoadingHelpers'
 import {
-  combineLoadedPrimaryLogSegments,
+  type LoadedPrimaryLogFile,
   PRIMARY_LOG_FILE_HINT,
   selectPrimaryLogGroup,
+  sortLoadedPrimaryLogSegments,
 } from '../../../utils/logFileDiscovery'
 
 interface UseFlowchartUploadOptions {
@@ -12,7 +14,9 @@ interface UseFlowchartUploadOptions {
     content: string,
     errorImages?: Map<string, string>,
     visionImages?: Map<string, string>,
-    waitFreezesImages?: Map<string, string>
+    waitFreezesImages?: Map<string, string>,
+    textFiles?: LoadedTextFile[],
+    primaryLogFiles?: LoadedPrimaryLogFile[],
   ) => void
 }
 
@@ -33,12 +37,15 @@ export const useFlowchartUpload = ({
     errorImages: Map<string, string>,
     visionImages: Map<string, string>,
     waitFreezesImages: Map<string, string>,
+    primaryLogFiles?: LoadedPrimaryLogFile[],
   ) {
     onUploadContent(
       content,
       errorImages.size > 0 ? errorImages : undefined,
       visionImages.size > 0 ? visionImages : undefined,
       waitFreezesImages.size > 0 ? waitFreezesImages : undefined,
+      undefined,
+      primaryLogFiles,
     )
   }
 
@@ -78,6 +85,7 @@ export const useFlowchartUpload = ({
       return {
         content: '',
         scopedFiles: [] as File[],
+        primaryLogFiles: [] as LoadedPrimaryLogFile[],
       }
     }
 
@@ -88,8 +96,9 @@ export const useFlowchartUpload = ({
     })))
 
     return {
-      content: combineLoadedPrimaryLogSegments(loadedLogs),
+      content: '',
       scopedFiles: filterFilesBySelectedDir(fileList, selectedLogs[0].candidate.dirPath),
+      primaryLogFiles: sortLoadedPrimaryLogSegments(loadedLogs),
     }
   }
 
@@ -123,6 +132,7 @@ export const useFlowchartUpload = ({
           result.errorImages,
           result.visionImages,
           result.waitFreezesImages,
+          result.primaryLogFiles,
         )
       }
     } catch (error) {
@@ -142,8 +152,8 @@ export const useFlowchartUpload = ({
     const files = input.files
     if (!files || files.length === 0) return
 
-    const { content, scopedFiles } = await resolveSelectedLogContentFromFiles(files)
-    if (!content) {
+    const { scopedFiles, primaryLogFiles } = await resolveSelectedLogContentFromFiles(files)
+    if (primaryLogFiles.length === 0) {
       alert(`文件夹中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
       input.value = ''
       return
@@ -168,8 +178,8 @@ export const useFlowchartUpload = ({
       }
     }
 
-    if (content) {
-      emitUploadContent(content, errorImages, visionImages, waitFreezesImages)
+    if (primaryLogFiles.length > 0) {
+      emitUploadContent('', errorImages, visionImages, waitFreezesImages, primaryLogFiles)
     }
     input.value = ''
   }

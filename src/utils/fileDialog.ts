@@ -6,10 +6,11 @@
 import { isTauri, isVSCode } from './platform'
 import { invoke } from '@tauri-apps/api/core'
 import {
-  combineLoadedPrimaryLogSegments,
   isPrimaryLogFileName,
+  type LoadedPrimaryLogFile,
   PRIMARY_LOG_FILE_HINT,
   selectPrimaryLogGroup,
+  sortLoadedPrimaryLogSegments,
 } from './logFileDiscovery'
 
 export { isTauri, isVSCode }
@@ -28,6 +29,7 @@ interface OpenFolderResult {
   visionImages: Map<string, string>
   waitFreezesImages: Map<string, string>
   textFiles: LoadedTextFile[]
+  primaryLogFiles: LoadedPrimaryLogFile[]
 }
 
 const isTextSearchFileName = (name: string) => {
@@ -437,10 +439,10 @@ async function hasPrimaryLogInTauri(dirPath: string): Promise<boolean> {
   return (await listPrimaryLogFilesTauri(dirPath)).length > 0
 }
 
-async function readCombinedPrimaryLogsTauri(dirPath: string): Promise<string> {
+async function readPrimaryLogFilesTauri(dirPath: string): Promise<LoadedPrimaryLogFile[]> {
   const { readTextFile } = await import('@tauri-apps/plugin-fs')
   const selectedLogs = selectPrimaryLogGroup(await listPrimaryLogFilesTauri(dirPath))
-  if (selectedLogs.length === 0) return ''
+  if (selectedLogs.length === 0) return []
 
   const loadedLogs = await Promise.all(selectedLogs.map(async ({ item }) => ({
     path: item.path,
@@ -448,7 +450,7 @@ async function readCombinedPrimaryLogsTauri(dirPath: string): Promise<string> {
     content: await readTextFile(item.path),
   })))
 
-  return combineLoadedPrimaryLogSegments(loadedLogs)
+  return sortLoadedPrimaryLogSegments(loadedLogs)
 }
 
 async function listPrimaryLogFilesWeb(
@@ -471,9 +473,9 @@ async function hasPrimaryLogInWeb(dirHandle: FileSystemDirectoryHandle): Promise
   return (await listPrimaryLogFilesWeb(dirHandle)).length > 0
 }
 
-async function readCombinedPrimaryLogsWeb(dirHandle: FileSystemDirectoryHandle): Promise<string> {
+async function readPrimaryLogFilesWeb(dirHandle: FileSystemDirectoryHandle): Promise<LoadedPrimaryLogFile[]> {
   const selectedLogs = selectPrimaryLogGroup(await listPrimaryLogFilesWeb(dirHandle))
-  if (selectedLogs.length === 0) return ''
+  if (selectedLogs.length === 0) return []
 
   const loadedLogs = await Promise.all(selectedLogs.map(async ({ item }) => ({
     path: item.path,
@@ -481,7 +483,7 @@ async function readCombinedPrimaryLogsWeb(dirHandle: FileSystemDirectoryHandle):
     content: await (await item.handle.getFile()).text(),
   })))
 
-  return combineLoadedPrimaryLogSegments(loadedLogs)
+  return sortLoadedPrimaryLogSegments(loadedLogs)
 }
 
 /**
@@ -536,14 +538,14 @@ async function openFolderDialogTauri(): Promise<OpenFolderResult | null> {
     }
 
     console.log('[文件夹] 读取日志文件')
-    const content = await readCombinedPrimaryLogsTauri(debugPath)
+    const primaryLogFiles = await readPrimaryLogFilesTauri(debugPath)
 
-    if (!content) {
+    if (primaryLogFiles.length === 0) {
       alert(`未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
       return null
     }
 
-    console.log('[文件夹] 日志文件读取完成，大小:', content.length)
+    console.log('[文件夹] 日志文件读取完成，数量:', primaryLogFiles.length)
 
     const errorImages = await readErrorImages(debugPath)
     const visionImages = await readVisionImages(debugPath)
@@ -555,7 +557,7 @@ async function openFolderDialogTauri(): Promise<OpenFolderResult | null> {
       console.warn('[文件夹] 收集文本文件失败(Tauri):', error)
     }
 
-    return { content, errorImages, visionImages, waitFreezesImages, textFiles }
+    return { content: '', errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles }
   } catch (error) {
     console.error('[文件夹] 打开失败:', error)
     alert('打开文件夹失败: ' + error)
@@ -728,14 +730,14 @@ async function openFolderDialogWeb(): Promise<OpenFolderResult | null> {
       console.log('[文件夹] 当前文件夹就是 debug 文件夹')
     }
 
-    const content = await readCombinedPrimaryLogsWeb(debugHandle)
+    const primaryLogFiles = await readPrimaryLogFilesWeb(debugHandle)
 
-    if (!content) {
+    if (primaryLogFiles.length === 0) {
       alert(`未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
       return null
     }
 
-    console.log('[文件夹] 日志文件读取完成，大小:', content.length)
+    console.log('[文件夹] 日志文件读取完成，数量:', primaryLogFiles.length)
 
     const errorImages = await readErrorImagesWeb(debugHandle)
     const visionImages = await readVisionImagesWeb(debugHandle)
@@ -747,7 +749,7 @@ async function openFolderDialogWeb(): Promise<OpenFolderResult | null> {
       console.warn('[文件夹] 收集文本文件失败(Web):', error)
     }
 
-    return { content, errorImages, visionImages, waitFreezesImages, textFiles }
+    return { content: '', errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles }
   } catch (error) {
     console.error('[文件夹] 打开失败:', error)
     if ((error as Error).name === 'AbortError') {

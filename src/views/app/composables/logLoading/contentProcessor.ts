@@ -22,9 +22,15 @@ export const createProcessLogContent = (
       params.waitFreezesImages,
     )
 
-    await options.parser.parseFile(params.content, (progress) => {
+    const onProgress = (progress: { percentage: number }) => {
       options.parseProgress.value = progress.percentage
-    })
+    }
+
+    if (params.parseInputs && params.parseInputs.length > 0) {
+      await options.parser.parseInputs(params.parseInputs, onProgress)
+    } else {
+      await options.parser.parseFile(params.content, onProgress)
+    }
     const parsedTasks = options.parser.consumeTasks()
     options.applyParsedTasks(parsedTasks, false)
 

@@ -114,10 +114,10 @@ const selectPrimaryLogGroup = <T extends { path: string; name: string }>(entries
   return rankedGroups[0]?.group ?? []
 }
 
-const combineLoadedPrimaryLogSegments = <T extends { path: string; name: string; content: string }>(
+const sortLoadedPrimaryLogSegments = <T extends { path: string; name: string; content: string }>(
   entries: T[],
-): string => {
-  const sorted = [...entries].sort((a, b) => {
+): T[] => {
+  return [...entries].sort((a, b) => {
     const aCandidate = getPrimaryLogCandidate(a.path, a.name)
     const bCandidate = getPrimaryLogCandidate(b.path, b.name)
     const aContentTimestamp = extractFirstLogTimestamp(a.content)
@@ -137,6 +137,12 @@ const combineLoadedPrimaryLogSegments = <T extends { path: string; name: string;
 
     return a.path.localeCompare(b.path)
   })
+}
+
+const combineLoadedPrimaryLogSegments = <T extends { path: string; name: string; content: string }>(
+  entries: T[],
+): string => {
+  const sorted = sortLoadedPrimaryLogSegments(entries)
 
   let combined = ''
   for (const entry of sorted) {
@@ -505,9 +511,9 @@ async function analyzeFolderUri(folderUri: vscode.Uri): Promise<void> {
       }
     }))
 
-    const combinedContent = combineLoadedPrimaryLogSegments(loadedSegments)
+    const primaryLogFiles = sortLoadedPrimaryLogSegments(loadedSegments)
 
-    if (!combinedContent) {
+    if (primaryLogFiles.length === 0) {
       vscode.window.showErrorMessage('未能读取到有效日志内容')
       return
     }
@@ -529,7 +535,8 @@ async function analyzeFolderUri(folderUri: vscode.Uri): Promise<void> {
 
     currentPanel?.webview.postMessage({
       type: 'loadFile',
-      content: combinedContent,
+      content: '',
+      primaryLogFiles,
       fileName: sourceName,
       errorImages: debugAssets.errorImages,
       visionImages: debugAssets.visionImages,

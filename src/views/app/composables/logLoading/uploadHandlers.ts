@@ -1,5 +1,9 @@
 import { getErrorMessage } from '../../../../utils/errorHandler'
 import type { LoadedTextFile } from '../../../../utils/fileDialog'
+import {
+  createPrimaryLogParseInputs,
+  type LoadedPrimaryLogFile,
+} from '../../../../utils/logFileDiscovery'
 import type { LogLoadingPipelineOptions } from './types'
 import type { ProcessLogContentParams } from './types'
 import type { TextSearchLoadedTarget } from '../useTextSearchTargets'
@@ -23,13 +27,24 @@ const createLoadedTargetsFromZip = (
 const createLoadedTargetsFromTextFiles = (
   content: string,
   textFiles?: LoadedTextFile[],
+  primaryLogFiles?: LoadedPrimaryLogFile[],
 ): TextSearchLoadedTarget[] => {
-  const explicitTargets: TextSearchLoadedTarget[] = (textFiles ?? []).map((file, index) => ({
-    id: `loaded:text:${index}:${file.path}`,
+  const primaryPaths = new Set((primaryLogFiles ?? []).map(file => file.path))
+  const primaryTargets: TextSearchLoadedTarget[] = (primaryLogFiles ?? []).map((file, index) => ({
+    id: `loaded:primary:${index}:${file.path}`,
     label: file.path || file.name,
     fileName: file.name,
     content: file.content,
   }))
+  const explicitTargets: TextSearchLoadedTarget[] = (textFiles ?? [])
+    .filter(file => !primaryPaths.has(file.path))
+    .map((file, index) => ({
+      id: `loaded:text:${index}:${file.path}`,
+      label: file.path || file.name,
+      fileName: file.name,
+      content: file.content,
+    }))
+  if (primaryTargets.length > 0) return [...primaryTargets, ...explicitTargets]
   if (explicitTargets.length > 0) return explicitTargets
   return [{ id: 'loaded:content', label: 'loaded.log', fileName: 'loaded.log', content }]
 }
@@ -85,13 +100,17 @@ export const createLogLoadingUploadHandlers = (options: CreateUploadHandlersOpti
     visionImages?: Map<string, string>,
     waitFreezesImages?: Map<string, string>,
     textFiles?: LoadedTextFile[],
+    primaryLogFiles?: LoadedPrimaryLogFile[],
   ) => {
     pipeline.loading.value = true
     try {
-      const loadedTargets = createLoadedTargetsFromTextFiles(content, textFiles)
+      const loadedTargets = createLoadedTargetsFromTextFiles(content, textFiles, primaryLogFiles)
       const defaultTargetId = pipeline.pickPreferredLogTargetId(loadedTargets)
       await processLogContent({
         content,
+        parseInputs: primaryLogFiles && primaryLogFiles.length > 0
+          ? createPrimaryLogParseInputs(primaryLogFiles)
+          : undefined,
         errorImages,
         visionImages,
         waitFreezesImages,

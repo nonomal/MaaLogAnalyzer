@@ -1,6 +1,7 @@
 import type { TaskInfo, NodeInfo } from '../../../../types'
 import type { LogParser } from '@windsland52/maa-log-parser'
 import type { LoadedTextFile } from '../../utils/fileLoadingHelpers'
+import type { LoadedPrimaryLogFile } from '../../../../utils/logFileDiscovery'
 
 export type ProcessViewControllerProps = Readonly<{
   tasks: TaskInfo[]
@@ -24,6 +25,7 @@ export interface ProcessViewControllerEmitters {
     visionImages?: Map<string, string>,
     waitFreezesImages?: Map<string, string>,
     textFiles?: LoadedTextFile[],
+    primaryLogFiles?: LoadedPrimaryLogFile[],
   ) => void
   onSelectNode: (node: NodeInfo) => void
   onSelectAction: (node: NodeInfo) => void

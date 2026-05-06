@@ -22,6 +22,8 @@ import { useFlowchartEdges } from './flowchart/composables/useFlowchartEdges'
 import { useFlowchartGraphRuntime } from './flowchart/composables/useFlowchartGraphRuntime'
 import { useFlowchartNodeInteraction } from './flowchart/composables/useFlowchartNodeInteraction'
 import { findNodeInfoImage } from './flowchart/utils/nodeImageLookup'
+import type { LoadedTextFile } from './process/utils/fileLoadingHelpers'
+import type { LoadedPrimaryLogFile } from '../utils/logFileDiscovery'
 
 const props = defineProps<{
   tasks: TaskInfo[]
@@ -32,7 +34,7 @@ const emit = defineEmits<{
   'select-task': [task: TaskInfo]
   'navigate-to-node': [task: TaskInfo, node: NodeInfo]
   'upload-file': [file: File]
-  'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>]
+  'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>, textFiles?: LoadedTextFile[], primaryLogFiles?: LoadedPrimaryLogFile[]]
 }>()
 
 const { isMobile } = useIsMobile()
@@ -66,8 +68,8 @@ const {
   handleFolderInputChange,
 } = useFlowchartUpload({
   onUploadFile: (file) => emit('upload-file', file),
-  onUploadContent: (content, errorImages, visionImages, waitFreezesImages) => {
-    emit('upload-content', content, errorImages, visionImages, waitFreezesImages)
+  onUploadContent: (content, errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles) => {
+    emit('upload-content', content, errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles)
   },
 })
 

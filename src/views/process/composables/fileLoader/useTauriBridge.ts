@@ -86,6 +86,7 @@ export const useTauriBridge = (
           result.visionImages,
           result.waitFreezesImages,
           result.textFiles,
+          result.primaryLogFiles,
         )
       }
     } catch (error) {

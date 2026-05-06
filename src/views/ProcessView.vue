@@ -6,6 +6,7 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import type { TaskInfo, NodeInfo } from '../types'
 import type { LogParser } from '@windsland52/maa-log-parser'
 import type { LoadedTextFile } from './process/utils/fileLoadingHelpers'
+import type { LoadedPrimaryLogFile } from '../utils/logFileDiscovery'
 import { useProcessViewController } from './process/composables/useProcessViewController'
 import ProcessMobileToolbar from './process/components/ProcessMobileToolbar.vue'
 import ProcessContentSection from './process/components/ProcessContentSection.vue'
@@ -32,7 +33,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   'select-task': [task: TaskInfo]
   'upload-file': [file: File]
-  'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>, textFiles?: LoadedTextFile[]]
+  'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>, textFiles?: LoadedTextFile[], primaryLogFiles?: LoadedPrimaryLogFile[]]
   'select-node': [node: NodeInfo]
   'select-action': [node: NodeInfo]
   'select-recognition': [node: NodeInfo, attemptIndex: number]
@@ -95,8 +96,8 @@ const {
   emitters: {
     onSelectTask: (task) => emit('select-task', task),
     onUploadFile: (file) => emit('upload-file', file),
-    onUploadContent: (content, errorImages, visionImages, waitFreezesImages, textFiles) => {
-      emit('upload-content', content, errorImages, visionImages, waitFreezesImages, textFiles)
+    onUploadContent: (content, errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles) => {
+      emit('upload-content', content, errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles)
     },
     onSelectNode: (node: NodeInfo) => emit('select-node', node),
     onSelectAction: (node: NodeInfo) => emit('select-action', node),
@@ -236,4 +237,3 @@ void fileInputRef
   box-shadow: none !important;
 }
 </style>
-
