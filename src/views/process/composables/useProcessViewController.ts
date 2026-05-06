@@ -2,10 +2,12 @@ import { useProcessFileSelection } from './processView/fileSelection'
 import { useProcessFollowNav } from './processView/followNav'
 import { useProcessRuntimeLayout } from './processView/runtimeLayout'
 import type { ProcessViewControllerEmitters, ProcessViewControllerProps } from './processView/types'
+import type { PrimaryLogSelectionOption } from '../../../utils/logFileDiscovery'
 
 interface UseProcessViewControllerOptions {
   props: ProcessViewControllerProps
   emitters: ProcessViewControllerEmitters
+  selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>
 }
 
 export const useProcessViewController = (
@@ -22,6 +24,7 @@ export const useProcessViewController = (
     isInTauri: runtimeLayout.isInTauri,
     isInVSCode: runtimeLayout.isInVSCode,
     virtualScroller: followNav.virtualScroller,
+    selectPrimaryLogs: options.selectPrimaryLogs,
   })
 
   return {

@@ -1,7 +1,8 @@
 import type { Ref } from 'vue'
 import type { LoadedTextFile } from '../../../../utils/fileDialog'
+import type { LoadedPrimaryLogFile, PrimaryLogSelectionOption } from '../../../../utils/logFileDiscovery'
 import type { TaskInfo } from '../../../../types'
-import type { LogParser } from '../../../../utils/logParser'
+import type { LogParser, ParseSourceInput } from '@windsland52/maa-log-parser'
 import type {
   DeferredTextSearchTarget,
   TextSearchLoadedTarget,
@@ -22,13 +23,16 @@ export interface LogLoadingPipelineOptions {
   setDeferredTextSearchTargets: (targets: DeferredTextSearchTarget[], defaultId?: string) => void
   pickPreferredLogTargetId: (targets: TextSearchLoadedTarget[]) => string
   applyParsedTasks: (nextTasks: TaskInfo[], preserveSelection: boolean) => void
-  clearRuntimeFilters: () => void
   onWarning: (message: string) => void
   onError: (message: string) => void
+  onFileLoadingStart?: () => void
+  onFileLoadingEnd?: () => void
+  selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>
 }
 
 export interface ProcessLogContentParams {
   content: string
+  parseInputs?: ParseSourceInput[]
   errorImages?: Map<string, string>
   visionImages?: Map<string, string>
   waitFreezesImages?: Map<string, string>
@@ -43,4 +47,5 @@ export interface HandleContentUploadParams {
   visionImages?: Map<string, string>
   waitFreezesImages?: Map<string, string>
   textFiles?: LoadedTextFile[]
+  primaryLogFiles?: LoadedPrimaryLogFile[]
 }

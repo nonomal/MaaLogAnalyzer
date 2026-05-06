@@ -61,7 +61,7 @@ const handleWheel = (event: WheelEvent) => {
       :ref="setDynamicScrollerRef"
       :key="selectedTaskKey ?? undefined"
       :items="nodes"
-      :min-item-size="150"
+      :min-item-size="40"
       key-field="_uniqueKey"
       class="virtual-scroller"
       :style="scrollerStyle"
@@ -92,6 +92,26 @@ const handleWheel = (event: WheelEvent) => {
           </div>
         </DynamicScrollerItem>
       </template>
+      
+      <!-- 增加底部留白（类似 VS Code 的 scrollBeyondLastLine） -->
+      <!-- 这从根本上解决了当列表最后几个巨型节点被收起时，因为整体 scrollHeight 锐减导致浏览器强制把滚动条往上推，进而产生点击位置向下乱跳的问题 -->
+      <template #after>
+        <div class="virtual-scroller-overscroll-padding" style="height: 100vh; pointer-events: none; opacity: 0;"></div>
+      </template>
     </DynamicScroller>
   </div>
 </template>
+
+<style scoped>
+.virtual-scroller {
+  /* 禁用浏览器默认的滚动锚定，防止虚拟列表在内部元素高频收起/展开时自动乱滚位置 */
+  overflow-anchor: none;
+}
+/* 确保动态条目也避免锚定争夺 */
+.virtual-scroller :deep(*) {
+  overflow-anchor: none;
+}
+.virtual-scroller :deep(.vue-recycle-scroller__item-wrapper) {
+  overflow-anchor: none;
+}
+</style>

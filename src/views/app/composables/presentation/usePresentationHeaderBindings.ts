@@ -12,16 +12,10 @@ interface UsePresentationHeaderBindingsOptions {
   onToggleTheme: () => void
   isMobile: UseAppPresentationBindingsOptions['isMobile']
   isVscodeLaunchEmbed: boolean
-  showProcessThreadFilters: boolean
   viewMode: UseAppPresentationBindingsOptions['viewMode']
   viewModeOptions: UseAppPresentationBindingsOptions['viewModeOptions']
   currentViewLabel: UseAppPresentationBindingsOptions['currentViewLabel']
   handleViewModeSelect: (key: string) => void
-  selectedProcessId: UseAppPresentationBindingsOptions['selectedProcessId']
-  selectedThreadId: UseAppPresentationBindingsOptions['selectedThreadId']
-  processIdOptions: UseAppPresentationBindingsOptions['processIdOptions']
-  threadIdOptions: UseAppPresentationBindingsOptions['threadIdOptions']
-  clearFilters: () => void
   showTaskDrawer: UseAppPresentationBindingsOptions['showTaskDrawer']
   showSettingsModal: UseAppPresentationBindingsOptions['showSettingsModal']
   showAboutModal: UseAppPresentationBindingsOptions['showAboutModal']
@@ -73,11 +67,6 @@ export const usePresentationHeaderBindings = (options: UsePresentationHeaderBind
     viewMode: options.viewMode,
     viewModeOptions: options.viewModeOptions,
     mobileMenuOptions,
-    showProcessThreadFilters: options.showProcessThreadFilters,
-    selectedProcessId: options.selectedProcessId,
-    selectedThreadId: options.selectedThreadId,
-    processIdOptions: options.processIdOptions,
-    threadIdOptions: options.threadIdOptions,
     isVscodeLaunchEmbed: options.isVscodeLaunchEmbed,
     isDark,
     showTaskDrawer: options.showTaskDrawer,
@@ -85,7 +74,6 @@ export const usePresentationHeaderBindings = (options: UsePresentationHeaderBind
     showAboutModal: options.showAboutModal,
     handleMobileMenuSelect,
     handleViewModeSelect: options.handleViewModeSelect,
-    clearFilters: options.clearFilters,
     toggleTheme: options.onToggleTheme,
   })
 

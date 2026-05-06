@@ -74,6 +74,7 @@ export const useDetailPresentationState = (options: UseDetailPresentationStateOp
     switch (type) {
       case 'task': return 'Task'
       case 'pipeline_node': return 'PipelineNode'
+      case 'resource_loading': return 'Resource.Loading'
       case 'recognition': return 'Recognition'
       case 'recognition_node': return 'RecognitionNode'
       case 'wait_freezes': return 'WaitFreezes'

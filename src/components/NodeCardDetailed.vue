@@ -2,10 +2,8 @@
 import { computed, toRef } from 'vue'
 import { NCard, NButton, NFlex, NText } from 'naive-ui'
 import type { NodeInfo, MergedRecognitionItem } from '../types'
-import { resolveImageSrcPath } from '../utils/imageSrc'
 import { getFlowItemButtonType, getFlowItemShortLabel } from '../utils/flowLabels'
 import TaskDocHoverPopover from './TaskDocHoverPopover.vue'
-import SafePreviewImage from './SafePreviewImage.vue'
 import StatusIcon from './StatusIcon.vue'
 import { useNodeCardFlowSectionState } from './nodeCard/useNodeCardFlowSectionState'
 import { buildRecognitionItemKey } from './nodeCard/recognitionListKeys'
@@ -67,7 +65,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
           <n-button
             size="small"
             class="fixed-toggle-button"
-            @click="emit('toggle-recognition')"
+            @click="emit('toggle-recognition')" @mousedown.prevent
           >
             {{ recognitionExpanded ? 'Hide' : 'Show' }}
           </n-button>
@@ -125,29 +123,10 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
                 v-if="item.attemptIndex != null && hasRecognitionNestedRows(item.attemptIndex)"
                 size="small"
                 class="fixed-toggle-button"
-                @click="emit('toggle-nested', item.attemptIndex)"
+                @click="emit('toggle-nested', item.attemptIndex)" @mousedown.prevent
               >
                 {{ isExpanded(item.attemptIndex) ? 'Hide' : 'Show' }}
               </n-button>
-            </n-flex>
-
-            <n-flex
-              v-if="item.attempt?.vision_image || item.attempt?.error_image"
-              vertical
-              style="gap: 8px; align-self: flex-start"
-            >
-              <safe-preview-image
-                v-if="item.attempt?.vision_image"
-                :src="resolveImageSrcPath(item.attempt.vision_image)"
-                width="200"
-                style="border-radius: 4px"
-              />
-              <safe-preview-image
-                v-if="item.attempt?.error_image"
-                :src="resolveImageSrcPath(item.attempt.error_image)"
-                width="200"
-                style="border-radius: 4px"
-              />
             </n-flex>
 
             <n-flex
@@ -176,6 +155,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
                   >
                     <n-button
                       size="small"
+                      class="flow-item-button"
                       :type="getFlowItemButtonType(nested.item)"
                       ghost
                       @click="emit('select-flow-item', node, nested.item.id)"
@@ -198,45 +178,10 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
                     v-if="nested.hasChildren"
                     size="small"
                     class="fixed-toggle-button"
-                    @click.stop="toggleNestedRecognitionFlowItemExpand(nested.item.id)"
+                    @click.stop="toggleNestedRecognitionFlowItemExpand(nested.item.id)" @mousedown.prevent
                   >
                     {{ nested.expanded ? 'Hide' : 'Show' }}
                   </n-button>
-                </n-flex>
-
-                <n-flex
-                  v-if="nested.item.type === 'recognition_node' && (nested.item.vision_image || nested.item.error_image)"
-                  vertical
-                  style="gap: 8px"
-                  :style="{ marginLeft: `${nested.depth * DETAIL_INDENT_PX + 24}px` }"
-                >
-                  <safe-preview-image
-                    v-if="nested.item.vision_image"
-                    :src="resolveImageSrcPath(nested.item.vision_image)"
-                    width="180"
-                    style="border-radius: 4px"
-                  />
-                  <safe-preview-image
-                    v-if="nested.item.error_image"
-                    :src="resolveImageSrcPath(nested.item.error_image)"
-                    width="180"
-                    style="border-radius: 4px"
-                  />
-                </n-flex>
-
-                <n-flex
-                  v-if="nested.item.type === 'wait_freezes' && nested.item.wait_freezes_details?.images && nested.item.wait_freezes_details.images.length > 0"
-                  vertical
-                  style="gap: 8px"
-                  :style="{ marginLeft: `${nested.depth * DETAIL_INDENT_PX + 24}px` }"
-                >
-                  <safe-preview-image
-                    v-for="(img, imgIndex) in nested.item.wait_freezes_details.images"
-                    :key="`nested-wf-img-${nested.item.id}-${imgIndex}`"
-                    :src="resolveImageSrcPath(img)"
-                    width="180"
-                    style="border-radius: 4px"
-                  />
                 </n-flex>
               </template>
             </n-flex>
@@ -253,7 +198,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
           v-if="actionTimelineRows.length > 0"
           size="small"
           class="fixed-toggle-button"
-          @click="emit('toggle-action')"
+          @click="emit('toggle-action')" @mousedown.prevent
         >
           {{ actionExpanded ? 'Hide' : 'Show' }}
         </n-button>
@@ -284,6 +229,7 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
             >
               <n-button
                 size="small"
+                class="flow-item-button"
                 :type="getFlowItemButtonType(row.item)"
                 ghost
                 @click="emit('select-flow-item', node, row.item.id)"
@@ -303,25 +249,10 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
               v-if="row.hasChildren"
               size="small"
               class="fixed-toggle-button"
-              @click.stop="toggleActionFlowItem(row.item.id)"
+              @click.stop="toggleActionFlowItem(row.item.id)" @mousedown.prevent
             >
               {{ row.expanded ? 'Hide' : 'Show' }}
             </n-button>
-          </n-flex>
-
-          <n-flex
-            v-if="row.item.type === 'wait_freezes' && row.item.wait_freezes_details?.images && row.item.wait_freezes_details.images.length > 0"
-            vertical
-            style="gap: 8px; align-self: flex-start"
-            :style="{ marginLeft: `${row.depth * DETAIL_INDENT_PX + 24}px` }"
-          >
-            <safe-preview-image
-              v-for="(img, idx) in row.item.wait_freezes_details.images"
-              :key="`detailed-wf-img-${row.item.id}-${idx}`"
-              :src="resolveImageSrcPath(img)"
-              width="200"
-              style="border-radius: 4px"
-            />
           </n-flex>
         </n-flex>
       </n-flex>
@@ -345,6 +276,20 @@ const waitFreezesShortLabel = getFlowItemShortLabel('wait_freezes')
 }
 
 .recognition-item-fragment {
-  display: contents;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.flow-item-button {
+  max-width: 100%;
+}
+
+.flow-item-button :deep(.n-button__content) {
+  display: inline-block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>

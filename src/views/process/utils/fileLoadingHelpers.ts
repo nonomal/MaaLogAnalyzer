@@ -1,3 +1,5 @@
+export { isBakLogFileName, isMainLogFileName } from '../../../utils/logFileDiscovery'
+
 const TEXT_SEARCH_EXTENSIONS = ['.log', '.txt', '.jsonl'] as const
 
 export interface LoadedTextFile {
@@ -11,9 +13,6 @@ interface CollectedDebugAssets {
   visionImages: Map<string, string>
   waitFreezesImages: Map<string, string>
 }
-
-export const isMainLogFileName = (name: string) => name === 'maa.log' || name === 'maafw.log'
-export const isBakLogFileName = (name: string) => name === 'maa.bak.log' || name === 'maafw.bak.log'
 
 const isSearchTextFileName = (name: string) => {
   const lower = name.toLowerCase()

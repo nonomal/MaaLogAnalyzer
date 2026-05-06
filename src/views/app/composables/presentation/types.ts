@@ -1,14 +1,13 @@
 import type { ComputedRef, Ref, VNodeChild } from 'vue'
-import type { LogParser } from '../../../../utils/logParser'
 import type { NodeInfo, TaskInfo } from '../../../../types'
 import type { TourStep } from '../../../../tutorial/types'
+import type { PrimaryLogSelectionOption } from '../../../../utils/logFileDiscovery'
 import type {
   DetailViewForwardProps,
   ProcessViewEventHandlers,
   ProcessViewForwardProps,
   TextSearchViewForwardProps,
   UploadContentHandler,
-  UploadFileHandler,
 } from '../../components/types'
 
 export interface ViewModeOptionLike extends Record<string, unknown> {
@@ -22,16 +21,10 @@ export interface UseAppPresentationBindingsOptions {
   onToggleTheme: () => void
   isMobile: Ref<boolean>
   isVscodeLaunchEmbed: boolean
-  showProcessThreadFilters: boolean
   viewMode: Ref<string>
   viewModeOptions: Ref<ViewModeOptionLike[]>
   currentViewLabel: Ref<string>
   handleViewModeSelect: (key: string) => void
-  selectedProcessId: Ref<string>
-  selectedThreadId: Ref<string>
-  processIdOptions: Ref<Array<Record<string, unknown>>>
-  threadIdOptions: Ref<Array<Record<string, unknown>>>
-  clearFilters: () => void
   showTaskDrawer: Ref<boolean>
   showDetailDrawer: Ref<boolean>
   showSettingsModal: Ref<boolean>
@@ -46,14 +39,16 @@ export interface UseAppPresentationBindingsOptions {
   selectedNode: Ref<NodeInfo | null>
   selectedFlowItemId: Ref<string | null>
   pendingScrollNodeId: Ref<number | null>
-  parser: LogParser
   textSearchViewProps: ComputedRef<TextSearchViewForwardProps>
   processViewMobileProps: ComputedRef<ProcessViewForwardProps>
   processViewDesktopProps: ComputedRef<ProcessViewForwardProps>
   processViewEventHandlers: ProcessViewEventHandlers
   detailViewProps: ComputedRef<DetailViewForwardProps>
   onSelectTask: (task: TaskInfo) => void
-  onUploadFile: UploadFileHandler
+  onUploadFile: (
+    file: File,
+    selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>,
+  ) => void | Promise<void>
   onUploadContent: UploadContentHandler
   onMobileTaskSelect: (task: TaskInfo) => void
   onToggleDetailView: () => void

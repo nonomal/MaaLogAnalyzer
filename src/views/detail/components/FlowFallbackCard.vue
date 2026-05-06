@@ -54,8 +54,38 @@ const props = defineProps<{
         {{ props.selectedFlowItem.node_id ?? '-' }}
       </n-descriptions-item>
 
+      <n-descriptions-item
+        v-if="props.selectedFlowItem.type === 'resource_loading'"
+        label="资源 ID"
+      >
+        {{ props.selectedFlowItem.resource_loading_details?.res_id ?? '-' }}
+      </n-descriptions-item>
+
+      <n-descriptions-item
+        v-if="props.selectedFlowItem.type === 'resource_loading'"
+        label="资源类型"
+      >
+        {{ props.selectedFlowItem.resource_loading_details?.resource_type ?? '-' }}
+      </n-descriptions-item>
+
       <n-descriptions-item label="子项数量">
         {{ props.selectedFlowItem.children?.length || 0 }}
+      </n-descriptions-item>
+
+      <n-descriptions-item
+        v-if="props.selectedFlowItem.type === 'resource_loading' && props.selectedFlowItem.resource_loading_details?.path"
+        label="资源路径"
+        :span="props.descriptionColumns"
+      >
+        <n-text code>{{ props.selectedFlowItem.resource_loading_details.path }}</n-text>
+      </n-descriptions-item>
+
+      <n-descriptions-item
+        v-if="props.selectedFlowItem.type === 'resource_loading' && props.selectedFlowItem.resource_loading_details?.hash"
+        label="Hash"
+        :span="props.descriptionColumns"
+      >
+        <n-text code>{{ props.selectedFlowItem.resource_loading_details.hash }}</n-text>
       </n-descriptions-item>
 
     </n-descriptions>

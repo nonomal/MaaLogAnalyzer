@@ -1,0 +1,43 @@
+{
+  "name": "@windsland52/maa-log-kernel",
+  "version": "0.0.1",
+  "type": "module",
+  "private": false,
+  "scripts": {
+    "typecheck": "tsc -p ./tsconfig.json",
+    "build": "pnpm run clean && tsc -p ./tsconfig.build.json && node ../../scripts/fix-esm-imports.mjs ./dist",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{ recursive: true, force: true })\""
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./protocol": {
+      "import": "./dist/protocol.js",
+      "types": "./dist/protocol.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types.js",
+      "types": "./dist/types.d.ts"
+    },
+    "./statistics": {
+      "import": "./dist/statistics.js",
+      "types": "./dist/statistics.d.ts"
+    },
+    "./parser": {
+      "import": "./dist/parser.js",
+      "types": "./dist/parser.d.ts"
+    }
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

@@ -10,8 +10,150 @@ const execFileAsync = promisify(execFile)
 const isZh = vscode.env.language.toLowerCase().startsWith('zh')
 const t = (en: string, zh: string) => (isZh ? zh : en)
 
-const MAIN_LOG_CANDIDATES = ['maa.log', 'maafw.log'] as const
-const BAK_LOG_CANDIDATES = ['maa.bak.log', 'maafw.bak.log'] as const
+const PRIMARY_LOG_FILE_HINT = 'maa.log / maa.bak*.log / maafw.log / maafw.bak*.log'
+const MAIN_LOG_RE = /^(maa|maafw)\.log$/i
+const BAK_LOG_RE = /^(maa|maafw)\.bak(?:\.(\d{4}\.\d{2}\.\d{2}-\d{2}\.\d{2}\.\d{2}\.\d{1,3}))?\.log$/i
+
+type PrimaryLogKind = 'main' | 'bak'
+
+interface PrimaryLogCandidate {
+  path: string
+  dirPath: string
+  fileName: string
+  normalizedName: string
+  kind: PrimaryLogKind
+  rotatedTimestampHint: string | null
+}
+
+const normalizeTimestampMilliseconds = (value: string): string => {
+  const lastDot = value.lastIndexOf('.')
+  if (lastDot < 0) return value
+  const ms = value.slice(lastDot + 1)
+  if (!/^\d{1,3}$/.test(ms)) return value
+  return `${value.slice(0, lastDot)}.${ms.padEnd(3, '0')}`
+}
+
+const compareNullableAscending = (a: string | null, b: string | null): number => {
+  if (a && b) return a.localeCompare(b)
+  if (a) return -1
+  if (b) return 1
+  return 0
+}
+
+const getParentUri = (uri: vscode.Uri): vscode.Uri => uri.with({
+  path: path.posix.dirname(uri.path),
+})
+
+const getPrimaryLogCandidate = (rawPath: string, rawName?: string): PrimaryLogCandidate | null => {
+  const normalizedPath = rawPath.replace(/\\/g, '/')
+  const fileName = rawName ?? path.posix.basename(normalizedPath)
+  const normalizedName = fileName.trim().toLowerCase()
+
+  const mainMatch = normalizedName.match(MAIN_LOG_RE)
+  if (mainMatch) {
+    return {
+      path: normalizedPath,
+      dirPath: path.posix.dirname(normalizedPath) === '.' ? '' : path.posix.dirname(normalizedPath),
+      fileName,
+      normalizedName,
+      kind: 'main',
+      rotatedTimestampHint: null,
+    }
+  }
+
+  const bakMatch = normalizedName.match(BAK_LOG_RE)
+  if (!bakMatch) return null
+
+  return {
+    path: normalizedPath,
+    dirPath: path.posix.dirname(normalizedPath) === '.' ? '' : path.posix.dirname(normalizedPath),
+    fileName,
+    normalizedName,
+    kind: 'bak',
+    rotatedTimestampHint: bakMatch[2] ? normalizeTimestampMilliseconds(bakMatch[2]) : null,
+  }
+}
+
+const extractFirstLogTimestamp = (content: string): string | null => {
+  const match = content.match(/\[(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d{1,3})\]/)
+  return match ? normalizeTimestampMilliseconds(match[1]) : null
+}
+
+const selectPrimaryLogGroup = <T extends { path: string; name: string }>(entries: T[]) => {
+  const groups = new Map<string, Array<{ item: T; candidate: PrimaryLogCandidate }>>()
+
+  for (const item of entries) {
+    const candidate = getPrimaryLogCandidate(item.path, item.name)
+    if (!candidate) continue
+    const bucket = groups.get(candidate.dirPath) ?? []
+    bucket.push({ item, candidate })
+    groups.set(candidate.dirPath, bucket)
+  }
+
+  const rankedGroups = Array.from(groups.entries()).map(([dirPath, group]) => {
+    const mainCount = group.filter(entry => entry.candidate.kind === 'main').length
+    const depth = dirPath ? dirPath.split('/').filter(Boolean).length : 0
+    return {
+      dirPath,
+      group,
+      hasMain: mainCount > 0,
+      mainCount,
+      count: group.length,
+      depth,
+    }
+  })
+
+  rankedGroups.sort((a, b) => {
+    if (a.depth !== b.depth) return a.depth - b.depth
+    if (a.hasMain !== b.hasMain) return a.hasMain ? -1 : 1
+    if (a.mainCount !== b.mainCount) return b.mainCount - a.mainCount
+    if (a.count !== b.count) return b.count - a.count
+    return a.dirPath.localeCompare(b.dirPath)
+  })
+
+  return rankedGroups[0]?.group ?? []
+}
+
+const sortLoadedPrimaryLogSegments = <T extends { path: string; name: string; content: string }>(
+  entries: T[],
+): T[] => {
+  return [...entries].sort((a, b) => {
+    const aCandidate = getPrimaryLogCandidate(a.path, a.name)
+    const bCandidate = getPrimaryLogCandidate(b.path, b.name)
+    const aContentTimestamp = extractFirstLogTimestamp(a.content)
+    const bContentTimestamp = extractFirstLogTimestamp(b.content)
+    const aChronoHint = aContentTimestamp ?? aCandidate?.rotatedTimestampHint ?? null
+    const bChronoHint = bContentTimestamp ?? bCandidate?.rotatedTimestampHint ?? null
+
+    const chronoDelta = compareNullableAscending(aChronoHint, bChronoHint)
+    if (chronoDelta !== 0) return chronoDelta
+
+    const contentDelta = compareNullableAscending(aContentTimestamp, bContentTimestamp)
+    if (contentDelta !== 0) return contentDelta
+
+    const aKind = aCandidate?.kind ?? 'main'
+    const bKind = bCandidate?.kind ?? 'main'
+    if (aKind !== bKind) return aKind === 'bak' ? -1 : 1
+
+    return a.path.localeCompare(b.path)
+  })
+}
+
+const combineLoadedPrimaryLogSegments = <T extends { path: string; name: string; content: string }>(
+  entries: T[],
+): string => {
+  const sorted = sortLoadedPrimaryLogSegments(entries)
+
+  let combined = ''
+  for (const entry of sorted) {
+    if (!entry.content) continue
+    if (combined && !combined.endsWith('\n')) {
+      combined += '\n'
+    }
+    combined += entry.content
+  }
+  return combined
+}
 
 const postThemeChangedToWebview = (panel: vscode.WebviewPanel | undefined) => {
   panel?.webview.postMessage({
@@ -332,69 +474,69 @@ async function analyzeUri(uri: vscode.Uri): Promise<void> {
 
 async function analyzeFolderUri(folderUri: vscode.Uri): Promise<void> {
   try {
-    const mainPatterns = MAIN_LOG_CANDIDATES.map(name => new vscode.RelativePattern(folderUri, `**/${name}`))
-    const bakPatterns = BAK_LOG_CANDIDATES.map(name => new vscode.RelativePattern(folderUri, `**/${name}`))
+    const candidatePatterns = [
+      '**/maa.log',
+      '**/maafw.log',
+      '**/maa.bak*.log',
+      '**/maafw.bak*.log',
+    ].map(pattern => new vscode.RelativePattern(folderUri, pattern))
+    const candidateLists = await Promise.all(
+      candidatePatterns.map(pattern => vscode.workspace.findFiles(pattern, '**/node_modules/**', 200)),
+    )
 
-    const [mainLists, bakLists] = await Promise.all([
-      Promise.all(mainPatterns.map(p => vscode.workspace.findFiles(p, '**/node_modules/**', 100))),
-      Promise.all(bakPatterns.map(p => vscode.workspace.findFiles(p, '**/node_modules/**', 100))),
-    ])
+    const primaryLogUris = candidateLists
+      .flat()
+      .filter((uri: vscode.Uri, index: number, all: vscode.Uri[]) => all.findIndex((other: vscode.Uri) => other.toString() === uri.toString()) === index)
+      .filter((uri: vscode.Uri) => getPrimaryLogCandidate(uri.path, path.posix.basename(uri.path)) != null)
 
-    const mainLogs = mainLists.flat()
-    const bakLogs = bakLists.flat()
+    const primaryLogEntries: Array<{ uri: vscode.Uri; path: string; name: string }> = primaryLogUris.map((uri: vscode.Uri) => ({
+      uri,
+      path: uri.path,
+      name: path.posix.basename(uri.path),
+    }))
+    const selectedLogs = selectPrimaryLogGroup(primaryLogEntries)
 
-    if (mainLogs.length === 0 && bakLogs.length === 0) {
-      vscode.window.showErrorMessage('文件夹中未找到日志文件（maa.log / maa.bak.log / maafw.log / maafw.bak.log）')
+    if (selectedLogs.length === 0) {
+      vscode.window.showErrorMessage(`文件夹中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
       return
     }
 
-    const sortByDepth = (a: vscode.Uri, b: vscode.Uri) => {
-      const da = a.path.split('/').length
-      const db = b.path.split('/').length
-      return da - db
-    }
-
-    const sortedMain = [...mainLogs].sort(sortByDepth)
-    const targetMain = sortedMain[0]
-
-    let targetBak: vscode.Uri | undefined
-    if (targetMain) {
-      const mainDir = path.posix.dirname(targetMain.path).toLowerCase()
-      targetBak = bakLogs.find(b => path.posix.dirname(b.path).toLowerCase() === mainDir)
-    }
-    if (!targetBak && bakLogs.length > 0) {
-      targetBak = [...bakLogs].sort(sortByDepth)[0]
-    }
-
-    let combinedContent = ''
-
-    if (targetBak) {
-      const bakContent = await vscode.workspace.fs.readFile(targetBak)
-      combinedContent += new TextDecoder('utf-8').decode(bakContent)
-    }
-
-    if (targetMain) {
-      const mainContent = await vscode.workspace.fs.readFile(targetMain)
-      if (combinedContent && !combinedContent.endsWith('\n')) {
-        combinedContent += '\n'
+    const loadedSegments = await Promise.all(selectedLogs.map(async ({ item }) => {
+      const bytes = await vscode.workspace.fs.readFile(item.uri)
+      return {
+        path: item.path,
+        name: item.name,
+        uri: item.uri,
+        content: new TextDecoder('utf-8').decode(bytes),
       }
-      combinedContent += new TextDecoder('utf-8').decode(mainContent)
-    }
+    }))
 
-    if (!combinedContent) {
+    const primaryLogFiles = sortLoadedPrimaryLogSegments(loadedSegments)
+
+    if (primaryLogFiles.length === 0) {
       vscode.window.showErrorMessage('未能读取到有效日志内容')
       return
     }
 
-    const sourceName = targetMain ? path.basename(path.dirname(targetMain.fsPath)) : path.basename(folderUri.fsPath)
-    const contentBaseDir = targetMain
-      ? vscode.Uri.file(path.dirname(targetMain.fsPath))
+    const targetMain = loadedSegments.find(segment => {
+      const candidate = getPrimaryLogCandidate(segment.path, segment.name)
+      return candidate?.kind === 'main'
+    })?.uri
+    const selectedBaseDir = loadedSegments[0]
+      ? getParentUri(loadedSegments[0].uri)
       : folderUri
+    const sourceName = targetMain
+      ? path.posix.basename(getParentUri(targetMain).path)
+      : path.posix.basename(selectedBaseDir.path || folderUri.path)
+    const contentBaseDir = targetMain
+      ? getParentUri(targetMain)
+      : selectedBaseDir
     const debugAssets = await collectDebugAssetsForBaseDirectory(contentBaseDir)
 
     currentPanel?.webview.postMessage({
       type: 'loadFile',
-      content: combinedContent,
+      content: '',
+      primaryLogFiles,
       fileName: sourceName,
       errorImages: debugAssets.errorImages,
       visionImages: debugAssets.visionImages,
@@ -577,23 +719,10 @@ async function uninstallWindowsContextMenu(): Promise<void> {
 function isNeededFile(filePath: string): boolean {
   const lower = filePath.replace(/\\/g, '/').toLowerCase()
   const name = lower.substring(lower.lastIndexOf('/') + 1)
-  if (MAIN_LOG_CANDIDATES.includes(name as (typeof MAIN_LOG_CANDIDATES)[number]) || BAK_LOG_CANDIDATES.includes(name as (typeof BAK_LOG_CANDIDATES)[number])) return true
+  if (getPrimaryLogCandidate(lower, name)) return true
   if (lower.includes('/on_error/') && lower.endsWith('.png')) return true
   if (lower.includes('/vision/') && lower.endsWith('.jpg')) return true
   return false
-}
-
-/** 找到主日志（maa.log / maafw.log）所在的 base 目录 */
-function findBaseDirectory(paths: string[]): string | null {
-  for (const p of paths) {
-    const normalized = p.replace(/\\/g, '/')
-    const lower = normalized.toLowerCase()
-    if (lower.endsWith('/maa.log') || lower === 'maa.log' || lower.endsWith('/maafw.log') || lower === 'maafw.log') {
-      const lastSlash = normalized.lastIndexOf('/')
-      return lastSlash === -1 ? '' : normalized.substring(0, lastSlash)
-    }
-  }
-  return null
 }
 
 /** 拼接路径 */
@@ -645,38 +774,28 @@ async function handleZipFile(uri: vscode.Uri): Promise<void> {
     })
 
     const paths = Object.keys(files)
-    const basePath = findBaseDirectory(paths)
-    if (basePath === null) {
-      vscode.window.showWarningMessage('ZIP 文件中未找到主日志文件（maa.log / maafw.log）')
+    const selectedLogs = selectPrimaryLogGroup(paths.map(filePath => ({
+      path: filePath,
+      name: filePath.replace(/\\/g, '/').split('/').pop() || filePath,
+    })))
+    if (selectedLogs.length === 0) {
+      vscode.window.showWarningMessage(`ZIP 文件中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
       return
     }
+    const basePath = selectedLogs[0].candidate.dirPath
 
-    let content = ''
-
-    // 读取 bak 日志（maa.bak.log / maafw.bak.log）
-    for (const bakName of BAK_LOG_CANDIDATES) {
-      const bakLogPath = joinZipPath(basePath, bakName)
-      for (const p of paths) {
-        if (p.replace(/\\/g, '/').toLowerCase() === bakLogPath.toLowerCase()) {
-          content += new TextDecoder('utf-8').decode(files[p])
-          break
+    const loadedSegments = selectedLogs
+      .map(({ item }) => {
+        const contentBytes = files[item.path]
+        if (!contentBytes) return null
+        return {
+          path: item.path,
+          name: item.name,
+          content: new TextDecoder('utf-8').decode(contentBytes),
         }
-      }
-    }
-
-    // 读取主日志（maa.log / maafw.log）
-    for (const mainName of MAIN_LOG_CANDIDATES) {
-      const mainLogPath = joinZipPath(basePath, mainName)
-      for (const p of paths) {
-        if (p.replace(/\\/g, '/').toLowerCase() === mainLogPath.toLowerCase()) {
-          if (content && !content.endsWith('\n')) {
-            content += '\n'
-          }
-          content += new TextDecoder('utf-8').decode(files[p])
-          break
-        }
-      }
-    }
+      })
+      .filter((entry): entry is { path: string; name: string; content: string } => entry != null)
+    const content = combineLoadedPrimaryLogSegments(loadedSegments)
 
     if (!content) {
       vscode.window.showWarningMessage('ZIP 文件中未找到有效的日志内容')

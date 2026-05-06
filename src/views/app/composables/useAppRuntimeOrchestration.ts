@@ -1,4 +1,3 @@
-import type { Ref } from 'vue'
 import type { TextSearchLoadedTarget } from './useTextSearchTargets'
 import type { UseBridgeRuntimeOptions } from './bridgeRuntime/types'
 import { useBridgeRuntime } from './useBridgeRuntime'
@@ -13,8 +12,6 @@ export interface UseAppRuntimeOrchestrationOptions extends RuntimeOptionOverride
   setTextSearchLoadedTargets: (targets: TextSearchLoadedTarget[], defaultId?: string) => void
   resetParserDebugAssets: () => void
   resetAnalysisState: () => void
-  selectedProcessId: Ref<string>
-  selectedThreadId: Ref<string>
 }
 
 const REALTIME_PARSE_INTERVAL_MS = 16
@@ -52,8 +49,6 @@ export const useAppRuntimeOrchestration = (options: UseAppRuntimeOrchestrationOp
       options.resetParserDebugAssets()
       options.parser.resetParsedEvents()
       options.resetAnalysisState()
-      options.selectedProcessId.value = ''
-      options.selectedThreadId.value = ''
     },
   }
 

@@ -3,12 +3,14 @@ import type { DynamicScroller } from 'vue-virtual-scroller'
 import { useProcessFileLoader } from '../useProcessFileLoader'
 import { useProcessSelectionHandlers } from '../useProcessSelectionHandlers'
 import type { ProcessViewControllerEmitters } from './types'
+import type { PrimaryLogSelectionOption } from '../../../../utils/logFileDiscovery'
 
 interface UseProcessFileSelectionOptions {
   emitters: ProcessViewControllerEmitters
   isInTauri: Ref<boolean>
   isInVSCode: Ref<boolean>
   virtualScroller: Ref<InstanceType<typeof DynamicScroller> | null>
+  selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>
 }
 
 export const useProcessFileSelection = (
@@ -34,6 +36,7 @@ export const useProcessFileSelection = (
     onUploadContent: options.emitters.onUploadContent,
     onFileLoadingStart: options.emitters.onFileLoadingStart,
     onFileLoadingEnd: options.emitters.onFileLoadingEnd,
+    selectPrimaryLogs: options.selectPrimaryLogs,
   })
 
   const {

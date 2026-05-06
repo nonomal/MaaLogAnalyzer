@@ -9,7 +9,7 @@ import {
   parseWaitFreezesParam,
   readNumberField,
   readStringField,
-} from '../logEventDecoders'
+} from '@windsland52/maa-log-parser/log-event-decoders'
 
 describe('logEventDecoders', () => {
   it('reads typed number and string fields', () => {

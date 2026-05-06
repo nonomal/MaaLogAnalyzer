@@ -1,11 +1,11 @@
 import { computed, type Ref } from 'vue'
 import type { MergedRecognitionItem, NodeInfo, RecognitionAttempt } from '../../types'
-import { buildNodeRecognitionAttempts } from '../../utils/nodeFlow'
+import { buildNodeRecognitionAttempts } from '@windsland52/maa-log-parser/node-flow'
 import {
   buildNextListDisplayName,
   buildRecognitionTargetByNextName,
   resolveRecognitionNextListName,
-} from '../../utils/nextListPresentation'
+} from '@windsland52/maa-log-tools/next-list-presentation'
 
 interface UseMergedRecognitionListParams {
   node: Ref<NodeInfo>

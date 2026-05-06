@@ -2,7 +2,7 @@ import { computed, h, watch, type Ref } from 'vue'
 import type { VNodeChild } from 'vue'
 import type { SelectOption } from 'naive-ui'
 import type { TaskInfo } from '../../../types'
-import { findTaskIndex, isSameTask } from '../../../utils/taskIdentity'
+import { findTaskIndex, isSameTask } from '@windsland52/maa-log-tools/task-identity'
 
 type FlowchartTaskOption = SelectOption & {
   status: TaskInfo['status']

@@ -51,7 +51,6 @@ export const useAppViewState = () => {
   const isVscodeLaunchEmbed = embedProfile.mode === EMBED_MODE_VSCODE_LAUNCH
   const bridgeEnabled = embedProfile.bridgeEnabled
   const tutorialAutoStartEnabled = embedProfile.ui.autoStartTutorial && !isEmbeddedContext && !hasEmbedQueryFlag
-  const showProcessThreadFilters = embedProfile.ui.showProcessThreadFilters
   const showRealtimeStatus = embedProfile.ui.showRealtimeStatus
   const showReloadControls = embedProfile.ui.showReloadControls
   const showTextSearchView = embedProfile.ui.showTextSearchView
@@ -122,6 +121,13 @@ export const useAppViewState = () => {
     }
   }
 
+  const ensureDetailViewExpanded = () => {
+    if (detailViewCollapsed.value) {
+      splitSize.value = detailViewSavedSize.value
+      detailViewCollapsed.value = false
+    }
+  }
+
   watch([splitSize, detailViewCollapsed, splitVerticalSize], ([currentSplitSize, collapsed, currentVerticalSize]) => {
     const prev = readAppLayoutState()
     const next: AppLayoutState = {
@@ -140,7 +146,6 @@ export const useAppViewState = () => {
     isVscodeLaunchEmbed,
     bridgeEnabled,
     tutorialAutoStartEnabled,
-    showProcessThreadFilters,
     showRealtimeStatus,
     showReloadControls,
     showTextSearchView,
@@ -154,5 +159,6 @@ export const useAppViewState = () => {
     splitVerticalSize,
     detailViewCollapsed,
     toggleDetailView,
+    ensureDetailViewExpanded,
   }
 }

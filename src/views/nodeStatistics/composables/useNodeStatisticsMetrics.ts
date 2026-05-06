@@ -4,7 +4,7 @@ import {
   NodeStatisticsAnalyzer,
   type NodeStatistics,
   type RecognitionActionStatistics,
-} from '../../../utils/nodeStatistics'
+} from '@windsland52/maa-log-parser/node-statistics'
 
 export type StatMode = 'node' | 'recognition-action'
 

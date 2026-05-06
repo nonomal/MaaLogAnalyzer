@@ -1,6 +1,7 @@
-import type { LogParser } from '../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import type { NodeInfo, TaskInfo } from '../../../types'
 import type { LoadedTextFile } from '../../process/utils/fileLoadingHelpers'
+import type { LoadedPrimaryLogFile, PrimaryLogSelectionOption } from '../../../utils/logFileDiscovery'
 import type { BridgeOpenCropRequest } from '../composables/useBridgeTaskActions'
 
 export interface LoadedSearchTarget {
@@ -10,13 +11,17 @@ export interface LoadedSearchTarget {
   content: string
 }
 
-export type UploadFileHandler = (file: File) => void | Promise<void>
+export type UploadFileHandler = (
+  file: File,
+  selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>,
+) => void | Promise<void>
 export type UploadContentHandler = (
   content: string,
   errorImages?: Map<string, string>,
   visionImages?: Map<string, string>,
   waitFreezesImages?: Map<string, string>,
   textFiles?: LoadedTextFile[],
+  primaryLogFiles?: LoadedPrimaryLogFile[],
 ) => void | Promise<void>
 
 export interface ProcessViewForwardProps {

@@ -1,10 +1,12 @@
 import { onMounted, onUnmounted } from 'vue'
 import { decodeBase64ImageEntries } from '../../utils/fileLoadingHelpers'
+import type { LoadedPrimaryLogFile } from '../../../../utils/logFileDiscovery'
 import type { UseProcessFileLoaderOptions } from './types'
 
 interface VSCodeBridgePayload {
   type: string
   content?: string
+  primaryLogFiles?: LoadedPrimaryLogFile[]
   errorImages?: Array<{ key: string, base64: string }>
   visionImages?: Array<{ key: string, base64: string }>
   waitFreezesImages?: Array<{ key: string, base64: string }>
@@ -32,12 +34,12 @@ export const useVSCodeBridge = (
 
   const handleVSCodeMessage = (event: MessageEvent) => {
     const message = event.data as VSCodeBridgePayload
-    if (message.type === 'loadFile' && message.content) {
+    if (message.type === 'loadFile' && (message.content || message.primaryLogFiles?.length)) {
       options.onFileLoadingStart()
       const errorImages = decodeBase64ImageEntries(message.errorImages, 'image/png')
       const visionImages = decodeBase64ImageEntries(message.visionImages, 'image/jpeg')
       const waitFreezesImages = decodeBase64ImageEntries(message.waitFreezesImages, 'image/jpeg')
-      options.onUploadContent(message.content, errorImages, visionImages, waitFreezesImages)
+      options.onUploadContent(message.content ?? '', errorImages, visionImages, waitFreezesImages, undefined, message.primaryLogFiles)
       options.onFileLoadingEnd()
       return
     }

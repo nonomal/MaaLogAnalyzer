@@ -10,7 +10,6 @@ import FlowchartTopToolbar from './flowchart/components/FlowchartTopToolbar.vue'
 import FlowchartTimelineNavList from './flowchart/components/FlowchartTimelineNavList.vue'
 import FlowchartNodePopover from './flowchart/components/FlowchartNodePopover.vue'
 import type { TaskInfo, NodeInfo } from '../types'
-import type { LogParser } from '../utils/logParser'
 import { useIsMobile } from '../composables/useIsMobile'
 import { getSettings, saveSettings } from '../utils/settings'
 import { getRuntimeStatusTagType, getRuntimeStatusText } from '../utils/runtimeStatus'
@@ -23,10 +22,11 @@ import { useFlowchartEdges } from './flowchart/composables/useFlowchartEdges'
 import { useFlowchartGraphRuntime } from './flowchart/composables/useFlowchartGraphRuntime'
 import { useFlowchartNodeInteraction } from './flowchart/composables/useFlowchartNodeInteraction'
 import { findNodeInfoImage } from './flowchart/utils/nodeImageLookup'
+import type { LoadedTextFile } from './process/utils/fileLoadingHelpers'
+import type { LoadedPrimaryLogFile } from '../utils/logFileDiscovery'
 
 const props = defineProps<{
   tasks: TaskInfo[]
-  parser?: LogParser
   selectedTask?: TaskInfo | null
 }>()
 
@@ -34,7 +34,7 @@ const emit = defineEmits<{
   'select-task': [task: TaskInfo]
   'navigate-to-node': [task: TaskInfo, node: NodeInfo]
   'upload-file': [file: File]
-  'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>]
+  'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>, textFiles?: LoadedTextFile[], primaryLogFiles?: LoadedPrimaryLogFile[]]
 }>()
 
 const { isMobile } = useIsMobile()
@@ -68,8 +68,8 @@ const {
   handleFolderInputChange,
 } = useFlowchartUpload({
   onUploadFile: (file) => emit('upload-file', file),
-  onUploadContent: (content, errorImages, visionImages, waitFreezesImages) => {
-    emit('upload-content', content, errorImages, visionImages, waitFreezesImages)
+  onUploadContent: (content, errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles) => {
+    emit('upload-content', content, errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles)
   },
 })
 
@@ -174,7 +174,7 @@ const nodeImageMap = computed(() => {
   if (!task) return map
 
   for (const info of task.nodes) {
-    const img = findNodeInfoImage(info, props.parser)
+    const img = findNodeInfoImage(info)
     if (img) map.set(info.node_id, img)
   }
 

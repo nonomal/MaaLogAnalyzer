@@ -1,0 +1,105 @@
+{
+  "name": "@windsland52/maa-log-parser",
+  "version": "0.0.1",
+  "type": "module",
+  "private": false,
+  "types": "./dist/core/index.d.ts",
+  "scripts": {
+    "typecheck": "tsc -p ./tsconfig.json",
+    "test": "vitest run src/__tests__",
+    "build": "pnpm run clean && tsc -p ./tsconfig.build.json && node ../../scripts/fix-esm-imports.mjs ./dist",
+    "clean": "node -e \"require('node:fs').rmSync('dist',{ recursive: true, force: true })\""
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/core/index.js",
+      "types": "./dist/core/index.d.ts"
+    },
+    "./raw-value": {
+      "import": "./dist/shared/rawValue.js",
+      "types": "./dist/shared/rawValue.d.ts"
+    },
+    "./protocol-types": {
+      "import": "./dist/protocol/types.js",
+      "types": "./dist/protocol/types.d.ts"
+    },
+    "./protocol-event-factory": {
+      "import": "./dist/protocol/eventFactory.js",
+      "types": "./dist/protocol/eventFactory.d.ts"
+    },
+    "./trace-scope-types": {
+      "import": "./dist/trace/scopeTypes.js",
+      "types": "./dist/trace/scopeTypes.d.ts"
+    },
+    "./trace-scope-id": {
+      "import": "./dist/trace/scopeId.js",
+      "types": "./dist/trace/scopeId.d.ts"
+    },
+    "./trace-reducer": {
+      "import": "./dist/trace/reducer.js",
+      "types": "./dist/trace/reducer.d.ts"
+    },
+    "./query-types": {
+      "import": "./dist/query/queryTypes.js",
+      "types": "./dist/query/queryTypes.d.ts"
+    },
+    "./query-locator": {
+      "import": "./dist/query/locator.js",
+      "types": "./dist/query/locator.d.ts"
+    },
+    "./trace-index": {
+      "import": "./dist/query/traceIndex.js",
+      "types": "./dist/query/traceIndex.d.ts"
+    },
+    "./query-helpers": {
+      "import": "./dist/query/helpers.js",
+      "types": "./dist/query/helpers.d.ts"
+    },
+    "./raw-line-store": {
+      "import": "./dist/raw/store.js",
+      "types": "./dist/raw/store.d.ts"
+    },
+    "./service-session-store": {
+      "import": "./dist/service/sessionStore.js",
+      "types": "./dist/service/sessionStore.d.ts"
+    },
+    "./service-evidence-builders": {
+      "import": "./dist/service/evidenceBuilders.js",
+      "types": "./dist/service/evidenceBuilders.d.ts"
+    },
+    "./service-tool-handlers": {
+      "import": "./dist/service/toolHandlers.js",
+      "types": "./dist/service/toolHandlers.d.ts"
+    },
+    "./types": {
+      "import": "./dist/shared/types.js",
+      "types": "./dist/shared/types.d.ts"
+    },
+    "./log-event-decoders": {
+      "import": "./dist/shared/logEventDecoders.js",
+      "types": "./dist/shared/logEventDecoders.d.ts"
+    },
+    "./node-flow": {
+      "import": "./dist/node/flow.js",
+      "types": "./dist/node/flow.d.ts"
+    },
+    "./timestamp": {
+      "import": "./dist/shared/timestamp.js",
+      "types": "./dist/shared/timestamp.d.ts"
+    },
+    "./node-statistics": {
+      "import": "./dist/node/statistics.js",
+      "types": "./dist/node/statistics.d.ts"
+    }
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

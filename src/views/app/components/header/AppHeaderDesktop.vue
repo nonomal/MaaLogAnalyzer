@@ -1,6 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
-import { NFlex, NButton, NIcon, NDropdown, NSelect, NText } from 'naive-ui'
+import { NFlex, NButton, NIcon, NDropdown, NText } from 'naive-ui'
 import {
   BarChartOutlined,
   FileSearchOutlined,
@@ -14,72 +13,26 @@ import {
 } from '@vicons/antd'
 import { isVSCode } from '../../../../utils/platform'
 
-const props = defineProps<{
+defineProps<{
   currentViewLabel: string
   viewMode: string
   viewModeOptions: Array<Record<string, unknown>>
-  showProcessThreadFilters: boolean
-  selectedProcessId: string
-  selectedThreadId: string
-  processIdOptions: Array<Record<string, unknown>>
-  threadIdOptions: Array<Record<string, unknown>>
   isVscodeLaunchEmbed: boolean
   isDark: boolean
 }>()
 
 const emit = defineEmits<{
   'select-view-mode': [key: string]
-  'update:selected-process-id': [value: string]
-  'update:selected-thread-id': [value: string]
-  'clear-filters': []
   'open-settings': []
   'open-about': []
   'toggle-theme': []
 }>()
 
-const normalizeSelectValue = (value: string | number | null): string => {
-  if (value == null) return ''
-  return typeof value === 'string' ? value : String(value)
-}
-
 const handleViewModeSelect = (key: string | number) => {
   emit('select-view-mode', String(key))
 }
 
-const handleProcessUpdate = (value: string | number | null) => {
-  emit('update:selected-process-id', normalizeSelectValue(value))
-}
-
-const handleThreadUpdate = (value: string | number | null) => {
-  emit('update:selected-thread-id', normalizeSelectValue(value))
-}
-
 const isNativeVSCodeHost = isVSCode()
-
-const useNonVscodeDarkSelectStyle = computed(() => (
-  props.isDark
-  && !props.isVscodeLaunchEmbed
-  && !isNativeVSCodeHost
-))
-
-const processThreadSelectStyle = computed(() => {
-  if (!useNonVscodeDarkSelectStyle.value) return 'width: 150px'
-  return [
-    'width: 150px',
-    '--n-color: rgba(255, 255, 255, 0.06)',
-    '--n-color-active: rgba(255, 255, 255, 0.08)',
-    '--n-border: 1px solid rgba(255, 255, 255, 0.26)',
-    '--n-border-hover: 1px solid rgba(255, 255, 255, 0.42)',
-    '--n-border-focus: 1px solid #63e2b7',
-    '--n-border-active: 1px solid #63e2b7',
-    '--n-box-shadow-hover: 0 0 0 1px rgba(255, 255, 255, 0.12)',
-    '--n-box-shadow-focus: 0 0 0 2px rgba(99, 226, 183, 0.24)',
-    '--n-box-shadow-active: 0 0 0 2px rgba(99, 226, 183, 0.24)',
-    '--n-text-color: rgba(255, 255, 255, 0.9)',
-    '--n-placeholder-color: rgba(255, 255, 255, 0.58)',
-    '--n-arrow-color: rgba(255, 255, 255, 0.72)',
-  ].join('; ')
-})
 </script>
 
 <template>
@@ -107,37 +60,6 @@ const processThreadSelectStyle = computed(() => {
           </n-button>
         </n-dropdown>
       </div>
-
-      <n-select
-        v-if="showProcessThreadFilters"
-        :value="selectedProcessId"
-        :options="processIdOptions"
-        placeholder="选择进程"
-        clearable
-        size="small"
-        :style="processThreadSelectStyle"
-        @update:value="handleProcessUpdate"
-      />
-
-      <n-select
-        v-if="showProcessThreadFilters"
-        :value="selectedThreadId"
-        :options="threadIdOptions"
-        placeholder="选择线程"
-        clearable
-        size="small"
-        :style="processThreadSelectStyle"
-        @update:value="handleThreadUpdate"
-      />
-
-      <n-button
-        v-if="showProcessThreadFilters && (props.selectedProcessId || props.selectedThreadId)"
-        @click="emit('clear-filters')"
-        size="small"
-        secondary
-      >
-        清除过滤
-      </n-button>
     </n-flex>
 
     <n-flex align="center" style="gap: 8px">
