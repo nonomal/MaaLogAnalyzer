@@ -1,5 +1,10 @@
 import type { UseProcessFileLoaderOptions } from './types'
 import { invoke } from '@tauri-apps/api/core'
+import {
+  createPrimaryLogSelectionOptions,
+  sortLoadedPrimaryLogSegments,
+  type LoadedPrimaryLogFile,
+} from '../../../../utils/logFileDiscovery'
 
 const createTauriImageMap = (entries: Record<string, string>) => {
   const result = new Map<string, string>()
@@ -34,6 +39,7 @@ export const useTauriBridge = (
           if (selected.toLowerCase().endsWith('.zip')) {
             const result = await invoke<{
               content: string
+              primary_log_files: LoadedPrimaryLogFile[]
               error_images: Record<string, string>
               vision_images: Record<string, string>
               wait_freezes_images: Record<string, string>
@@ -42,8 +48,24 @@ export const useTauriBridge = (
             const errorImages = createTauriImageMap(result.error_images)
             const visionImages = createTauriImageMap(result.vision_images)
             const waitFreezesImages = createTauriImageMap(result.wait_freezes_images)
+            const primaryLogFiles = sortLoadedPrimaryLogSegments(result.primary_log_files ?? [])
+            const selectedOptions = options.selectPrimaryLogs
+              ? await options.selectPrimaryLogs(createPrimaryLogSelectionOptions(primaryLogFiles))
+              : createPrimaryLogSelectionOptions(primaryLogFiles)
+            if (!selectedOptions) return
 
-            options.onUploadContent(result.content, errorImages, visionImages, waitFreezesImages)
+            const selectedPaths = new Set(selectedOptions.map(option => option.path))
+            const selectedPrimaryLogFiles = primaryLogFiles.filter(file => selectedPaths.has(file.path))
+            if (selectedPrimaryLogFiles.length === 0) return
+
+            options.onUploadContent(
+              result.content,
+              errorImages,
+              visionImages,
+              waitFreezesImages,
+              undefined,
+              selectedPrimaryLogFiles,
+            )
           } else {
             const { readTextFile } = await import('@tauri-apps/plugin-fs')
             const content = await readTextFile(selected)
@@ -78,7 +100,9 @@ export const useTauriBridge = (
       setFileLoading(true)
       options.onFileLoadingStart()
 
-      const result = await openFolderDialog()
+      const result = await openFolderDialog({
+        selectPrimaryLogs: options.selectPrimaryLogs,
+      })
       if (result) {
         options.onUploadContent(
           result.content,

@@ -1,11 +1,14 @@
 import type { Ref } from 'vue'
 import type { LoadedTextFile } from '../../utils/fileLoadingHelpers'
-import type { LoadedPrimaryLogFile } from '../../../../utils/logFileDiscovery'
+import type { LoadedPrimaryLogFile, PrimaryLogSelectionOption } from '../../../../utils/logFileDiscovery'
 
 export interface UseProcessFileLoaderOptions {
   isInTauri: Ref<boolean>
   isInVSCode: Ref<boolean>
-  onUploadFile: (file: File) => void
+  onUploadFile: (
+    file: File,
+    selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>,
+  ) => void
   onUploadContent: (
     content: string,
     errorImages?: Map<string, string>,
@@ -16,4 +19,5 @@ export interface UseProcessFileLoaderOptions {
   ) => void
   onFileLoadingStart: () => void
   onFileLoadingEnd: () => void
+  selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>
 }

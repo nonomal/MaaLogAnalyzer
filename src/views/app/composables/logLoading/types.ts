@@ -1,6 +1,6 @@
 import type { Ref } from 'vue'
 import type { LoadedTextFile } from '../../../../utils/fileDialog'
-import type { LoadedPrimaryLogFile } from '../../../../utils/logFileDiscovery'
+import type { LoadedPrimaryLogFile, PrimaryLogSelectionOption } from '../../../../utils/logFileDiscovery'
 import type { TaskInfo } from '../../../../types'
 import type { LogParser, ParseSourceInput } from '@windsland52/maa-log-parser'
 import type {
@@ -25,6 +25,9 @@ export interface LogLoadingPipelineOptions {
   applyParsedTasks: (nextTasks: TaskInfo[], preserveSelection: boolean) => void
   onWarning: (message: string) => void
   onError: (message: string) => void
+  onFileLoadingStart?: () => void
+  onFileLoadingEnd?: () => void
+  selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>
 }
 
 export interface ProcessLogContentParams {

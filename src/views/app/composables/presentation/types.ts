@@ -1,13 +1,13 @@
 import type { ComputedRef, Ref, VNodeChild } from 'vue'
 import type { NodeInfo, TaskInfo } from '../../../../types'
 import type { TourStep } from '../../../../tutorial/types'
+import type { PrimaryLogSelectionOption } from '../../../../utils/logFileDiscovery'
 import type {
   DetailViewForwardProps,
   ProcessViewEventHandlers,
   ProcessViewForwardProps,
   TextSearchViewForwardProps,
   UploadContentHandler,
-  UploadFileHandler,
 } from '../../components/types'
 
 export interface ViewModeOptionLike extends Record<string, unknown> {
@@ -45,7 +45,10 @@ export interface UseAppPresentationBindingsOptions {
   processViewEventHandlers: ProcessViewEventHandlers
   detailViewProps: ComputedRef<DetailViewForwardProps>
   onSelectTask: (task: TaskInfo) => void
-  onUploadFile: UploadFileHandler
+  onUploadFile: (
+    file: File,
+    selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>,
+  ) => void | Promise<void>
   onUploadContent: UploadContentHandler
   onMobileTaskSelect: (task: TaskInfo) => void
   onToggleDetailView: () => void

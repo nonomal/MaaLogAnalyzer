@@ -30,6 +30,7 @@ struct PrimaryLogCandidate {
 
 struct LoadedPrimaryLogSegment {
     path: String,
+    name: String,
     kind: PrimaryLogKind,
     rotated_timestamp_hint: Option<String>,
     content_timestamp: Option<String>,
@@ -37,8 +38,16 @@ struct LoadedPrimaryLogSegment {
 }
 
 #[derive(Serialize)]
+struct LoadedPrimaryLogFileDto {
+    path: String,
+    name: String,
+    content: String,
+}
+
+#[derive(Serialize)]
 struct ZipExtractResult {
     content: String,
+    primary_log_files: Vec<LoadedPrimaryLogFileDto>,
     error_images: HashMap<String, String>,
     vision_images: HashMap<String, String>,
     wait_freezes_images: HashMap<String, String>,
@@ -85,6 +94,7 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
             let content = decode_content(&buf);
             log_segments.push(LoadedPrimaryLogSegment {
                 path: candidate.path.clone(),
+                name: candidate.path.rsplit('/').next().unwrap_or(&candidate.path).to_string(),
                 kind: candidate.kind,
                 rotated_timestamp_hint: candidate.rotated_timestamp_hint.clone(),
                 content_timestamp: extract_first_log_timestamp(&content),
@@ -111,23 +121,23 @@ fn extract_zip_log(path: String) -> Result<ZipExtractResult, String> {
     }
 
     log_segments.sort_by(compare_loaded_log_segments);
-    let mut content = String::new();
-    for segment in log_segments {
-        if segment.content.is_empty() {
-            continue;
-        }
-        if !content.is_empty() && !content.ends_with('\n') {
-            content.push('\n');
-        }
-        content.push_str(&segment.content);
-    }
+    let primary_log_files: Vec<LoadedPrimaryLogFileDto> = log_segments
+        .into_iter()
+        .filter(|segment| !segment.content.is_empty())
+        .map(|segment| LoadedPrimaryLogFileDto {
+            path: segment.path,
+            name: segment.name,
+            content: segment.content,
+        })
+        .collect();
 
-    if content.is_empty() {
+    if primary_log_files.is_empty() {
         return Err("ZIP 中未找到有效的日志内容".to_string());
     }
 
     Ok(ZipExtractResult {
-        content,
+        content: String::new(),
+        primary_log_files,
         error_images,
         vision_images,
         wait_freezes_images,

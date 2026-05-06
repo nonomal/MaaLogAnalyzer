@@ -5,6 +5,7 @@ import {
   readDirectoryFiles,
 } from '../../utils/fileLoadingHelpers'
 import {
+  createPrimaryLogSelectionOptions,
   type LoadedPrimaryLogFile,
   PRIMARY_LOG_FILE_HINT,
   selectPrimaryLogGroup,
@@ -25,7 +26,10 @@ const filterFilesBySelectedDir = (files: Iterable<File>, selectedDirPath: string
   })
 }
 
-const resolveSelectedLogContent = async (files: Iterable<File>) => {
+const resolveSelectedLogContent = async (
+  files: Iterable<File>,
+  selectPrimaryLogs: UseProcessFileLoaderOptions['selectPrimaryLogs'],
+) => {
   const fileList = Array.from(files)
   const selectedLogs = selectPrimaryLogGroup(
     fileList.map(file => ({
@@ -40,19 +44,44 @@ const resolveSelectedLogContent = async (files: Iterable<File>) => {
       content: '',
       scopedFiles: [] as File[],
       primaryLogFiles: [] as LoadedPrimaryLogFile[],
+      cancelled: false,
     }
   }
 
-  const loadedLogs = await Promise.all(selectedLogs.map(async ({ item }) => ({
-    name: item.name,
-    path: item.path,
-    content: await item.file.text(),
-  })))
+  const selectedOptions = selectPrimaryLogs
+    ? await selectPrimaryLogs(createPrimaryLogSelectionOptions(selectedLogs.map(({ item }) => item)))
+    : createPrimaryLogSelectionOptions(selectedLogs.map(({ item }) => item))
+  if (!selectedOptions) {
+    return {
+      content: '',
+      scopedFiles: [] as File[],
+      primaryLogFiles: [] as LoadedPrimaryLogFile[],
+      cancelled: true,
+    }
+  }
+  if (selectedOptions.length === 0) {
+    return {
+      content: '',
+      scopedFiles: [] as File[],
+      primaryLogFiles: [] as LoadedPrimaryLogFile[],
+      cancelled: false,
+    }
+  }
+  const selectedPaths = new Set(selectedOptions.map(option => option.path))
+
+  const loadedLogs = await Promise.all(selectedLogs
+    .filter(({ item }) => selectedPaths.has(item.path))
+    .map(async ({ item }) => ({
+      name: item.name,
+      path: item.path,
+      content: await item.file.text(),
+    })))
 
   return {
     content: '',
     scopedFiles: filterFilesBySelectedDir(fileList, selectedLogs[0].candidate.dirPath),
     primaryLogFiles: sortLoadedPrimaryLogSegments(loadedLogs),
+    cancelled: false,
   }
 }
 
@@ -66,7 +95,8 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
       options.onFileLoadingStart()
 
       const files = await readDirectoryFiles(dirEntry)
-      const { scopedFiles, primaryLogFiles } = await resolveSelectedLogContent(files)
+      const { scopedFiles, primaryLogFiles, cancelled } = await resolveSelectedLogContent(files, options.selectPrimaryLogs)
+      if (cancelled) return
       if (primaryLogFiles.length === 0) {
         alert(`文件夹中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
         return
@@ -106,7 +136,7 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
 
     const file = firstItem.getAsFile()
     if (file) {
-      options.onUploadFile(file)
+      options.onUploadFile(file, options.selectPrimaryLogs)
     }
   }
 
@@ -124,7 +154,8 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
       setFileLoading(true)
       options.onFileLoadingStart()
 
-      const { scopedFiles, primaryLogFiles } = await resolveSelectedLogContent(files)
+      const { scopedFiles, primaryLogFiles, cancelled } = await resolveSelectedLogContent(files, options.selectPrimaryLogs)
+      if (cancelled) return
       if (primaryLogFiles.length === 0) {
         alert(`文件夹中未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
         return
@@ -161,7 +192,7 @@ export const useWebFileInputs = (options: UseProcessFileLoaderOptions, setFileLo
     const input = event.target as HTMLInputElement
     const file = input.files?.[0]
     if (file) {
-      options.onUploadFile(file)
+      options.onUploadFile(file, options.selectPrimaryLogs)
     }
     input.value = ''
   }

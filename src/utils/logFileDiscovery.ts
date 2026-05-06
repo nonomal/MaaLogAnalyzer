@@ -25,6 +25,13 @@ export interface LoadedPrimaryLogFile extends PrimaryLogSourceEntry {
   content: string
 }
 
+export interface PrimaryLogSelectionOption extends PrimaryLogSourceEntry {
+  kind: PrimaryLogKind
+  family: PrimaryLogFamily
+  rotatedTimestampHint: string | null
+  selected: boolean
+}
+
 export interface MatchedPrimaryLogEntry<T extends PrimaryLogSourceEntry> {
   item: T
   candidate: PrimaryLogCandidate
@@ -153,6 +160,32 @@ export const selectPrimaryLogGroup = <T extends PrimaryLogSourceEntry>(
   })
 
   return rankedGroups[0]?.group ?? []
+}
+
+export const sortPrimaryLogSelectionOptions = (
+  options: PrimaryLogSelectionOption[],
+): PrimaryLogSelectionOption[] => {
+  return [...options].sort((a, b) => {
+    const chronoDelta = compareNullableAscending(a.rotatedTimestampHint, b.rotatedTimestampHint)
+    if (chronoDelta !== 0) return chronoDelta
+
+    if (a.kind !== b.kind) return a.kind === 'bak' ? -1 : 1
+    return toPosixPath(a.path).localeCompare(toPosixPath(b.path))
+  })
+}
+
+export const createPrimaryLogSelectionOptions = <T extends PrimaryLogSourceEntry>(
+  entries: Iterable<T>,
+): PrimaryLogSelectionOption[] => {
+  const options = selectPrimaryLogGroup(entries).map(({ item, candidate }) => ({
+    path: item.path,
+    name: item.name,
+    kind: candidate.kind,
+    family: candidate.family,
+    rotatedTimestampHint: candidate.rotatedTimestampHint,
+    selected: true,
+  }))
+  return sortPrimaryLogSelectionOptions(options)
 }
 
 export const sortLoadedPrimaryLogSegments = <T extends PrimaryLogSourceEntry & { content: string }>(

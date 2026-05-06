@@ -8,9 +8,12 @@
 import { unzip, type Unzipped } from 'fflate'
 import { decodeFileContent } from './fileDialog'
 import {
-  combineLoadedPrimaryLogSegments,
+  createPrimaryLogSelectionOptions,
   isPrimaryLogFileName,
+  type LoadedPrimaryLogFile,
+  type PrimaryLogSelectionOption,
   selectPrimaryLogGroup,
+  sortLoadedPrimaryLogSegments,
 } from './logFileDiscovery'
 
 const SEARCH_TEXT_EXTENSIONS = ['.log', '.txt', '.jsonl'] as const
@@ -46,12 +49,14 @@ function isNeededFile(path: string): boolean {
  */
 export async function extractZipContent(
   file: File,
+  selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>,
 ): Promise<{
   content: string
   errorImages: Map<string, string>
   visionImages: Map<string, string>
   waitFreezesImages: Map<string, string>
   textFiles: ExtractedTextFile[]
+  primaryLogFiles: LoadedPrimaryLogFile[]
 } | null> {
   const buffer = await file.arrayBuffer()
   const zipData = new Uint8Array(buffer)
@@ -78,8 +83,17 @@ export async function extractZipContent(
     return null
   }
 
+  const selectedOptions = selectPrimaryLogs
+    ? await selectPrimaryLogs(createPrimaryLogSelectionOptions(selectedLogs.map(({ item }) => item)))
+    : createPrimaryLogSelectionOptions(selectedLogs.map(({ item }) => item))
+  if (!selectedOptions || selectedOptions.length === 0) {
+    return null
+  }
+  const selectedPaths = new Set(selectedOptions.map(option => option.path))
+
   const basePath = selectedLogs[0].candidate.dirPath
   const loadedLogs = selectedLogs
+    .filter(({ item }) => selectedPaths.has(item.path))
     .map(({ item }) => {
       const data = findFile(files, paths, item.path)
       if (!data) return null
@@ -89,10 +103,10 @@ export async function extractZipContent(
         content: decodeFileContent(data),
       }
     })
-    .filter((entry): entry is { path: string; name: string; content: string } => entry != null)
-  const content = combineLoadedPrimaryLogSegments(loadedLogs)
+    .filter((entry): entry is LoadedPrimaryLogFile => entry != null)
+  const primaryLogFiles = sortLoadedPrimaryLogSegments(loadedLogs)
 
-  if (!content) {
+  if (primaryLogFiles.length === 0) {
     return null
   }
 
@@ -106,7 +120,7 @@ export async function extractZipContent(
   const waitFreezesImages = extractWaitFreezesImages(files, paths, basePath)
   const textFiles = extractSearchTextFiles(files, paths, basePath)
 
-  return { content, errorImages, visionImages, waitFreezesImages, textFiles }
+  return { content: '', errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles }
 }
 
 /**

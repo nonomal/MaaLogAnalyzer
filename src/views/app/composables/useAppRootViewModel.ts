@@ -198,6 +198,8 @@ export const useAppRootViewModel = ({
     setDeferredTextSearchTargets,
     pickPreferredLogTargetId,
     applyParsedTasks,
+    handleFileLoadingStart,
+    handleFileLoadingEnd,
     steps: TOUR_STEPS,
     isMobile,
     viewMode,

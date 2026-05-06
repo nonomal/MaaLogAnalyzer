@@ -1,7 +1,7 @@
 import type { TaskInfo, NodeInfo } from '../../../../types'
 import type { LogParser } from '@windsland52/maa-log-parser'
 import type { LoadedTextFile } from '../../utils/fileLoadingHelpers'
-import type { LoadedPrimaryLogFile } from '../../../../utils/logFileDiscovery'
+import type { LoadedPrimaryLogFile, PrimaryLogSelectionOption } from '../../../../utils/logFileDiscovery'
 
 export type ProcessViewControllerProps = Readonly<{
   tasks: TaskInfo[]
@@ -18,7 +18,10 @@ export type ProcessViewControllerProps = Readonly<{
 
 export interface ProcessViewControllerEmitters {
   onSelectTask: (task: TaskInfo) => void
-  onUploadFile: (file: File) => void
+  onUploadFile: (
+    file: File,
+    selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>,
+  ) => void
   onUploadContent: (
     content: string,
     errorImages?: Map<string, string>,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   combineLoadedPrimaryLogSegments,
+  createPrimaryLogSelectionOptions,
   createPrimaryLogParseInputs,
   isBakLogFileName,
   isMainLogFileName,
@@ -121,6 +122,32 @@ describe('logFileDiscovery', () => {
         sourceKey: 'sample/focus/maafw.log',
         sourcePath: 'sample/focus/maafw.log',
         inputIndex: 1,
+      },
+    ])
+  })
+
+  it('creates default-selected primary log options from the current group', () => {
+    const options = createPrimaryLogSelectionOptions([
+      { path: 'root/debug/maafw.log', name: 'maafw.log' },
+      { path: 'root/debug/maafw.bak.2026.04.14-04.11.31.124.log', name: 'maafw.bak.2026.04.14-04.11.31.124.log' },
+    ])
+
+    expect(options).toEqual([
+      {
+        path: 'root/debug/maafw.log',
+        name: 'maafw.log',
+        kind: 'main',
+        family: 'maafw',
+        rotatedTimestampHint: null,
+        selected: true,
+      },
+      {
+        path: 'root/debug/maafw.bak.2026.04.14-04.11.31.124.log',
+        name: 'maafw.bak.2026.04.14-04.11.31.124.log',
+        kind: 'bak',
+        family: 'maafw',
+        rotatedTimestampHint: '2026.04.14-04.11.31.124',
+        selected: true,
       },
     ])
   })

@@ -13,17 +13,6 @@ interface CreateUploadHandlersOptions {
   processLogContent: (params: ProcessLogContentParams) => Promise<void>
 }
 
-const createLoadedTargetsFromZip = (
-  textFiles: Array<{ path: string; name: string; content: string }>,
-): TextSearchLoadedTarget[] => {
-  return textFiles.map((textFile, index) => ({
-    id: `zip:${index}:${textFile.path}`,
-    label: textFile.path,
-    fileName: textFile.name,
-    content: textFile.content,
-  }))
-}
-
 const createLoadedTargetsFromTextFiles = (
   content: string,
   textFiles?: LoadedTextFile[],
@@ -52,27 +41,38 @@ const createLoadedTargetsFromTextFiles = (
 export const createLogLoadingUploadHandlers = (options: CreateUploadHandlersOptions) => {
   const { pipeline, processLogContent } = options
 
-  const handleFileUpload = async (file: File) => {
+  const handleFileUpload = async (
+    file: File,
+    selectPrimaryLogs = pipeline.selectPrimaryLogs,
+  ) => {
     pipeline.loading.value = true
     try {
       if (file.name.toLowerCase().endsWith('.zip')) {
-        const { extractZipContent } = await import('../../../../utils/zipExtractor')
-        const result = await extractZipContent(file)
-        if (!result) {
-          pipeline.onWarning('ZIP 文件中未找到有效的日志文件')
-          return
-        }
+        pipeline.onFileLoadingStart?.()
+        try {
+          const { extractZipContent } = await import('../../../../utils/zipExtractor')
+          const result = await extractZipContent(file, selectPrimaryLogs)
+          if (!result) {
+            pipeline.onWarning('ZIP 文件中未找到有效的日志文件')
+            return
+          }
 
-        const loadedTargets = createLoadedTargetsFromZip(result.textFiles)
-        const defaultTargetId = pipeline.pickPreferredLogTargetId(loadedTargets)
-        await processLogContent({
-          content: result.content,
-          errorImages: result.errorImages,
-          visionImages: result.visionImages,
-          waitFreezesImages: result.waitFreezesImages,
-          loadedTargets,
-          loadedDefaultTargetId: defaultTargetId,
-        })
+          const loadedTargets = createLoadedTargetsFromTextFiles(result.content, result.textFiles, result.primaryLogFiles)
+          const defaultTargetId = pipeline.pickPreferredLogTargetId(loadedTargets)
+          await processLogContent({
+            content: result.content,
+            parseInputs: result.primaryLogFiles.length > 0
+              ? createPrimaryLogParseInputs(result.primaryLogFiles)
+              : undefined,
+            errorImages: result.errorImages,
+            visionImages: result.visionImages,
+            waitFreezesImages: result.waitFreezesImages,
+            loadedTargets,
+            loadedDefaultTargetId: defaultTargetId,
+          })
+        } finally {
+          pipeline.onFileLoadingEnd?.()
+        }
         return
       }
 

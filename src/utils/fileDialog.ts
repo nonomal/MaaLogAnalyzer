@@ -6,8 +6,10 @@
 import { isTauri, isVSCode } from './platform'
 import { invoke } from '@tauri-apps/api/core'
 import {
+  createPrimaryLogSelectionOptions,
   isPrimaryLogFileName,
   type LoadedPrimaryLogFile,
+  type PrimaryLogSelectionOption,
   PRIMARY_LOG_FILE_HINT,
   selectPrimaryLogGroup,
   sortLoadedPrimaryLogSegments,
@@ -30,6 +32,10 @@ interface OpenFolderResult {
   waitFreezesImages: Map<string, string>
   textFiles: LoadedTextFile[]
   primaryLogFiles: LoadedPrimaryLogFile[]
+}
+
+export interface OpenFolderDialogOptions {
+  selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>
 }
 
 const isTextSearchFileName = (name: string) => {
@@ -439,16 +445,27 @@ async function hasPrimaryLogInTauri(dirPath: string): Promise<boolean> {
   return (await listPrimaryLogFilesTauri(dirPath)).length > 0
 }
 
-async function readPrimaryLogFilesTauri(dirPath: string): Promise<LoadedPrimaryLogFile[]> {
+async function readPrimaryLogFilesTauri(
+  dirPath: string,
+  selectPrimaryLogs?: OpenFolderDialogOptions['selectPrimaryLogs'],
+): Promise<LoadedPrimaryLogFile[] | null> {
   const { readTextFile } = await import('@tauri-apps/plugin-fs')
   const selectedLogs = selectPrimaryLogGroup(await listPrimaryLogFilesTauri(dirPath))
   if (selectedLogs.length === 0) return []
+  const selectedOptions = selectPrimaryLogs
+    ? await selectPrimaryLogs(createPrimaryLogSelectionOptions(selectedLogs.map(({ item }) => item)))
+    : createPrimaryLogSelectionOptions(selectedLogs.map(({ item }) => item))
+  if (!selectedOptions) return null
+  if (selectedOptions.length === 0) return []
+  const selectedPaths = new Set(selectedOptions.map(option => option.path))
 
-  const loadedLogs = await Promise.all(selectedLogs.map(async ({ item }) => ({
-    path: item.path,
-    name: item.name,
-    content: await readTextFile(item.path),
-  })))
+  const loadedLogs = await Promise.all(selectedLogs
+    .filter(({ item }) => selectedPaths.has(item.path))
+    .map(async ({ item }) => ({
+      path: item.path,
+      name: item.name,
+      content: await readTextFile(item.path),
+    })))
 
   return sortLoadedPrimaryLogSegments(loadedLogs)
 }
@@ -473,15 +490,26 @@ async function hasPrimaryLogInWeb(dirHandle: FileSystemDirectoryHandle): Promise
   return (await listPrimaryLogFilesWeb(dirHandle)).length > 0
 }
 
-async function readPrimaryLogFilesWeb(dirHandle: FileSystemDirectoryHandle): Promise<LoadedPrimaryLogFile[]> {
+async function readPrimaryLogFilesWeb(
+  dirHandle: FileSystemDirectoryHandle,
+  selectPrimaryLogs?: OpenFolderDialogOptions['selectPrimaryLogs'],
+): Promise<LoadedPrimaryLogFile[] | null> {
   const selectedLogs = selectPrimaryLogGroup(await listPrimaryLogFilesWeb(dirHandle))
   if (selectedLogs.length === 0) return []
+  const selectedOptions = selectPrimaryLogs
+    ? await selectPrimaryLogs(createPrimaryLogSelectionOptions(selectedLogs.map(({ item }) => item)))
+    : createPrimaryLogSelectionOptions(selectedLogs.map(({ item }) => item))
+  if (!selectedOptions) return null
+  if (selectedOptions.length === 0) return []
+  const selectedPaths = new Set(selectedOptions.map(option => option.path))
 
-  const loadedLogs = await Promise.all(selectedLogs.map(async ({ item }) => ({
-    path: item.path,
-    name: item.name,
-    content: await (await item.handle.getFile()).text(),
-  })))
+  const loadedLogs = await Promise.all(selectedLogs
+    .filter(({ item }) => selectedPaths.has(item.path))
+    .map(async ({ item }) => ({
+      path: item.path,
+      name: item.name,
+      content: await (await item.handle.getFile()).text(),
+    })))
 
   return sortLoadedPrimaryLogSegments(loadedLogs)
 }
@@ -489,18 +517,18 @@ async function readPrimaryLogFilesWeb(dirHandle: FileSystemDirectoryHandle): Pro
 /**
  * 打开文件夹并读取日志
  */
-export async function openFolderDialog(): Promise<OpenFolderResult | null> {
+export async function openFolderDialog(options: OpenFolderDialogOptions = {}): Promise<OpenFolderResult | null> {
   if (isTauri()) {
-    return await openFolderDialogTauri()
+    return await openFolderDialogTauri(options)
   } else {
-    return await openFolderDialogWeb()
+    return await openFolderDialogWeb(options)
   }
 }
 
 /**
  * Tauri 版本：打开文件夹并读取日志
  */
-async function openFolderDialogTauri(): Promise<OpenFolderResult | null> {
+async function openFolderDialogTauri(options: OpenFolderDialogOptions): Promise<OpenFolderResult | null> {
 
   try {
     const { open } = await import('@tauri-apps/plugin-dialog')
@@ -538,7 +566,11 @@ async function openFolderDialogTauri(): Promise<OpenFolderResult | null> {
     }
 
     console.log('[文件夹] 读取日志文件')
-    const primaryLogFiles = await readPrimaryLogFilesTauri(debugPath)
+    const primaryLogFiles = await readPrimaryLogFilesTauri(debugPath, options.selectPrimaryLogs)
+
+    if (primaryLogFiles == null) {
+      return null
+    }
 
     if (primaryLogFiles.length === 0) {
       alert(`未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)
@@ -696,7 +728,7 @@ async function readVisionImagesWeb(debugHandle: FileSystemDirectoryHandle): Prom
 /**
  * Web 版本：打开文件夹并读取日志
  */
-async function openFolderDialogWeb(): Promise<OpenFolderResult | null> {
+async function openFolderDialogWeb(options: OpenFolderDialogOptions): Promise<OpenFolderResult | null> {
   try {
     if (!('showDirectoryPicker' in window)) {
       alert('您的浏览器不支持文件夹选择功能，请使用 Chrome/Edge 等现代浏览器')
@@ -730,7 +762,11 @@ async function openFolderDialogWeb(): Promise<OpenFolderResult | null> {
       console.log('[文件夹] 当前文件夹就是 debug 文件夹')
     }
 
-    const primaryLogFiles = await readPrimaryLogFilesWeb(debugHandle)
+    const primaryLogFiles = await readPrimaryLogFilesWeb(debugHandle, options.selectPrimaryLogs)
+
+    if (primaryLogFiles == null) {
+      return null
+    }
 
     if (primaryLogFiles.length === 0) {
       alert(`未找到日志文件（${PRIMARY_LOG_FILE_HINT}）`)

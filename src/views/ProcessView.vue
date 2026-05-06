@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { ref } from 'vue'
 import {
   NCard
 } from 'naive-ui'
@@ -6,10 +7,11 @@ import 'vue-virtual-scroller/dist/vue-virtual-scroller.css'
 import type { TaskInfo, NodeInfo } from '../types'
 import type { LogParser } from '@windsland52/maa-log-parser'
 import type { LoadedTextFile } from './process/utils/fileLoadingHelpers'
-import type { LoadedPrimaryLogFile } from '../utils/logFileDiscovery'
+import type { LoadedPrimaryLogFile, PrimaryLogSelectionOption } from '../utils/logFileDiscovery'
 import { useProcessViewController } from './process/composables/useProcessViewController'
 import ProcessMobileToolbar from './process/components/ProcessMobileToolbar.vue'
 import ProcessContentSection from './process/components/ProcessContentSection.vue'
+import PrimaryLogSelectionModal from './process/components/PrimaryLogSelectionModal.vue'
 import type { NodeNavMode } from './process/composables/useNodeNavSearch'
 
 const props = defineProps<{
@@ -32,7 +34,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   'select-task': [task: TaskInfo]
-  'upload-file': [file: File]
+  'upload-file': [file: File, selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>]
   'upload-content': [content: string, errorImages?: Map<string, string>, visionImages?: Map<string, string>, waitFreezesImages?: Map<string, string>, textFiles?: LoadedTextFile[], primaryLogFiles?: LoadedPrimaryLogFile[]]
   'select-node': [node: NodeInfo]
   'select-action': [node: NodeInfo]
@@ -43,6 +45,35 @@ const emit = defineEmits<{
   'open-task-drawer': []
   'scroll-done': []
 }>()
+
+let resolvePrimaryLogSelection: ((options: PrimaryLogSelectionOption[] | null) => void) | null = null
+const showPrimaryLogSelection = ref(false)
+const primaryLogSelectionOptions = ref<PrimaryLogSelectionOption[]>([])
+
+const selectPrimaryLogs = (options: PrimaryLogSelectionOption[]) => {
+  if (options.length <= 1) {
+    return Promise.resolve(options)
+  }
+  primaryLogSelectionOptions.value = options
+  showPrimaryLogSelection.value = true
+  return new Promise<PrimaryLogSelectionOption[] | null>((resolve) => {
+    resolvePrimaryLogSelection = resolve
+  })
+}
+
+const handlePrimaryLogSelectionConfirm = (options: PrimaryLogSelectionOption[]) => {
+  showPrimaryLogSelection.value = false
+  resolvePrimaryLogSelection?.(options)
+  resolvePrimaryLogSelection = null
+  primaryLogSelectionOptions.value = []
+}
+
+const handlePrimaryLogSelectionCancel = () => {
+  showPrimaryLogSelection.value = false
+  resolvePrimaryLogSelection?.(null)
+  resolvePrimaryLogSelection = null
+  primaryLogSelectionOptions.value = []
+}
 
 const {
   settings,
@@ -93,9 +124,10 @@ const {
   setNodeNavPanelRef,
 } = useProcessViewController({
   props,
+  selectPrimaryLogs,
   emitters: {
     onSelectTask: (task) => emit('select-task', task),
-    onUploadFile: (file) => emit('upload-file', file),
+    onUploadFile: (file) => emit('upload-file', file, selectPrimaryLogs),
     onUploadContent: (content, errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles) => {
       emit('upload-content', content, errorImages, visionImages, waitFreezesImages, textFiles, primaryLogFiles)
     },
@@ -195,6 +227,13 @@ void fileInputRef
       :on-toggle-node-nav-failed-only="toggleNodeNavFailedOnly"
       :on-select-node-nav="scrollToNode"
       :on-manual-scroll-up="stopFollowOnScrollUp"
+    />
+
+    <primary-log-selection-modal
+      :show="showPrimaryLogSelection"
+      :options="primaryLogSelectionOptions"
+      @confirm="handlePrimaryLogSelectionConfirm"
+      @cancel="handlePrimaryLogSelectionCancel"
     />
 
     <!-- Web 环境下的全局隐藏文件选择输入框 -->

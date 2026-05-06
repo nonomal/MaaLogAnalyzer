@@ -26,6 +26,8 @@ interface UseAppWorkflowBindingsOptions {
   ) => void
   pickPreferredLogTargetId: (targets: Array<{ id: string; label: string; fileName: string; content: string }>) => string
   applyParsedTasks: (tasks: TaskInfo[], preserveSelection: boolean) => void
+  handleFileLoadingStart: () => void
+  handleFileLoadingEnd: () => void
   steps: TourStep[]
   isMobile: Ref<boolean>
   viewMode: Ref<string>
@@ -57,6 +59,8 @@ export const useAppWorkflowBindings = (options: UseAppWorkflowBindingsOptions) =
     applyParsedTasks: options.applyParsedTasks,
     onWarning: (text) => message.warning(text, { duration: 5000 }),
     onError: (text) => message.error(text, { duration: 5000 }),
+    onFileLoadingStart: options.handleFileLoadingStart,
+    onFileLoadingEnd: options.handleFileLoadingEnd,
   })
 
   const tutorialTour = useTutorialTour({
