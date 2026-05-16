@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   NCard, NFlex, NDescriptions, NDescriptionsItem, NTag,
   NText, NCollapse, NButton,
@@ -8,6 +8,7 @@ import {
 import type { UnifiedFlowItem } from '../../../types'
 import SafePreviewImage from '../../../components/SafePreviewImage.vue'
 import RawJsonCollapseItem from './RawJsonCollapseItem.vue'
+import { buildRecognitionDetailRows, formatDetailValue } from './detailRows'
 
 const props = defineProps<{
   currentRecognition: any
@@ -37,6 +38,10 @@ watch(
     expandedNames.value = [...names]
   },
 )
+
+const recognitionDetailRows = computed(() => buildRecognitionDetailRows(props.currentRecognition, props.descriptionColumns))
+
+const getRecognitionHitTagType = (value: unknown) => value === '命中' ? 'success' : 'error'
 </script>
 
 <template>
@@ -78,6 +83,24 @@ watch(
       <n-descriptions-item label="识别位置" v-if="props.currentRecognition?.box">
         <n-text code>
           [{{ props.currentRecognition.box.join(', ') }}]
+        </n-text>
+      </n-descriptions-item>
+
+      <n-descriptions-item
+        v-for="row in recognitionDetailRows"
+        :key="row.label"
+        :label="row.label"
+        :span="row.span"
+      >
+        <n-tag
+          v-if="row.label === '命中状态'"
+          :type="getRecognitionHitTagType(row.value)"
+          size="small"
+        >
+          {{ formatDetailValue(row.value) }}
+        </n-tag>
+        <n-text v-else code class="detail-value">
+          {{ formatDetailValue(row.value) }}
         </n-text>
       </n-descriptions-item>
     </n-descriptions>
@@ -173,6 +196,11 @@ watch(
   width: 100%;
   height: auto;
   border-radius: 4px;
+}
+
+.detail-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 
 /* 微调 Tabs 面板的内边距，让图片更紧凑 */

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import {
   NCard, NDescriptions, NDescriptionsItem, NTag,
   NText, NCollapse,
@@ -8,6 +8,7 @@ import type { NodeInfo } from '../../../types'
 import { getRuntimeStatusTagType, getRuntimeStatusText } from '../../../utils/runtimeStatus'
 import SafePreviewImage from '../../../components/SafePreviewImage.vue'
 import RawJsonCollapseItem from './RawJsonCollapseItem.vue'
+import { buildActionDetailRows, formatDetailValue } from './detailRows'
 
 const props = defineProps<{
   currentActionDetails: any
@@ -29,6 +30,8 @@ watch(
     expandedNames.value = [...names]
   },
 )
+
+const actionDetailRows = computed(() => buildActionDetailRows(props.currentActionDetails, props.descriptionColumns))
 </script>
 
 <template>
@@ -64,6 +67,17 @@ watch(
       <n-descriptions-item label="目标位置" :span="props.descriptionColumns" v-if="props.currentActionDetails?.box">
         <n-text code>
           [{{ props.currentActionDetails.box.join(', ') }}]
+        </n-text>
+      </n-descriptions-item>
+
+      <n-descriptions-item
+        v-for="row in actionDetailRows"
+        :key="row.label"
+        :label="row.label"
+        :span="row.span"
+      >
+        <n-text code class="detail-value">
+          {{ formatDetailValue(row.value) }}
         </n-text>
       </n-descriptions-item>
     </n-descriptions>
@@ -103,5 +117,10 @@ watch(
   width: 100%;
   height: auto;
   border-radius: 4px;
+}
+
+.detail-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 </style>
