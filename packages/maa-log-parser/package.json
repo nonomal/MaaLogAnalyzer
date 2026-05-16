@@ -101,5 +101,10 @@
   "files": [
     "dist",
     "README.md"
-  ]
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MaaXYZ/MaaLogAnalyzer",
+    "directory": "packages/maa-log-parser"
+  }
 }
