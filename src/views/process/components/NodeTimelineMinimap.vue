@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch, onMounted, onBeforeUnmount } from 'vue'
+import { shallowRef, ref, watch, onMounted, onBeforeUnmount } from 'vue'
 import type { DynamicScroller } from 'vue-virtual-scroller'
 import type { NodeInfo } from '../../../types'
 import { MINIMAP_CONFIG } from '../utils/minimapColors'
@@ -17,7 +17,7 @@ const props = defineProps<{
 const canvasRef = ref<HTMLCanvasElement | null>(null)
 const containerRef = ref<HTMLDivElement | null>(null)
 const scrollerRefLocal = ref<InstanceType<typeof DynamicScroller> | null>(null)
-const nodesRef = ref<NodeTimelineItem[]>([])
+const nodesRef = shallowRef<NodeTimelineItem[]>([])
 const selectedNodeIdRef = ref<number | null>(null)
 
 watch(() => props.scrollerRef, (v) => { scrollerRefLocal.value = v })
@@ -42,6 +42,8 @@ let resizeObserver: ResizeObserver | null = null
 let scrollerEl: HTMLElement | null = null
 let scrollRafId: number | null = null
 let redrawRafId: number | null = null
+let visibleTimer: ReturnType<typeof setTimeout> | null = null
+let idleRedrawId: number | null = null
 
 const scheduleRedraw = () => {
   if (redrawRafId != null) return
@@ -49,6 +51,20 @@ const scheduleRedraw = () => {
     redrawRafId = null
     redraw()
   })
+}
+
+const scheduleIdleRedraw = () => {
+  if (idleRedrawId != null) return
+  const run = () => {
+    idleRedrawId = null
+    scheduleRedraw()
+  }
+  const requestIdle = window.requestIdleCallback
+  if (requestIdle) {
+    idleRedrawId = requestIdle(run, { timeout: 300 }) as unknown as number
+    return
+  }
+  idleRedrawId = window.setTimeout(run, 80)
 }
 
 const onScrollerScroll = () => {
@@ -87,11 +103,25 @@ const detachScroller = () => {
 const visible = ref(false)
 
 watch(() => props.nodes.length, () => {
-  visible.value = props.nodes.length >= MINIMAP_CONFIG.minNodesToShow
+  if (visibleTimer) {
+    clearTimeout(visibleTimer)
+    visibleTimer = null
+  }
+
+  if (props.nodes.length < MINIMAP_CONFIG.minNodesToShow) {
+    visible.value = false
+    return
+  }
+
+  visibleTimer = setTimeout(() => {
+    visibleTimer = null
+    visible.value = true
+    scheduleIdleRedraw()
+  }, 120)
 }, { immediate: true })
 
 watch(() => props.nodes, () => {
-  scheduleRedraw()
+  scheduleIdleRedraw()
 }, { flush: 'post' })
 
 watch(() => props.selectedNodeId, () => {
@@ -123,6 +153,18 @@ onBeforeUnmount(() => {
   if (redrawRafId != null) {
     cancelAnimationFrame(redrawRafId)
     redrawRafId = null
+  }
+  if (visibleTimer) {
+    clearTimeout(visibleTimer)
+    visibleTimer = null
+  }
+  if (idleRedrawId != null) {
+    if (window.cancelIdleCallback) {
+      window.cancelIdleCallback(idleRedrawId)
+    } else {
+      clearTimeout(idleRedrawId)
+    }
+    idleRedrawId = null
   }
 })
 </script>

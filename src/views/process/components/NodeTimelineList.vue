@@ -5,6 +5,7 @@ import { DynamicScroller, DynamicScrollerItem } from 'vue-virtual-scroller'
 import type { NodeInfo } from '../../../types'
 import NodeCard from '../../../components/NodeCard.vue'
 import NodeTimelineMinimap from './NodeTimelineMinimap.vue'
+import { MINIMAP_CONFIG } from '../utils/minimapColors'
 
 type NodeTimelineItem = NodeInfo & {
   _uniqueKey: string
@@ -109,7 +110,7 @@ const setLocalScrollerRef = (value: Element | object | null) => {
       </template>
     </DynamicScroller>
     <node-timeline-minimap
-      v-if="safeScrollToItem"
+      v-if="safeScrollToItem && nodes.length >= MINIMAP_CONFIG.minNodesToShow"
       :nodes="nodes"
       :scroller-ref="localScrollerRef"
       :selected-node-id="selectedNodeId ?? null"
