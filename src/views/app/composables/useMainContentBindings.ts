@@ -1,6 +1,7 @@
 import { computed, type ComputedRef, type Ref } from 'vue'
-import type { LogParser } from '../../../utils/logParser'
+import type { LogParser } from '@windsland52/maa-log-parser'
 import type { NodeInfo, TaskInfo } from '../../../types'
+import type { LoadedPrimaryLogFile, PrimaryLogSelectionOption } from '../../../utils/logFileDiscovery'
 import type { BridgeOpenCropRequest } from './useBridgeTaskActions'
 import type {
   LoadedSearchTarget,
@@ -37,7 +38,10 @@ interface UseMainContentBindingsOptions {
   hasDeferredTextSearchTargets: Ref<boolean>
   ensureTextSearchTargetsHydrated: (() => Promise<void>) | undefined
   handleSelectTask: (task: TaskInfo) => void
-  handleFileUpload: (file: File) => void | Promise<void>
+  handleFileUpload: (
+    file: File,
+    selectPrimaryLogs?: (options: PrimaryLogSelectionOption[]) => Promise<PrimaryLogSelectionOption[] | null>,
+  ) => void | Promise<void>
   handleContentUpload: (
     content: string,
     errorImages?: Map<string, string>,
@@ -47,7 +51,8 @@ interface UseMainContentBindingsOptions {
       path: string
       name: string
       content: string
-    }>
+    }>,
+    primaryLogFiles?: LoadedPrimaryLogFile[],
   ) => void | Promise<void>
   handleSelectNode: (node: NodeInfo) => void
   handleSelectAction: (node: NodeInfo) => void

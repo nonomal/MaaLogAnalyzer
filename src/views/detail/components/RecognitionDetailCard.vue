@@ -1,11 +1,14 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import {
   NCard, NFlex, NDescriptions, NDescriptionsItem, NTag,
-  NText, NCollapse, NCollapseItem, NButton, NIcon, NCode,
+  NText, NCollapse, NButton,
+  NTabs, NTabPane // <-- 1. 新增引入 Tabs 相关组件
 } from 'naive-ui'
-import { CopyOutlined } from '@vicons/antd'
 import type { UnifiedFlowItem } from '../../../types'
 import SafePreviewImage from '../../../components/SafePreviewImage.vue'
+import RawJsonCollapseItem from './RawJsonCollapseItem.vue'
+import { buildRecognitionDetailRows, formatDetailValue } from './detailRows'
 
 const props = defineProps<{
   currentRecognition: any
@@ -27,6 +30,18 @@ const props = defineProps<{
   copyToClipboard: (text: string) => void
   openRecognitionInCrop: () => void | Promise<void>
 }>()
+
+const expandedNames = ref<string[]>([...props.rawJsonDefaultExpanded])
+watch(
+  () => props.rawJsonDefaultExpanded,
+  (names) => {
+    expandedNames.value = [...names]
+  },
+)
+
+const recognitionDetailRows = computed(() => buildRecognitionDetailRows(props.currentRecognition, props.descriptionColumns))
+
+const getRecognitionHitTagType = (value: unknown) => value === '命中' ? 'success' : 'error'
 </script>
 
 <template>
@@ -45,6 +60,7 @@ const props = defineProps<{
         </n-button>
       </n-flex>
     </template>
+    
     <n-descriptions :column="props.descriptionColumns" size="small" label-placement="left" bordered>
       <n-descriptions-item label="识别 ID">
         {{ props.currentRecognition?.reco_id }}
@@ -69,63 +85,100 @@ const props = defineProps<{
           [{{ props.currentRecognition.box.join(', ') }}]
         </n-text>
       </n-descriptions-item>
+
+      <n-descriptions-item
+        v-for="row in recognitionDetailRows"
+        :key="row.label"
+        :label="row.label"
+        :span="row.span"
+      >
+        <n-tag
+          v-if="row.label === '命中状态'"
+          :type="getRecognitionHitTagType(row.value)"
+          size="small"
+        >
+          {{ formatDetailValue(row.value) }}
+        </n-tag>
+        <n-text v-else code class="detail-value">
+          {{ formatDetailValue(row.value) }}
+        </n-text>
+      </n-descriptions-item>
     </n-descriptions>
 
-    <div v-if="props.currentAttempt?.vision_image" style="margin-top: 12px">
-      <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">调试截图</n-text>
-      <safe-preview-image :src="props.resolveImageSrc(props.currentAttempt.vision_image)" class="detail-preview-image" />
-    </div>
-
-    <div v-if="props.currentAttempt?.error_image" style="margin-top: 12px">
-      <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">错误截图</n-text>
-      <safe-preview-image :src="props.resolveImageSrc(props.currentAttempt.error_image)" class="detail-preview-image" />
-    </div>
-
     <div v-if="props.bridgeRecognitionLoading" style="margin-top: 12px">
-      <n-text depth="3" style="font-size: 13px">正在加载识别截图...</n-text>
+      <n-text depth="3" style="font-size: 13px">正在加载高清截图...</n-text>
     </div>
-
     <div v-if="props.bridgeRecognitionError" style="margin-top: 12px">
       <n-text type="error" style="font-size: 13px">{{ props.bridgeRecognitionError }}</n-text>
     </div>
 
-    <div v-if="props.bridgeRecognitionDrawImages.length > 0" style="margin-top: 12px">
-      <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">Draw ({{ props.bridgeRecognitionDrawImages.length }})</n-text>
-      <n-flex vertical style="gap: 8px">
-        <safe-preview-image
-          v-for="(img, idx) in props.bridgeRecognitionDrawImages"
-          :key="`${idx}-${img.slice(0, 24)}`"
-          :src="props.resolveImageSrc(img)"
-          class="detail-preview-image"
-        />
-      </n-flex>
-    </div>
+    <n-tabs 
+      v-if="props.bridgeRecognitionRawImage || props.currentAttempt?.vision_image || props.bridgeRecognitionDrawImages.length > 0 || props.currentAttempt?.error_image"
+      type="line" 
+      size="small" 
+      animated 
+      default-value="draw"
+      style="margin-top: 16px"
+    >
+      <n-tab-pane
+        v-if="props.bridgeRecognitionDrawImages.length > 0 || props.currentAttempt?.vision_image"
+        name="draw"
+        :tab="props.bridgeRecognitionDrawImages.length > 0 ? `解析图 (Draw - ${props.bridgeRecognitionDrawImages.length})` : '解析图 (Draw)'"
+      >
+        <n-flex vertical style="gap: 8px">
+          <safe-preview-image
+            v-for="(img, idx) in props.bridgeRecognitionDrawImages"
+            :key="`draw-${idx}-${img.slice(0, 24)}`"
+            :src="props.resolveImageSrc(img)"
+            class="detail-preview-image"
+          />
+          <safe-preview-image
+            v-if="props.bridgeRecognitionDrawImages.length === 0 && props.currentAttempt?.vision_image"
+            :src="props.resolveImageSrc(props.currentAttempt.vision_image)"
+            class="detail-preview-image"
+          />
+        </n-flex>
+      </n-tab-pane>
 
-    <div v-if="props.bridgeRecognitionRawImage" style="margin-top: 12px">
-      <n-text depth="3" style="font-size: 13px; display: block; margin-bottom: 8px">Raw</n-text>
-      <safe-preview-image :src="props.resolveImageSrc(props.bridgeRecognitionRawImage)" class="detail-preview-image" />
-    </div>
-
-    <n-collapse style="margin-top: 16px" :default-expanded-names="props.rawJsonDefaultExpanded">
-      <n-collapse-item title="原始识别数据" name="reco-json">
-        <template #header-extra>
-          <n-button
-            size="tiny"
-            @click.stop="props.copyToClipboard(props.formatJson(props.currentRecognition))"
-          >
-            <template #icon>
-              <n-icon><copy-outlined /></n-icon>
-            </template>
-            复制
-          </n-button>
-        </template>
-        <n-code
-          :code="props.formatJson(props.currentRecognition)"
-          language="json"
-          :word-wrap="true"
-          style="max-height: 400px; overflow: auto; max-width: 100%"
+      <n-tab-pane
+        v-if="props.bridgeRecognitionRawImage || props.currentAttempt?.error_image"
+        name="raw"
+        tab="原图 (Raw)"
+      >
+        <safe-preview-image 
+          v-if="props.bridgeRecognitionRawImage"
+          :src="props.resolveImageSrc(props.bridgeRecognitionRawImage)" 
+          class="detail-preview-image" 
         />
-      </n-collapse-item>
+        <safe-preview-image 
+          v-else-if="props.currentAttempt?.error_image"
+          :src="props.resolveImageSrc(props.currentAttempt.error_image)" 
+          class="detail-preview-image" 
+        />
+      </n-tab-pane>
+
+      <n-tab-pane
+        v-if="props.currentAttempt?.error_image && props.bridgeRecognitionRawImage"
+        name="error"
+        tab="错误截图 (Error)"
+      >
+        <safe-preview-image 
+          :src="props.resolveImageSrc(props.currentAttempt.error_image)" 
+          class="detail-preview-image" 
+        />
+      </n-tab-pane>
+    </n-tabs>
+
+    <n-collapse v-model:expanded-names="expandedNames" style="margin-top: 16px">
+      <raw-json-collapse-item
+        title="原始识别数据"
+        name="reco-json"
+        :value="props.currentRecognition"
+        :expanded-names="expandedNames"
+        :format-json="props.formatJson"
+        :copy-to-clipboard="props.copyToClipboard"
+        max-height="400px"
+      />
     </n-collapse>
   </n-card>
 </template>
@@ -143,5 +196,15 @@ const props = defineProps<{
   width: 100%;
   height: auto;
   border-radius: 4px;
+}
+
+.detail-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* 微调 Tabs 面板的内边距，让图片更紧凑 */
+:deep(.n-tabs-pane-wrapper) {
+  padding-top: 12px !important;
 }
 </style>

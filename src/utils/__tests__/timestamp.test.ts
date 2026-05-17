@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toTimestampMs } from '../timestamp'
+import { toTimestampMs } from '@windsland52/maa-log-parser/timestamp'
 
 describe('timestamp helper', () => {
   it('parses log timestamps in both space and T formats', () => {

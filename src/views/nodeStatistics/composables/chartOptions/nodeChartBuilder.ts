@@ -1,4 +1,4 @@
-import type { NodeStatistics } from '../../../../utils/nodeStatistics'
+import type { NodeStatistics } from '@windsland52/maa-log-parser/node-statistics'
 import { formatDuration } from '../../../../utils/formatDuration'
 import type { NodeChartDimension } from './dimensions'
 import { buildBarBaseOption } from './baseBar'

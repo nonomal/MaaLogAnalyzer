@@ -1,5 +1,5 @@
 import type { DataTableColumns } from 'naive-ui'
-import type { RecognitionActionStatistics } from '../../../../utils/nodeStatistics'
+import type { RecognitionActionStatistics } from '@windsland52/maa-log-parser/node-statistics'
 import { formatDuration } from '../../../../utils/formatDuration'
 import { renderSuccessRateProgress } from './renderers'
 

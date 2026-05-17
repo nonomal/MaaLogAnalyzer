@@ -2,6 +2,8 @@
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+  /* 强力封杀全部滚动锚定，防止虚拟滚动折叠时发生跳动 */
+  overflow-anchor: none !important;
 }
 
 html,

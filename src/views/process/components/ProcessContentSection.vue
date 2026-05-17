@@ -5,7 +5,7 @@ import type { VNodeChild } from 'vue'
 import EmptyUploadPanel from './EmptyUploadPanel.vue'
 import ProcessMobilePane from './ProcessMobilePane.vue'
 import ProcessDesktopPane from './ProcessDesktopPane.vue'
-import { buildTaskIdentity } from '../../../utils/taskIdentity'
+import { buildTaskIdentity } from '@windsland52/maa-log-tools/task-identity'
 
 type ReloadOption = { label: string; key: string; icon: () => VNodeChild }
 type NodeTimelineItem = NodeInfo & { _uniqueKey: string }
@@ -71,6 +71,7 @@ const props = defineProps<{
   onToggleNodeNavFailedOnly: () => void
   onSelectNodeNav: (index: number) => void
   onManualScrollUp: () => void
+  safeScrollToItem?: (index: number) => Promise<boolean>
 }>()
 </script>
 
@@ -141,6 +142,7 @@ const props = defineProps<{
         :bridge-reveal-task="props.bridgeRevealTask"
         :set-task-list-panel-ref="props.setTaskListPanelRef"
         :set-node-nav-panel-ref="props.setNodeNavPanelRef"
+        :safe-scroll-to-item="props.safeScrollToItem"
         @update:task-list-size="props.onUpdateTaskListSize"
         @update:node-nav-size="props.onUpdateNodeNavSize"
         @toggle-task-list="props.onToggleTaskList"

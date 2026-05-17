@@ -4,7 +4,7 @@ import { NCard, NFlex, NText, NButton, NIcon, NScrollbar, NList, NListItem, NTag
 import { VerticalAlignTopOutlined, VerticalAlignBottomOutlined } from '@vicons/antd'
 import type { TaskInfo } from '../../../types'
 import { formatDuration } from '../../../utils/formatDuration'
-import { buildTaskIdentity } from '../../../utils/taskIdentity'
+import { buildTaskIdentity } from '@windsland52/maa-log-tools/task-identity'
 
 const props = defineProps<{
   tasks: TaskInfo[]

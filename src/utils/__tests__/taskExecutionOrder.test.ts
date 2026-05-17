@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { NodeInfo } from '../../types'
-import { sortNodesByGlobalExecutionOrder } from '../taskExecutionOrder'
+import { sortNodesByGlobalExecutionOrder } from '@windsland52/maa-log-tools/task-execution-order'
 
 const makeNode = (params: {
   nodeId: number

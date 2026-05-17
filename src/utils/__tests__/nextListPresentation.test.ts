@@ -4,7 +4,7 @@ import {
   buildNextListDisplayName,
   buildRecognitionTargetByNextName,
   resolveRecognitionNextListName,
-} from '../nextListPresentation'
+} from '@windsland52/maa-log-tools/next-list-presentation'
 import { collectNodeNavMatchDetails } from '../../views/process/composables/nodeNavSearch/match'
 
 const nextList: NodeInfo['next_list'] = [

@@ -1,4 +1,5 @@
 import { computed, ref, shallowRef } from 'vue'
+import { matchPrimaryLogFile, sortLoadedPrimaryLogSegments } from '../../../utils/logFileDiscovery'
 
 export interface TextSearchLoadedTarget {
   id: string
@@ -30,14 +31,33 @@ export const useTextSearchTargets = () => {
 
   const pickPreferredLogTargetId = (targets: TextSearchLoadedTarget[]): string => {
     if (targets.length === 0) return ''
-    const normalize = (name: string) => name.toLowerCase()
-    const priority = ['maafw.log', 'maa.log', 'maafw.bak.log', 'maa.bak.log']
-    for (const key of priority) {
-      const hit = targets.find(
-        (t) => normalize(t.fileName || '').endsWith(key) || normalize(t.label || '').endsWith(key),
-      )
-      if (hit) return hit.id
+
+    const primaryTargets = targets
+      .map((target) => ({
+        target,
+        candidate: matchPrimaryLogFile(target.label || target.fileName, target.fileName),
+      }))
+      .filter((entry): entry is { target: TextSearchLoadedTarget; candidate: NonNullable<ReturnType<typeof matchPrimaryLogFile>> } => entry.candidate != null)
+
+    const preferredMain = primaryTargets.find(
+      entry => entry.candidate.kind === 'main' && entry.candidate.normalizedName === 'maafw.log',
+    ) ?? primaryTargets.find(
+      entry => entry.candidate.kind === 'main' && entry.candidate.normalizedName === 'maa.log',
+    )
+    if (preferredMain) {
+      return preferredMain.target.id
     }
+
+    if (primaryTargets.length > 0) {
+      const sortedBakTargets = sortLoadedPrimaryLogSegments(primaryTargets.map((entry) => ({
+        id: entry.target.id,
+        path: entry.target.label || entry.target.fileName,
+        name: entry.target.fileName,
+        content: entry.target.content,
+      })))
+      return sortedBakTargets[sortedBakTargets.length - 1]?.id ?? primaryTargets[0].target.id
+    }
+
     return targets[0].id
   }
 

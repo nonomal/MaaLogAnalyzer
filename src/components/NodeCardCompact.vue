@@ -3,15 +3,17 @@ import { computed } from 'vue'
 import { NButton, NFlex, NText } from 'naive-ui'
 import type { NodeInfo, MergedRecognitionItem } from '../types'
 import {
+  buildNodeActionTimelineItems,
   buildNodeActionLevelRecognitionItems,
   buildNodeActionRepeatCount,
   buildNodeActionRootItem,
   buildNodeRecognitionAttempts,
   buildNodeTaskFlowItems,
-} from '../utils/nodeFlow'
+} from '@windsland52/maa-log-parser/node-flow'
 import TaskDocHoverPopover from './TaskDocHoverPopover.vue'
 import StatusIcon from './StatusIcon.vue'
 import { resolveResultStatusButtonType } from './nodeCard/statusButtonType'
+import { getFlowItemShortLabel } from '../utils/flowLabels'
 
 const props = defineProps<{
   node: NodeInfo
@@ -121,6 +123,12 @@ const actionSummary = computed<CompactActionSummary | null>(() => {
   }
 })
 
+const auxiliaryFlowItems = computed(() =>
+  buildNodeActionTimelineItems(props.node).filter((item) =>
+    item.type === 'wait_freezes' || item.type === 'resource_loading'
+  )
+)
+
 const toTimestampMs = (timestamp?: string): number => {
   if (!timestamp) return Number.POSITIVE_INFINITY
   const normalized = timestamp.includes(' ') ? timestamp.replace(' ', 'T') : timestamp
@@ -133,8 +141,8 @@ const pickEarliest = (timestamps: Array<string | undefined>): number => {
   return values.length > 0 ? Math.min(...values) : Number.POSITIVE_INFINITY
 }
 
-const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
-  const sections: Array<{ type: 'recognition' | 'task' | 'action'; ts: number }> = []
+const sectionOrder = computed<Array<'recognition' | 'task' | 'flow' | 'action'>>(() => {
+  const sections: Array<{ type: 'recognition' | 'task' | 'flow' | 'action'; ts: number }> = []
 
   if (recognitionSummary.value) {
     const timestamps = [
@@ -151,6 +159,13 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
     sections.push({
       type: 'task',
       ts: pickEarliest(taskItems.value.map(group => group.ts)),
+    })
+  }
+
+  if (auxiliaryFlowItems.value.length > 0) {
+    sections.push({
+      type: 'flow',
+      ts: pickEarliest(auxiliaryFlowItems.value.map(item => item.ts)),
     })
   }
 
@@ -230,6 +245,23 @@ const sectionOrder = computed<Array<'recognition' | 'task' | 'action'>>(() => {
               {{ group.name }}
             </n-button>
           </task-doc-hover-popover>
+      </n-flex>
+
+      <n-flex v-else-if="section === 'flow' && auxiliaryFlowItems.length > 0" align="center" style="gap: 6px; flex-wrap: wrap">
+        <n-text depth="3" style="font-size: 12px">Flow:</n-text>
+        <n-button
+          v-for="item in auxiliaryFlowItems"
+          :key="`compact-flow-${item.id}`"
+          text
+          size="tiny"
+          :type="resolveResultStatusButtonType(item.status)"
+          @click="emit('select-flow-item', node, item.id)"
+        >
+          <template #icon>
+            <status-icon :status="item.status" />
+          </template>
+          [{{ getFlowItemShortLabel(item.type) }}] {{ item.name }}
+        </n-button>
       </n-flex>
 
       <n-flex v-else-if="section === 'action' && actionSummary" align="center" style="gap: 6px">

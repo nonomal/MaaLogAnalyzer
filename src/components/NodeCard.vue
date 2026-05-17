@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, watch, toRef } from 'vue'
-import { NCard, NButton, NFlex, NText, NPopover } from 'naive-ui'
+import { NCard, NButton, NText, NPopover } from 'naive-ui'
 import type { NodeInfo } from '../types'
 import { getSettings } from '../utils/settings'
 import { extractTime } from '../utils/formatDuration'
@@ -33,8 +33,8 @@ const expandedAttempts = ref<Map<number, boolean>>(new Map())
 // 跟踪 Recognition 部分是否展开
 const recognitionExpanded = ref(!settings.defaultCollapseRecognition)
 
-// 跟踪 Action 部分是否展开
-const actionExpanded = ref(!settings.defaultCollapseNestedActionNodes)
+// 跟踪根部 Action 列表是否展开
+const actionExpanded = ref(!settings.defaultCollapseRootActionList)
 
 const forceExpandRelatedWhileRunning = computed(() => props.node.status === 'running')
 const effectiveRecognitionExpanded = computed(() => forceExpandRelatedWhileRunning.value || recognitionExpanded.value)
@@ -43,7 +43,7 @@ const effectiveActionExpanded = computed(() => forceExpandRelatedWhileRunning.va
 // 监听node变化，清空展开状态
 const syncSectionExpandStateFromSettings = () => {
   recognitionExpanded.value = !settings.defaultCollapseRecognition
-  actionExpanded.value = !settings.defaultCollapseNestedActionNodes
+  actionExpanded.value = !settings.defaultCollapseRootActionList
 }
 
 watch(() => props.node?.node_id, () => {
@@ -55,7 +55,7 @@ watch(() => props.node?.node_id, () => {
 watch(
   [
     () => settings.defaultCollapseRecognition,
-    () => settings.defaultCollapseNestedActionNodes,
+    () => settings.defaultCollapseRootActionList,
   ],
   syncSectionExpandStateFromSettings,
   { flush: 'sync' }
@@ -149,11 +149,11 @@ const toggleActionSection = () => {
     >
       <!-- Header: 节点名称按钮 + 时间 -->
       <template #header>
-        <n-flex align="center" style="gap: 8px">
+        <div style="display: flex; align-items: center; gap: 8px;">
           <n-popover
+            v-if="taskDocText"
             trigger="manual"
             :show="taskDocPopoverVisible"
-            :disabled="!taskDocText"
             :show-arrow="true"
             style="max-width: 420px"
           >
@@ -171,6 +171,15 @@ const toggleActionSection = () => {
               {{ taskDocText }}
             </n-text>
           </n-popover>
+          <span v-else @mouseenter="handleTaskDocHoverEnter" @mouseleave="handleTaskDocHoverLeave">
+            <n-button
+              size="small"
+              @click="handleNodeClick"
+            >
+              {{ node.name }}
+            </n-button>
+          </span>
+          
           <n-button
             v-if="isVscodeLaunchEmbed"
             size="small"
@@ -182,11 +191,11 @@ const toggleActionSection = () => {
           <n-text depth="3" style="font-size: 12px">
             {{ extractTime(node.ts) }}
           </n-text>
-        </n-flex>
+        </div>
       </template>
 
       <!-- Content: 根据显示模式切换 -->
-      <n-flex vertical style="gap: 12px">
+      <div style="display: flex; flex-direction: column; gap: 12px;">
         <node-card-detailed
           v-if="settings.displayMode === 'detailed'"
           v-bind="sharedExpandableViewProps"
@@ -214,7 +223,7 @@ const toggleActionSection = () => {
           @toggle-action="toggleActionSection"
           @toggle-nested="toggleNestedNodes"
         />
-      </n-flex>
+      </div>
     </n-card>
   </div>
 </template>

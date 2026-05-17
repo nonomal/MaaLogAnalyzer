@@ -2,10 +2,10 @@ import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch, type Ref 
 import { version } from '../../../../package.json'
 import { getErrorMessage } from '../../../utils/errorHandler'
 import { useIsMobile } from '../../../composables/useIsMobile'
-import { buildNodeFlowItems, buildNodeRecognitionFlowItems } from '../../../utils/nodeFlow'
+import { buildNodeFlowItems, buildNodeRecognitionFlowItems } from '@windsland52/maa-log-parser/node-flow'
 import { TOUR_STEPS, TOUR_STORAGE_KEY, TOUR_VERSION } from '../../../tutorial/steps'
 import type { NodeInfo, TaskInfo } from '../../../types'
-import { LogParser } from '../../../utils/logParser'
+import { LogParser } from '@windsland52/maa-log-parser'
 import { BRIDGE_THEME_UPDATED_EVENT } from '../../../utils/bridgeEvents'
 import { useTextSearchTargets } from './useTextSearchTargets'
 import { useAppViewState } from './useAppViewState'
@@ -39,7 +39,6 @@ export const useAppRootViewModel = ({
     isVscodeLaunchEmbed,
     bridgeEnabled,
     tutorialAutoStartEnabled,
-    showProcessThreadFilters,
     showRealtimeStatus,
     showReloadControls,
     showTextSearchView,
@@ -52,6 +51,7 @@ export const useAppRootViewModel = ({
     splitVerticalSize,
     detailViewCollapsed,
     toggleDetailView,
+    ensureDetailViewExpanded,
   } = useAppViewState()
   const parser = new LogParser()
 
@@ -109,18 +109,11 @@ export const useAppRootViewModel = ({
     handleFileLoadingStart,
     handleFileLoadingEnd,
     handleMobileSelectTask,
-    selectedProcessId,
-    selectedThreadId,
     filteredTasks,
-    processIdOptions,
-    threadIdOptions,
-    clearFilters,
-    clearRuntimeFilters,
     resetAnalysisState,
     applyParsedTasks,
   } = useAppSelectionAndFilters({
     isMobile,
-    parser,
     tasks,
     selectedTask,
     selectedNode,
@@ -128,6 +121,7 @@ export const useAppRootViewModel = ({
     pendingScrollNodeId,
     buildNodeFlowItems,
     buildNodeRecognitionFlowItems,
+    afterSelect: ensureDetailViewExpanded,
   })
 
   const {
@@ -167,8 +161,6 @@ export const useAppRootViewModel = ({
     setTextSearchLoadedTargets,
     resetParserDebugAssets,
     resetAnalysisState,
-    selectedProcessId,
-    selectedThreadId,
   })
 
   const {
@@ -206,7 +198,8 @@ export const useAppRootViewModel = ({
     setDeferredTextSearchTargets,
     pickPreferredLogTargetId,
     applyParsedTasks,
-    clearRuntimeFilters,
+    handleFileLoadingStart,
+    handleFileLoadingEnd,
     steps: TOUR_STEPS,
     isMobile,
     viewMode,
@@ -278,16 +271,10 @@ export const useAppRootViewModel = ({
     onToggleTheme,
     isMobile,
     isVscodeLaunchEmbed,
-    showProcessThreadFilters,
     viewMode,
     viewModeOptions,
     currentViewLabel,
     handleViewModeSelect,
-    selectedProcessId,
-    selectedThreadId,
-    processIdOptions,
-    threadIdOptions,
-    clearFilters,
     showTaskDrawer,
     showSettingsModal,
     showAboutModal,
@@ -310,7 +297,6 @@ export const useAppRootViewModel = ({
     selectedNode,
     selectedFlowItemId,
     pendingScrollNodeId,
-    parser,
     textSearchViewProps,
     processViewMobileProps,
     processViewDesktopProps,

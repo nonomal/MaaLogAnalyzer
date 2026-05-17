@@ -3,7 +3,7 @@ import type { NodeInfo, TaskInfo } from '../../../types'
 import {
   buildNodeExecutionTimeline,
   type NodeExecutionNavStatus,
-} from '../../../utils/nodeExecutionTimeline'
+} from '@windsland52/maa-log-tools/node-execution-timeline'
 
 interface UseFlowchartTimelineOptions {
   selectedTask: Ref<TaskInfo | null>

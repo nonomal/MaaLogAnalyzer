@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { NestedActionGroup } from '../../types'
-import { buildActionFlowItems } from '../nodeFlow'
+import { buildActionFlowItems } from '@windsland52/maa-log-parser/node-flow'
 
 describe('nodeFlow nested task node_flow mapping', () => {
   it('prefers nested node_flow and keeps child tasks attached under action root', () => {

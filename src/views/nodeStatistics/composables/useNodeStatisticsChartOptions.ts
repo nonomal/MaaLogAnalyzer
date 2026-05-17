@@ -2,7 +2,7 @@ import { computed, type Ref } from 'vue'
 import type {
   NodeStatistics,
   RecognitionActionStatistics,
-} from '../../../utils/nodeStatistics'
+} from '@windsland52/maa-log-parser/node-statistics'
 import { adaptChartForMobile } from './chartOptions/baseBar'
 import {
   buildNodeChartOption,

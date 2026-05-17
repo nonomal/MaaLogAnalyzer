@@ -41,6 +41,11 @@ const props = defineProps<{
         </tr>
 
         <tr v-if="props.settings.displayMode === 'detailed' || props.settings.displayMode === 'tree'">
+          <td>默认折叠根部动作列表</td>
+          <td><n-switch v-model:value="props.settings.defaultCollapseRootActionList" /></td>
+        </tr>
+
+        <tr v-if="props.settings.displayMode === 'detailed' || props.settings.displayMode === 'tree'">
           <td>默认折叠嵌套识别节点</td>
           <td><n-switch v-model:value="props.settings.defaultCollapseNestedRecognition" /></td>
         </tr>

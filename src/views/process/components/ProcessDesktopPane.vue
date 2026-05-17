@@ -7,7 +7,6 @@ import ProcessTimelineListPane from './ProcessTimelineListPane.vue'
 import type { NodeInfo, TaskInfo } from '../../../types'
 import type { NodeNavMode, NodeNavViewItem } from '../composables/useNodeNavSearch'
 import type { VNodeChild } from 'vue'
-import { resolveNodeByOriginalIndex } from '../composables/nodeNavSelection'
 
 type ReloadOption = {
   label: string
@@ -48,6 +47,7 @@ const props = defineProps<{
   bridgeRevealTask?: ((task: string) => Promise<void>) | null
   setTaskListPanelRef?: (instance: unknown | null) => void
   setNodeNavPanelRef?: (instance: unknown | null) => void
+  safeScrollToItem?: (index: number) => Promise<boolean>
 }>()
 
 const emit = defineEmits<{
@@ -71,12 +71,13 @@ const emit = defineEmits<{
   'select-flow-item': [node: NodeInfo, flowItemId: string]
 }>()
 
-const handleSelectNodeNav = (index: number) => {
-  emit('select-node-nav', index)
-  const node = resolveNodeByOriginalIndex(props.nodeNavItems, index)
-  if (node) {
-    emit('select-node', node)
+const handleSelectNodeNavItem = (item: NodeNavViewItem) => {
+  emit('select-node-nav', item.originalIndex)
+  if (item.targetFlowItemId) {
+    emit('select-flow-item', item.node, item.targetFlowItemId)
+    return
   }
+  emit('select-node', item.node)
 }
 </script>
 
@@ -133,7 +134,7 @@ const handleSelectNodeNav = (index: number) => {
         @update:search-text="emit('update:node-nav-search-text', $event)"
         @update:mode="emit('update:node-nav-mode', $event)"
         @toggle-failed-only="emit('toggle-node-nav-failed-only')"
-        @select-node="handleSelectNodeNav"
+        @select-item="handleSelectNodeNavItem"
         @manual-scroll-up="emit('manual-scroll-up')"
       />
     </template>
@@ -146,6 +147,8 @@ const handleSelectNodeNav = (index: number) => {
         :is-vscode-launch-embed="isVscodeLaunchEmbed"
         :bridge-request-task-doc="bridgeRequestTaskDoc"
         :bridge-reveal-task="bridgeRevealTask"
+        :selected-node-id="selectedNodeId ?? null"
+        :safe-scroll-to-item="safeScrollToItem"
         @manual-scroll-up="emit('manual-scroll-up')"
         @scroller-mounted="emit('scroller-mounted', $event)"
         @select-node="emit('select-node', $event)"

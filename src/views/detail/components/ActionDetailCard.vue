@@ -1,12 +1,14 @@
 <script setup lang="ts">
+import { computed, ref, watch } from 'vue'
 import {
   NCard, NDescriptions, NDescriptionsItem, NTag,
-  NText, NCollapse, NCollapseItem, NButton, NIcon, NCode,
+  NText, NCollapse,
 } from 'naive-ui'
-import { CopyOutlined } from '@vicons/antd'
 import type { NodeInfo } from '../../../types'
 import { getRuntimeStatusTagType, getRuntimeStatusText } from '../../../utils/runtimeStatus'
 import SafePreviewImage from '../../../components/SafePreviewImage.vue'
+import RawJsonCollapseItem from './RawJsonCollapseItem.vue'
+import { buildActionDetailRows, formatDetailValue } from './detailRows'
 
 const props = defineProps<{
   currentActionDetails: any
@@ -20,6 +22,16 @@ const props = defineProps<{
   formatJson: (obj: any) => string
   copyToClipboard: (text: string) => void
 }>()
+
+const expandedNames = ref<string[]>([...props.rawJsonDefaultExpanded])
+watch(
+  () => props.rawJsonDefaultExpanded,
+  (names) => {
+    expandedNames.value = [...names]
+  },
+)
+
+const actionDetailRows = computed(() => buildActionDetailRows(props.currentActionDetails, props.descriptionColumns))
 </script>
 
 <template>
@@ -57,6 +69,17 @@ const props = defineProps<{
           [{{ props.currentActionDetails.box.join(', ') }}]
         </n-text>
       </n-descriptions-item>
+
+      <n-descriptions-item
+        v-for="row in actionDetailRows"
+        :key="row.label"
+        :label="row.label"
+        :span="row.span"
+      >
+        <n-text code class="detail-value">
+          {{ formatDetailValue(row.value) }}
+        </n-text>
+      </n-descriptions-item>
     </n-descriptions>
 
     <div v-if="props.currentActionStatus === 'failed' && props.actionErrorImage" style="margin-top: 12px">
@@ -67,26 +90,16 @@ const props = defineProps<{
       />
     </div>
 
-    <n-collapse style="margin-top: 16px" :default-expanded-names="props.rawJsonDefaultExpanded">
-      <n-collapse-item title="原始动作数据" name="action-json">
-        <template #header-extra>
-          <n-button
-            size="tiny"
-            @click.stop="props.copyToClipboard(props.formatJson(props.currentActionDetails))"
-          >
-            <template #icon>
-              <n-icon><copy-outlined /></n-icon>
-            </template>
-            复制
-          </n-button>
-        </template>
-        <n-code
-          :code="props.formatJson(props.currentActionDetails)"
-          language="json"
-          :word-wrap="true"
-          style="max-height: 400px; overflow: auto; max-width: 100%"
-        />
-      </n-collapse-item>
+    <n-collapse v-model:expanded-names="expandedNames" style="margin-top: 16px">
+      <raw-json-collapse-item
+        title="原始动作数据"
+        name="action-json"
+        :value="props.currentActionDetails"
+        :expanded-names="expandedNames"
+        :format-json="props.formatJson"
+        :copy-to-clipboard="props.copyToClipboard"
+        max-height="400px"
+      />
     </n-collapse>
   </n-card>
 </template>
@@ -104,5 +117,10 @@ const props = defineProps<{
   width: 100%;
   height: auto;
   border-radius: 4px;
+}
+
+.detail-value {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
 }
 </style>
