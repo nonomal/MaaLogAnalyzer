@@ -201,4 +201,77 @@ describe('useNodeNavSearch', () => {
     expect(nodeNavItems.value).toHaveLength(0)
     expect(nodeNavEmptyDescription.value).toBe('暂无根层节点数据')
   })
+
+  it('builds focus navigation entries for node and flow item focus configs', () => {
+    const nodes = ref<NodeInfo[]>([
+      {
+        ...createNode({ nodeId: 41, name: 'FocusedNode', taskId: 100 }),
+        focus: { display: ['log', 'toast'], content: 'Node {name}' },
+        node_flow: [{
+          id: 'reco.1',
+          type: 'recognition',
+          name: 'FocusedReco',
+          status: 'failed',
+          ts: '2026-04-08 10:00:00.100',
+          focus: 'Reco focus',
+        }],
+      },
+      {
+        ...createNode({ nodeId: 42, name: 'OtherTaskNode', taskId: 200 }),
+        focus: 'Should be filtered by task',
+      },
+    ])
+
+    const rootTaskId = computed(() => 100)
+    const {
+      nodeNavItems,
+      setNodeNavMode,
+      toggleNodeNavFailedOnly,
+    } = useNodeNavSearch(nodes, rootTaskId)
+    setNodeNavMode('focus')
+
+    expect(nodeNavItems.value.map((item) => item.primaryText)).toEqual(['FocusedNode', 'FocusedReco'])
+    expect(nodeNavItems.value.map((item) => item.focusKind)).toEqual(['node', 'recognition'])
+    expect(nodeNavItems.value.map((item) => item.focusDisplay)).toEqual(['log/toast', 'log'])
+    expect(nodeNavItems.value[1]?.targetFlowItemId).toBe('reco.1')
+
+    toggleNodeNavFailedOnly()
+    expect(nodeNavItems.value.map((item) => item.primaryText)).toEqual(['FocusedReco'])
+  })
+
+  it('only shows focus entries that can be resolved for the current source kind', () => {
+    const actionFocus = { 'Node.Action.Starting': '主任务启动' }
+    const nodes = ref<NodeInfo[]>([
+      {
+        ...createNode({ nodeId: 51, name: 'BatchUseDetectorMain', taskId: 100 }),
+        focus: actionFocus,
+        node_flow: [
+          {
+            id: 'recognition:1',
+            type: 'recognition',
+            name: 'BatchUseDetectorMain',
+            status: 'success',
+            ts: '2026-05-15 11:38:58.201',
+            focus: actionFocus,
+          },
+          {
+            id: 'action:1',
+            type: 'action',
+            name: 'BatchUseDetectorMain',
+            status: 'success',
+            ts: '2026-05-15 11:38:58.454',
+            focus: actionFocus,
+          },
+        ],
+      },
+    ])
+
+    const rootTaskId = computed(() => 100)
+    const { nodeNavItems, setNodeNavMode } = useNodeNavSearch(nodes, rootTaskId)
+    setNodeNavMode('focus')
+
+    expect(nodeNavItems.value).toHaveLength(1)
+    expect(nodeNavItems.value[0]?.focusKind).toBe('action')
+    expect(nodeNavItems.value[0]?.targetFlowItemId).toBe('action:1')
+  })
 })

@@ -28,7 +28,7 @@ const emit = defineEmits<{
   'update:search-text': [value: string]
   'update:mode': [value: NodeNavMode]
   'toggle-failed-only': []
-  'select-node': [index: number]
+  'select-item': [item: NodeNavViewItem]
   'manual-scroll-up': []
 }>()
 
@@ -141,7 +141,7 @@ defineExpose({
         v-if="props.items.length > 0"
         ref="nodeNavScroller"
         :items="props.items"
-        key-field="originalIndex"
+        key-field="navKey"
         :min-item-size="navMinItemSize"
         class="node-nav-scroller"
         @wheel.passive="handleWheel"
@@ -162,7 +162,7 @@ defineExpose({
                 'node-nav-row-detailed': props.displayMode === 'detailed',
                 'node-nav-row-active': props.selectedNodeId != null && item.node.node_id === props.selectedNodeId,
               }"
-              @click="emit('select-node', item.originalIndex)"
+              @click="emit('select-item', item)"
             >
               <node-nav-item
                 :item="item"

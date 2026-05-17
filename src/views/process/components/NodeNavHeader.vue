@@ -4,8 +4,7 @@ import {
   NText,
   NButton,
   NIcon,
-  NRadioGroup,
-  NRadioButton,
+  NSelect,
 } from 'naive-ui'
 import { VerticalAlignTopOutlined, VerticalAlignBottomOutlined } from '@vicons/antd'
 import type { NodeNavMode } from '../composables/useNodeNavSearch'
@@ -21,28 +20,33 @@ const emit = defineEmits<{
   'scroll-top': []
   'scroll-bottom': []
 }>()
+
+const modeOptions: Array<{ label: string; value: NodeNavMode }> = [
+  { label: '全部', value: 'pipeline' },
+  { label: '识别', value: 'next-list-hit' },
+  { label: 'Focus', value: 'focus' },
+]
 </script>
 
 <template>
   <n-flex align="center" style="padding-right: 6px; flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden">
     <n-flex align="center" style="gap: 4px; flex-wrap: nowrap; flex-shrink: 0">
       <n-text style="font-size: 14px; font-weight: 500; white-space: nowrap">节点导航</n-text>
-      <n-radio-group
-        class="node-nav-mode-group"
+      <n-select
+        class="node-nav-mode-select"
         :value="mode"
+        :options="modeOptions"
         size="small"
+        :consistent-menu-width="false"
         @update:value="(value) => emit('update:mode', value as NodeNavMode)"
-      >
-        <n-radio-button value="pipeline" title="按 Pipeline 节点列表显示">全部</n-radio-button>
-        <n-radio-button value="next-list-hit" title="按根层识别执行顺序显示">识别</n-radio-button>
-      </n-radio-group>
+      />
       <n-button
         text
         size="tiny"
         @click="emit('toggle-failed-only')"
         :title="failedOnly
-          ? (mode === 'pipeline' ? '仅显示失败节点（点击显示全部）' : '仅显示异常状态节点（点击显示全部）')
-          : (mode === 'pipeline' ? '显示全部节点（点击仅失败）' : '显示全部节点（点击仅异常状态）')"
+          ? (mode === 'pipeline' ? '仅显示失败节点（点击显示全部）' : mode === 'focus' ? '仅显示失败 Focus（点击显示全部）' : '仅显示异常状态节点（点击显示全部）')
+          : (mode === 'pipeline' ? '显示全部节点（点击仅失败）' : mode === 'focus' ? '显示全部 Focus（点击仅失败）' : '显示全部节点（点击仅异常状态）')"
       >
         <span class="node-nav-filter-dot" :class="{ 'node-nav-filter-dot--active': failedOnly }" />
       </n-button>
@@ -72,14 +76,7 @@ const emit = defineEmits<{
   background: #d03050;
 }
 
-.node-nav-mode-group {
-  --n-button-padding: 0 3px;
-  --n-button-font-size: 12px;
-  --n-button-height: 18px;
-  --n-button-border-radius: 4px;
-}
-
-.node-nav-mode-group :deep(.n-radio-button) {
-  min-width: 0;
+.node-nav-mode-select {
+  width: 82px;
 }
 </style>

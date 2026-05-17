@@ -39,6 +39,13 @@ const getNodeNavStatusTagType = (status: NodeNavStatus) => {
   if (status === 'action-failed') return 'error' as const
   return getRuntimeStatusTagType(status)
 }
+
+const focusKindLabelMap = {
+  node: '节点',
+  recognition: '识别',
+  action: '动作',
+  flow: '流程',
+} as const
 </script>
 
 <template>
@@ -52,6 +59,20 @@ const getNodeNavStatusTagType = (status: NodeNavStatus) => {
     <n-flex align="center" style="gap: 8px">
       <n-tag size="small" :type="getNodeNavStatusTagType(item.navStatus)">
         {{ getNodeNavStatusText(item.navStatus) }}
+      </n-tag>
+      <n-tag
+        v-if="mode === 'focus' && item.focusKind"
+        size="small"
+        type="warning"
+      >
+        {{ focusKindLabelMap[item.focusKind] }}
+      </n-tag>
+      <n-tag
+        v-if="mode === 'focus' && item.focusDisplay"
+        size="small"
+        type="primary"
+      >
+        {{ item.focusDisplay }}
       </n-tag>
       <n-tag
         v-if="showMatchDetails"
@@ -79,6 +100,13 @@ const getNodeNavStatusTagType = (status: NodeNavStatus) => {
       <n-text style="font-size: 12px; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap">
         {{ item.primaryText || '未命名节点' }}
       </n-text>
+      <n-tag
+        v-if="mode === 'focus' && item.focusKind"
+        size="tiny"
+        type="warning"
+      >
+        {{ focusKindLabelMap[item.focusKind] }}
+      </n-tag>
       <n-tag
         v-if="showMatchDetails"
         size="tiny"

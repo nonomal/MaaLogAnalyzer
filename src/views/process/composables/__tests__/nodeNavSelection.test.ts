@@ -13,6 +13,7 @@ const createNode = (params: { nodeId: number; name: string }): NodeInfo => ({
 })
 
 const createNavItem = (node: NodeInfo, originalIndex: number): NodeNavViewItem => ({
+  navKey: `test:${originalIndex}`,
   node,
   originalIndex,
   primaryText: node.name,

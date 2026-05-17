@@ -4,6 +4,7 @@ export const formatNodeNavMatchHint = (kinds: NodeNavMatchKind[]): string => {
   const labels = kinds.map((kind) => {
     if (kind === 'next-list') return 'Next'
     if (kind === 'flow') return '流程'
+    if (kind === 'focus') return 'Focus'
     return '节点'
   })
   return labels.join('/')
@@ -12,6 +13,7 @@ export const formatNodeNavMatchHint = (kinds: NodeNavMatchKind[]): string => {
 const formatNodeNavMatchDetail = (detail: NodeNavMatchDetail): string => {
   if (detail.kind === 'next-list') return `Next: ${detail.text}`
   if (detail.kind === 'flow') return `流程: ${detail.text}`
+  if (detail.kind === 'focus') return `Focus: ${detail.text}`
   return `节点: ${detail.text}`
 }
 

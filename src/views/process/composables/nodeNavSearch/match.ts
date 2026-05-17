@@ -104,6 +104,6 @@ export const collectNodeNavMatchDetails = (node: NodeInfo, query: string): NodeN
 }
 
 export const getNodeNavMatchKinds = (details: NodeNavMatchDetail[]): NodeNavMatchKind[] => {
-  const order: NodeNavMatchKind[] = ['node', 'next-list', 'flow']
+  const order: NodeNavMatchKind[] = ['node', 'next-list', 'flow', 'focus']
   return order.filter((kind) => details.some((detail) => detail.kind === kind))
 }
